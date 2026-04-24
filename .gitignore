@@ -1,0 +1,11 @@
+_site/
+_site*/
+.sass-cache/
+.jekyll-metadata
+.jekyll-cache
+.bundle/
+vendor/
+Gemfile.lock
+
+# nix
+/result
