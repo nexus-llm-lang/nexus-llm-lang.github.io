@@ -147,7 +147,7 @@ During parallel force (`@{ a: x, b: y }`), if one thunk raises:
 - If already running, it completes but the result is discarded
 - No resource leak — linear types guarantee cleanup
 
-## Standard Library (`stdlib/lazy.nx`)
+## Standard Library (`std:lazy`)
 
 Only the `@` sigil is built into the language. Combinators are provided as stdlib functions backed by runtime host functions:
 
@@ -168,7 +168,7 @@ The `@` sigil is fully implemented:
 - **Closure linearization**: Capturing `@x` in a closure makes the closure linear
 - **DAG parallel evaluation**: Compiler detects 2+ consecutive forces and emits `LazySpawn`/`LazyJoin` for parallel execution via OS threads
 - **Runtime**: `nexus:runtime/lazy` host module with `__nx_lazy_spawn(thunk, num_captures) -> task_id` and `__nx_lazy_join(task_id) -> result`
-- **stdlib/lazy.nx**: `race`, `cancel`, `detach`, `force_all` combinators
+- **`std:lazy`**: `race`, `cancel`, `detach`, `force_all` combinators
 
 ---
 

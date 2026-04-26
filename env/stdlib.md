@@ -5,17 +5,19 @@ title: Standard Library
 
 # Standard Library
 
-Import stdlib modules from `stdlib/`:
+The standard library is the `std` package, rooted at `nxlib/stdlib/`. Import its modules with the `std:<name>` form:
 
 ```nexus
-import { Console }, * as stdio from "stdlib/stdio.nx"
+import { Console }, * as stdio from "std:stdio"
 ```
+
+Bare paths (no colon) remain relative file imports. Each `std:<name>` resolves to `nxlib/stdlib/<name>.nx`; the WIT interface name is `nexus:std/<name>` (with `_` rewritten to `-`, e.g. `std:string_ops` ↔ `nexus:std/string-ops`).
 
 ## I/O Caps
 
 I/O is capability-gated via caps. Each cap has a `system_handler` that declares `require { PermX }`, propagating the permission to the caller when injected. Mock handlers without `require` need no runtime permissions.
 
-### Console (`stdio.nx`)
+### Console (`std:stdio`)
 
 Requires `PermConsole`. CLI flag: `--allow-console`.
 
@@ -39,7 +41,7 @@ let main = fn () -> unit require { PermConsole } do
 end
 ```
 
-### File System (`fs.nx`)
+### File System (`std:filesystem`)
 
 Requires `PermFs`. CLI flag: `--allow-fs`.
 
@@ -106,7 +108,7 @@ match %r do
 end
 ```
 
-### Network (`net.nx`)
+### Network (`std:network`)
 
 Requires `PermNet`. CLI flag: `--allow-net`.
 
@@ -165,7 +167,7 @@ fn request_path(req: &Request) -> string
 fn request_body(req: &Request) -> string
 ```
 
-### Random (`random.nx`)
+### Random (`std:random`)
 
 Requires `PermRandom`. CLI flag: `--allow-random`.
 
@@ -177,7 +179,7 @@ cap Random do
 end
 ```
 
-### Clock (`clock.nx`)
+### Clock (`std:clock`)
 
 Requires `PermClock`. CLI flag: `--allow-clock`.
 
@@ -188,7 +190,7 @@ cap Clock do
 end
 ```
 
-### Process (`proc.nx`)
+### Process (`std:process`)
 
 Requires `PermProc`. CLI flag: `--allow-proc`.
 
@@ -214,7 +216,7 @@ cap Proc do
 end
 ```
 
-### Environment (`env.nx`)
+### Environment (`std:environment`)
 
 Requires `PermEnv`. CLI flag: `--allow-env`.
 
@@ -229,7 +231,7 @@ end
 
 ## Data Structures
 
-### Option (`option.nx`)
+### Option (`std:option`)
 
 ```nexus
 type Option<T> = Some(val: T) | None
@@ -244,7 +246,7 @@ fn unwrap<T>(opt: Option<T>) -> T throws { Exn }
 fn expect<T>(opt: Option<T>, msg: string) -> T throws { Exn }
 ```
 
-### List (`list.nx`)
+### List (`std:list`)
 
 Immutable singly-linked list: `type List<T> = Nil | Cons(v: T, rest: List<T>)`.
 `[ T ]` is an alias for `List<T>` with literal syntax sugar.
@@ -270,7 +272,7 @@ fn map<T, U>(xs: [ T ], f: (val: T) -> U) -> [ U ]
 fn map_rev<T, U>(xs: [ T ], f: (val: T) -> U) -> [ U ]
 ```
 
-### Tuple (`tuple.nx`)
+### Tuple (`std:tuple`)
 
 ```nexus
 type Pair<A, B> = Pair(left: A, right: B)
@@ -279,7 +281,7 @@ fn fst<A, B>(p: Pair<A, B>) -> A
 fn snd<A, B>(p: Pair<A, B>) -> B
 ```
 
-### Array (`array.nx`)
+### Array (`std:array`)
 
 Linear mutable array: `[| T |]`
 
@@ -303,7 +305,7 @@ fn zip<A, B>(left: &[| A |], right: &[| B |]) -> [ Pair<A, B> ]
 fn consume<T>(%arr: [| T |], f: (val: %T) -> unit) -> unit
 ```
 
-### Set (`set.nx`)
+### Set (`std:set`)
 
 FFI-backed hash set of i64 values. Uses opaque linear handles backed by Rust `HashSet<i64>`.
 
@@ -323,7 +325,7 @@ fn difference(left: &Set, right: &Set) -> %Set
 fn free(set: %Set) -> unit
 ```
 
-### HashMap (`hashmap.nx`)
+### HashMap (`std:hashmap`)
 
 FFI-backed hash map from i64 keys to i64 values. Uses opaque linear handles backed by Rust `HashMap<i64, i64>`.
 
@@ -343,7 +345,7 @@ fn values(map: &HashMap) -> [ i64 ]
 fn free(map: %HashMap) -> unit
 ```
 
-### StringMap (`stringmap.nx`)
+### StringMap (`std:stringmap`)
 
 FFI-backed hash map from string keys to i64 values. Uses opaque linear handles backed by Rust `HashMap<String, i64>`.
 
@@ -363,7 +365,7 @@ fn values(map: &StringMap) -> [ i64 ]
 fn free(map: %StringMap) -> unit
 ```
 
-### ByteBuffer (`bytebuffer.nx`)
+### ByteBuffer (`std:bytebuffer`)
 
 FFI-backed mutable byte buffer for binary data construction. Uses opaque linear handles backed by Rust `Vec<u8>`. Provides LEB128 encoding, little-endian integer writes, and raw byte/string/buffer append operations.
 
@@ -389,7 +391,7 @@ All mutating operations consume the buffer and return a new handle (consume-and-
 
 ## Utilities
 
-### String (`string.nx`)
+### String (`std:string_ops`)
 
 ```nexus
 // Inspection
@@ -425,7 +427,7 @@ fn parse_f64(s: string) -> Option<f64>
 fn to_f64(s: string) -> f64 throws { Exn }
 ```
 
-### Math (`math.nx`)
+### Math (`std:math`)
 
 ```nexus
 fn abs(val: i64) -> i64
@@ -442,7 +444,7 @@ fn float_to_i64(val: float) -> i64
 fn negate(val: bool) -> bool
 ```
 
-### Result (`result.nx`)
+### Result (`std:result`)
 
 ```nexus
 type Result<T, E> = Ok(val: T) | Err(err: E)
@@ -457,7 +459,7 @@ fn from_exn<T>(exn: Exn) -> Result<T, Exn>
 fn to_exn<T>(res: Result<T, Exn>) -> T throws { Exn }
 ```
 
-### Exception Utilities (`exn.nx`)
+### Exception Utilities (`std:exn`)
 
 ```nexus
 fn to_string(exn: Exn) -> string
@@ -466,7 +468,7 @@ fn backtrace(exn: Exn) -> [string]
 
 `backtrace` returns call-stack frames (with source file and line info) captured at the raise point.
 
-### Char (`char.nx`)
+### Char (`std:char`)
 
 Character classification functions for ASCII analysis:
 
@@ -486,7 +488,7 @@ fn digit_value(c: char) -> i64
 fn hex_digit_value(c: char) -> i64
 ```
 
-### Lazy (`lazy.nx`)
+### Lazy (`std:lazy`)
 
 Combinators for `@` thunk evaluation. Backed by `nexus:runtime/lazy` host functions.
 
@@ -506,7 +508,7 @@ fn force_all(tasks: [i64]) -> [i64]
 
 Note: functions use `i64` internally (all values are i64 at WASM level). The `@T` linearity is enforced at the call site by the typechecker.
 
-### Core (`core.nx`)
+### Core (`std:core`)
 
 Legacy re-exports for backwards compatibility. Prefer `tuple.nx`, `list.nx`, `math.nx` for new code.
 

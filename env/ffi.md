@@ -212,12 +212,12 @@ The WASM module is responsible for managing the actual state behind the handle (
 **Keep every `import external "foo.wasm"` and its `external` declarations confined to a single `.nx` file** — a thin wrapper module — and have all other code depend on that wrapper instead of re-declaring the bindings.
 
 ```
-stdlib/
-  array.nx          // import external "array.wasm" + external __nx_* + typed wrappers
-  string.nx         // import external "string.wasm" + external __nx_* + typed wrappers
+nxlib/stdlib/                        // root of the `std` package
+  array.nx                           // import external "std:collections" + external __nx_* + typed wrappers
+  string_ops.nx                      // import external "std:string-ops" + external __nx_* + typed wrappers
   ...
 app/
-  main.nx           // import * as arr from "stdlib/array.nx"  — no `external` here
+  main.nx                            // import * as arr from "std:array"  — no `external` here
 ```
 
 Why this matters:
