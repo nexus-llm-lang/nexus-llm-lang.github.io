@@ -150,6 +150,8 @@ list.map(xs: items, f: transform)
 
 All arguments are labeled. Argument order at the call site does not matter -- `add(b: 2, a: 1)` is equivalent to `add(a: 1, b: 2)`. Port method calls use `Port.method(...)` syntax.
 
+**Punning.** When the argument is a bare variable whose name equals the label, the label may be omitted. The parser desugars `f(x)` to `f(x: x)`. Sigils ride along: `f(%v)` desugars to `f(v: %v)`, `f(&v)` to `f(v: &v)`, `f(~v)` to `f(v: ~v)`, `f(@v)` to `f(v: @v)`, and `f(&%v)` (borrow of a linear) to `f(v: &%v)`. The same rule applies to constructor calls and constructor patterns. Punning does **not** apply to record literals or record patterns, which still require `name: value`.
+
 ### Lambda Expressions
 
 ```nexus
@@ -588,9 +590,12 @@ handler_fn       ::= "fn" IDENT [ type_params ] "(" [ param ( "," param )* ] ")"
                      "->" type [ "require" throws_type ] [ "throws" throws_type ]
                      "do" stmt* "end"
 call_expr        ::= dotted_ident "(" [ labeled_arg ( "," labeled_arg )* ] ")"
-labeled_arg      ::= IDENT ":" expr
+labeled_arg      ::= IDENT ":" expr | pun_arg
 constructor_expr ::= UIDENT "(" [ ctor_arg ( "," ctor_arg )* ] ")"
-ctor_arg         ::= [ IDENT ":" ] expr
+ctor_arg         ::= IDENT ":" expr | pun_arg
+pun_arg          ::= IDENT                       (* desugars to IDENT ":" IDENT *)
+                   | sigil IDENT                 (* desugars to IDENT ":" sigil IDENT *)
+                   | "&" [ sigil ] IDENT         (* desugars to IDENT ":" "&" [sigil] IDENT *)
 record_expr      ::= "{" [ IDENT ":" expr ( "," IDENT ":" expr )* ] "}"
 list_expr        ::= "[" [ expr ( "," expr )* [ "," ] ] "]"
 linear_list_expr ::= "%" "[" [ expr ( "," expr )* [ "," ] ] "]"
@@ -615,7 +620,9 @@ list_pattern        ::= "[" [ pattern ( "," pattern )* [ "," ] ] "]"
 literal_pattern     ::= literal
 variable_pattern    ::= [ sigil ] IDENT
 constructor_pattern ::= UIDENT "(" [ ctor_pat_arg ( "," ctor_pat_arg )* ] ")"
-ctor_pat_arg        ::= [ IDENT ":" ] pattern
+ctor_pat_arg        ::= IDENT ":" pattern | pun_pat_arg
+pun_pat_arg         ::= IDENT                    (* desugars to IDENT ":" IDENT *)
+                      | sigil IDENT              (* desugars to IDENT ":" sigil IDENT *)
 record_pattern      ::= "{" [ rec_pat_field ( "," rec_pat_field )* [ "," ] ] "}"
 rec_pat_field       ::= "_" | IDENT ":" pattern
                          (* "_" must be the last element; enables partial matching *)
