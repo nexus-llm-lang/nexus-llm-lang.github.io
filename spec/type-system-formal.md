@@ -536,7 +536,9 @@ Both branches receive the **same** $\Gamma_b$ (since only one executes at runtim
 
 To unify the result types of match arms ([T-Match](#T-Match)), we introduce $\text{tail}$, which extracts the type produced by the last statement in a sequence:
 
-$$\text{tail}(\overline{s}) = \begin{cases} \tau & \text{if last statement is an expression of type } \tau \\ \texttt{unit} & \text{if last statement is } \textbf{let},\; \mathord{\sim}x \leftarrow e,\; \textbf{inject},\; \textbf{try}\text{-}\textbf{catch} \\ \bot & \text{if last statement is } \textbf{return},\text{ or an expression statement whose expression is } \textbf{raise}~e \end{cases}$$
+$$\text{tail}(\overline{s}) = \begin{cases} \bot & \text{if last statement is } \textbf{return},\; \textbf{raise}~e\;(\text{as expression statement}),\; \text{or}\; \textbf{let}~\mu\,x = \textbf{raise}~e' \\ \tau & \text{if last statement is an expression of type } \tau \\ \texttt{unit} & \text{otherwise (} \textbf{let},\; \mathord{\sim}x \leftarrow e,\; \textbf{inject},\; \textbf{try}\text{-}\textbf{catch}) \end{cases}$$
+
+Divergence propagates through a binding whose RHS is a $\textbf{raise}$: the binding never produces a value, so the arm should not be forced to unify against a concrete type. Without this case, $\textbf{match}~e~\lbrace A \to \textbf{raise}~X;\; B \to \textbf{let}~\_ = \textbf{raise}~Y \rbrace$ would have $\sigma = \texttt{unit}$ (only the B arm survives the $\bot$ filter), pinning the whole match's type spuriously.
 
 <a id="T-Match"></a>
 
