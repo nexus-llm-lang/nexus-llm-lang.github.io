@@ -221,17 +221,25 @@ U-Borrow is intentionally asymmetric (auto-derefs only the left argument). U-Exp
 
 $$\textbf{P7}~\text{(Unification).}\quad \text{unify}(\tau_1, \tau_2)~\text{terminates and returns a most general unifier or fails}$$
 
-### Generalization and Instantiation
+### Polymorphism Introduction
 
-$\text{gen}$ and $\text{inst}$ are functions used in [T-Let](#T-Let) and [T-Var](#T-Var), not inference rules.
+Polymorphic schemes are introduced **only** by explicit type-parameter lists on top-level function declarations:
 
-$$\text{gen}(\Gamma, \tau) = \forall \alpha_1 \ldots \alpha_n.\, \tau \qquad\text{where } \lbrace \alpha_1, \ldots, \alpha_n \rbrace = \text{fv}(\tau) \setminus \text{fv}(\Gamma)$$
+$$\textbf{fn}~\textit{foo}\langle\alpha_1, \ldots, \alpha_n\rangle(\overline{\ell:\tau}) \to \tau_r;\,\rho_q;\,\rho_e \quad\rightsquigarrow\quad \forall\alpha_1\ldots\alpha_n.\,(\overline{\ell:\tau}) \to \tau_r;\,\rho_q;\,\rho_e$$
 
-$\text{fv}(\tau)$ returns free unification variables in $\tau$. $\text{fv}(\Gamma)$ returns the union of free variables in all schemes in $\Gamma$, excluding each scheme's bound variables.
+The $\alpha_i$ are user-named quantifiers (predicative System-F). There is **no implicit generalization**: every let-binding produces a monomorphic scheme via $\text{mono}$. The only carve-out is [T-Let-Alias](#T-Let-Alias), which copies an existing polymorphic scheme verbatim when the RHS is a bare polymorphic variable.
+
+$$\text{mono}(\tau) = \forall\emptyset.\,\tau \qquad\text{(monomorphic scheme; empty quantifier list)}$$
+
+The pattern rules ([P-Var](#P-Var)) and assignment rule ([T-Assign](#T-Assign)) write the equivalent 2-tuple form $(\emptyset,\,\tau)$ for the same monomorphic scheme — both denote $\forall\emptyset.\,\tau$.
 
 $$\text{inst}(\forall \alpha_1 \ldots \alpha_n.\, \tau) = \tau[\alpha_1 := {?}\beta_1, \ldots, \alpha_n := {?}\beta_n] \qquad (\overline{{?}\beta}~\text{fresh})$$
 
-$$\textbf{P8}~\text{(Generalization).}\quad \text{gen}(\Gamma, \tau)~\text{quantifies exactly}~\text{fv}(\tau) \setminus \text{fv}(\Gamma)$$
+$\text{inst}$ is used at every variable use site ([T-Var](#T-Var)). When the scheme is monomorphic ($n = 0$), $\text{inst}$ is the identity and $\tau' = \tau$.
+
+$$\textbf{P8}~\text{(No implicit generalization).}\quad\text{For any binding}~x :^{q} S~\text{introduced by [T-Let](#T-Let) or [T-LetPat](#T-LetPat)},~S = \text{mono}(\tau)~\text{for some}~\tau.$$
+
+Polymorphic schemes ($\forall\overline{\alpha}.\,\tau$ with $\overline{\alpha} \neq \emptyset$) enter $\Gamma$ only via top-level $\textbf{fn}$ declarations or [T-Let-Alias](#T-Let-Alias).
 
 ### Pattern Matching
 
@@ -245,6 +253,8 @@ $$\text{strip}(\tau) = \begin{cases}
 \end{cases}$$
 
 The match expression ([T-Match](#T-Match)) consumes the linear scrutinee via $\otimes$; the pattern rules operate on the stripped type.
+
+<a id="P-Var"></a>
 
 $$\dfrac{
   q = \begin{cases} 1 & \text{if } \text{linear}(\tau) \\ \omega & \text{otherwise} \end{cases}
@@ -560,7 +570,7 @@ $$\dfrac{
   \Gamma;\, \rho_q \vdash_e e : \tau \mathbin{!} \rho_0 \\[2pt]
   \tau' = \text{default}(\tau) \\[2pt]
   \tau_f = \text{wrapSigil}(\mu, \tau') \qquad
-  S = \text{gen}(\Gamma, \tau_f) \\[2pt]
+  S = \text{mono}(\tau_f) \\[2pt]
   q = \begin{cases} 1 & \text{if } \text{linear}(\tau_f) \\ \omega & \text{otherwise} \end{cases}
   \end{array}
 }{
@@ -569,12 +579,28 @@ $$\dfrac{
 
 When the surface syntax includes a type annotation ($\textbf{let}~\mu\,x : \sigma = e$), an additional premise $\text{unify}(\tau', \sigma)$ is required and $\tau'$ is replaced by $\sigma$. When the annotation is absent, $\tau'$ remains as inferred (possibly containing unification variables that are resolved later or defaulted).
 
+T-Let always produces a monomorphic scheme (see P8). The single exception is the variable-aliasing form below, which fires only when the surface form is exactly $\textbf{let}~x = y$ with no sigil, no annotation, and $y$ bound to a polymorphic scheme. All other shapes — annotated, sigil-prefixed, or with a non-variable RHS — fall through to T-Let.
+
+<a id="T-Let-Alias"></a>
+
+$$\dfrac{
+  y :^{\omega} \forall\overline{\alpha}.\,\sigma \in \Gamma \qquad
+  \overline{\alpha} \neq \emptyset \qquad
+  \Gamma \setminus \lbrace y \rbrace~\text{has no linear bindings}
+}{
+  \Gamma;\, \rho_q;\, \tau_r \vdash_s \textbf{let}~x = y : \Gamma,\, x :^{\omega} (\forall\overline{\alpha}.\,\sigma) \mathbin{!} \lbrace\rbrace
+} \;\textsc{T-Let-Alias}$$
+
+T-Let-Alias preserves polymorphism across plain rebinding: subsequent uses of $x$ re-instantiate $\forall\overline{\alpha}.\,\sigma$ via [T-Var](#T-Var) just as uses of $y$ would. Without this rule, $\textbf{let}~f = \textit{id}$ would instantiate $\textit{id}$ once at the binding site (collapsing $f$ to a monotyped arrow), defeating the polymorphism of $\textit{id}$ at every use of $f$. The carve-out is intentionally narrow — RHS must be a bare variable — so that $\text{mono}$-by-default remains the rule, not the exception. Implementation: see `infer.nx::alias_poly_scheme`.
+
 $$\dfrac{
   \Gamma;\, \rho_q \vdash_e e : \tau \mathbin{!} \rho_0 \qquad
   \text{unify}(\tau, \tau_r)
 }{
   \Gamma;\, \rho_q;\, \tau_r \vdash_s \textbf{return}~e : \Gamma \mathbin{!} \rho_0
 } \;\textsc{T-Return}$$
+
+<a id="T-Assign"></a>
 
 $$\dfrac{
   x :^{\omega} (\emptyset,\, \mathord{\sim}\tau) \in \Gamma \qquad
