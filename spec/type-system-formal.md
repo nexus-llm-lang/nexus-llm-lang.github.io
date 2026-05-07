@@ -289,6 +289,7 @@ Field patterns are checked sequentially, threading the environment: each sub-pat
 
 $$\dfrac{
   \begin{array}{l}
+  \text{distinct}(\overline{\ell}) \qquad
   \forall i.\;\tau_i = \text{fields}(\text{strip}(\tau)).\ell_i \\[2pt]
   \Gamma \vdash p_1 : \tau_1 \Rightarrow \Gamma_1 \qquad \ldots \qquad \Gamma_{k-1} \vdash p_k : \tau_k \Rightarrow \Gamma_k
   \end{array}
@@ -554,10 +555,13 @@ The thunk is consumed via [T-Var](#T-Var) ($q = 1$) in the sub-derivation.
 
 $$\dfrac{
   \Gamma = \Gamma_1 \otimes \ldots \otimes \Gamma_k \qquad
+  \text{distinct}(\overline{\ell}) \qquad
   \forall i.\;\Gamma_i;\, \rho_q \vdash_e e_i : \tau_i \mathbin{!} \rho_i
 }{
   \Gamma;\, \rho_q \vdash_e \lbrace \overline{\ell : e} \rbrace : \lbrace \overline{\ell : \tau_i} \rbrace \mathbin{!} \textstyle\bigcup_i \rho_i
 } \;\textsc{T-Record}$$
+
+$\text{distinct}(\overline{\ell})$ holds iff $\lvert\overline{\ell}\rvert = \lvert\lbrace \ell_1, \ldots, \ell_k \rbrace\rvert$ — the label sequence has no duplicates. This makes record types label-sets, not multisets: $\lbrace a:1, a:2\rbrace$ is rejected at construction time, so [T-Proj](#T-Proj) and $\text{fields}$ never face an ambiguous lookup.
 
 $$\dfrac{
   \Gamma;\, \rho_q \vdash_e e : \tau \mathbin{!} \rho_0 \qquad
