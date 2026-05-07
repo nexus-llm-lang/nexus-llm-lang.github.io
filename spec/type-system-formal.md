@@ -81,7 +81,11 @@ In expression position, $\mu\,x$ with $\mu \in \{\varepsilon, \%, \mathord{\sim}
 
 The row type $\rho$ is used for both the effect position ($\rho_e$, in $\textbf{throws}$) and the capability position ($\rho_q$, in $\textbf{require}$) of function types. Both positions share the same structure — row extension, unification, row variable instantiation — so no separate syntactic category is needed. The distinction is semantic: $\rho_e$ ranges over exception types, $\rho_q$ ranges over capabilities ($\texttt{PermFs}$, $\texttt{PermNet}$, etc.). No kind system enforces this; the invariant is maintained by the introduction rules (T-Raise adds to $\rho_e$; handler declarations add to $\rho_q$).
 
-In the current language, the only effect is checked exceptions: $\rho_e$ contains at most $\texttt{Exn}$ (an extensible sum type to which user-declared `exception` adds variants). The rules are stated for a general row $\rho_e$, but in practice every $\rho_e$ is either $\lbrace\rbrace$ (pure) or $\lbrace \texttt{Exn} \rbrace$ / $\lbrace \texttt{Exn} \mid {?}r \rbrace$.
+In the current language, the only effect is checked exceptions. $\rho_e$ is a row of **exception-constructor names**: each user `exception C(...)` declaration extends the global $\texttt{Exn}$ sum with constructor $C$ and simultaneously introduces $C$ as a row-entry symbol usable in $\textbf{throws}$ rows. So $\rho_e$ may be $\lbrace\rbrace$ (pure), a closed set of specific variants $\lbrace C_1, \ldots, C_n \rbrace$, an open variant row $\lbrace C_1, \ldots, C_n \mid {?}r \rbrace$, or contain the catch-all sentinel $\texttt{Exn}$ (see below).
+
+$\texttt{Exn}$ itself is the **top of the exception lattice** — the type assigned to a binding that captures *any* exception (e.g. $\textbf{catch}~e \to \ldots$ binds $e : \texttt{Exn}$). $\texttt{Exn}$ surfaces as a row entry only when re-raising such a catch-all binding: $\textbf{raise}~e$ for $e : \texttt{Exn}$ emits $\lbrace \texttt{Exn} \rbrace$, indicating "may raise any variant". Specific-variant rows $\lbrace C_i \rbrace$ are subsumed by $\lbrace \texttt{Exn} \rbrace$ via [U-Row-Exn](#U-Row-Exn) below; otherwise rows unify by entry equality (no implicit subtyping).
+
+Exception groups (`exception group G = C_1 | C_2 | \ldots`, see [Exception Groups](../exception-groups)) are syntactic shortcuts: anywhere $G$ appears in a row position or a catch-arm pattern, it expands to its declared member set $\lbrace C_1, C_2, \ldots \rbrace$ at parse time. The formal rules never observe groups directly — only their expansions.
 
 The capability names $\texttt{PermFs}$, $\texttt{PermNet}$, $\texttt{PermConsole}$, $\texttt{PermRandom}$, $\texttt{PermClock}$, $\texttt{PermProc}$, $\texttt{PermEnv}$ correspond to WASI interface grants at runtime. See [WASM and WASI](../../env/wasm) for the complete mapping.
 
@@ -130,7 +134,7 @@ $$\begin{array}{rcl}
 
 $\text{typedef}(x)$ denotes the definition of named type $x$ in the global type-definition environment.
 
-Other functions are introduced where first used: $\text{linear}$, $\text{autoDrop}$ (Linearity), $\text{strip}$ (Pattern Matching), $\text{open}$ and $\text{selectInt}$/$\text{selectFloat}$ (Expressions), $\text{default}$, $\text{wrapSigil}$ (Statements), $\text{merge}$ (Statements), $\text{tail}$ (Expressions), $\text{methods}$ (Expressions).
+Other functions are introduced where first used: $\text{linear}$, $\text{autoDrop}$ (Linearity), $\text{strip}$ (Pattern Matching), $\text{open}$ and $\text{selectInt}$/$\text{selectFloat}$ and $\text{comparable}$ (Expressions), $\text{default}$, $\text{wrapSigil}$ (Statements), $\text{merge}$ (Statements), $\text{tail}$ (Expressions), $\text{methods}$ (Expressions), $\text{caughtVariants}$, $\text{hasCatchAll}$, $\text{members}$, $\text{diverges}$ (Statements).
 
 ### Linearity
 
@@ -240,11 +244,28 @@ $$\dfrac{
 
 The three U-Row rules cover every combination of closed/open arguments. Closed-closed succeeds only when the multisets are equal — neither side has a tail to absorb the difference. Closed-open is the asymmetric mixed case: the right-hand tail must absorb whatever the left has beyond the common prefix, but the left being closed means the right cannot have entries the left lacks ($\overline{r_2} = \emptyset$). The open-closed case follows by the symmetry convention stated at the start of §Unification.
 
+<a id="U-Row-Exn"></a>
+
 $$\dfrac{
+  \begin{array}{l}
+  \texttt{Exn} \in \overline{\tau_2} \qquad
+  \overline{c} = \overline{\tau_2} \setminus \lbrace \texttt{Exn} \rbrace \\[2pt]
+  \forall C \in \overline{\tau_1}.\;\;C = \texttt{Exn} \;\vee\; C \in \overline{c} \;\vee\; C \in \text{variants}(\texttt{Exn})
+  \end{array}
+}{
+  \text{unify}(\lbrace \overline{\tau_1} \rbrace,\; \lbrace \overline{\tau_2} \rbrace)
+} \;\textsc{U-Row-Exn}$$
+
+U-Row-Exn handles the variant-lattice subsumption of $\texttt{Exn}$ described in §1.3: when one side carries the catch-all sentinel $\texttt{Exn}$, any constructors of $\texttt{Exn}$ on the other side are absorbed by it. This is the *only* place the type system admits a row-inclusion relationship — every other row rule requires entry-by-entry equality. U-Row-Exn applies in both argument orders by the symmetry convention. It is intentionally restricted to closed-closed shapes; mixing $\texttt{Exn}$ with an open-row tail $\lbrace \overline{\tau} \mid {?}r \rbrace$ is handled by first instantiating $?r$ via U-Row-Closed-Open, then re-applying U-Row-Exn.
+
+$$\dfrac{
+  \neg\text{linear}(\tau_2) \qquad
   \text{unify}(\tau_1, \tau_2)
 }{
   \text{unify}(\&\tau_1, \tau_2)
 } \;\textsc{U-Borrow}$$
+
+The $\neg\text{linear}(\tau_2)$ premise blocks borrow-to-ownership smuggling: a value of type $\&\sigma$ supplied where the context demands a linear $\tau_2$ would let the callee consume the underlying resource while the caller (still holding the borrow's source) believes the resource is alive. With the premise, $\textit{consume}(\&\%r)$ is rejected at unification — the borrow must be explicitly cloned or the caller must move ownership.
 
 $$\dfrac{
   \text{fields}(x\langle\overline{\tau}\rangle) = \lbrace \overline{\ell : \sigma} \rbrace \qquad
@@ -548,13 +569,24 @@ $$\dfrac{
   \Gamma = \Gamma_1 \otimes \Gamma_2 \\[2pt]
   \Gamma_1;\, \rho_q \vdash_e e_1 : \tau_1 \mathbin{!} \rho_1 \qquad
   \Gamma_2;\, \rho_q \vdash_e e_2 : \tau_2 \mathbin{!} \rho_2 \\[2pt]
-  \text{unify}(\tau_1, \tau_2)
+  \text{unify}(\tau_1, \tau_2) \qquad
+  \text{comparable}(\tau_1)
   \end{array}
 }{
   \Gamma;\, \rho_q \vdash_e e_1 \odot e_2 : \texttt{bool} \mathbin{!} \rho_1 \cup \rho_2
 } \;\textsc{T-Cmp}$$
 
-$\odot$ ranges over comparison operators $\lbrace ==,\, !=,\, <,\, \leq,\, >,\, \geq \rbrace$. Both operands must unify (e.g. both numeric, both strings, both chars); the result is always $\texttt{bool}$. Equality on records and ADTs reduces structurally, requiring the operand types to match.
+$\odot$ ranges over comparison operators $\lbrace ==,\, !=,\, <,\, \leq,\, >,\, \geq \rbrace$. Both operands must unify (e.g. both numeric, both strings, both chars); the result is always $\texttt{bool}$. Equality on records and ADTs reduces structurally, requiring the operand types to match. The $\text{comparable}$ predicate excludes types whose runtime equality is undefined:
+
+$$\text{comparable}(\tau) = \begin{cases}
+\text{true} & \text{if}~\tau \in \lbrace b,\, \texttt{intlit},\, \texttt{floatlit} \rbrace \\
+\text{true} & \text{if}~\tau = \lbrace \overline{\ell : \sigma} \rbrace \wedge \forall i.\;\text{comparable}(\sigma_i) \\
+\text{true} & \text{if}~\tau = x\langle\overline{\sigma}\rangle \wedge \forall i.\;\text{comparable}(\sigma_i) \\
+\text{true} & \text{if}~\tau = [\sigma] \wedge \text{comparable}(\sigma) \\
+\text{false} & \text{if}~\tau~\text{is an arrow type, handler value, ref, borrow, thunk, or array}
+\end{cases}$$
+
+Functions, handlers, mutable refs ($\mathord{\sim}\sigma$), borrows ($\&\sigma$), thunks ($@\sigma$), and arrays ($[\lvert\,\sigma\,\rvert]$) have no defined value-equality at runtime; comparing them is a type error. (Identity comparison on these would be an explicit operator, not $==$.)
 
 <a id="T-Logic"></a>
 
@@ -642,14 +674,29 @@ $$\dfrac{
 
 The lambda is pure ($\mathbin{!} \lbrace\rbrace$). It consumes $\Gamma_\text{cap}$ (captured linear bindings). The body environment includes $\Gamma_\omega$ (captured unrestricted bindings), $\Gamma_\text{cap}$, and the parameters $\overline{x_i :^{q_i} \tau_i}$ — each parameter's usage $q_i$ matches its type's linearity (mirroring [T-Let](#T-Let)). The closure-linearization premise $\tau_\to^\star$ promotes the lambda's type to $\%\tau_\to$ whenever any linear binding is captured: a closure that owns a linear resource is itself one-shot, so two uses of the same closure value would imply two consumptions of the resource. The same shape is reused in [T-Handler](#T-Handler) to linearize handler values that capture linears.
 
+<a id="T-Raise-Ctor"></a>
+
 $$\dfrac{
+  \begin{array}{l}
+  e = c(\overline{\ell : e_a}) \qquad
+  c \in \text{variants}(\texttt{Exn}) \\[2pt]
+  \Gamma;\, \rho_q \vdash_e c(\overline{\ell : e_a}) : \texttt{Exn} \mathbin{!} \rho_0
+  \end{array}
+}{
+  \Gamma;\, \rho_q \vdash_e \textbf{raise}~e : {?}\alpha \mathbin{!} \lbrace c \rbrace \cup \rho_0
+} \;\textsc{T-Raise-Ctor}$$
+
+<a id="T-Raise-Val"></a>
+
+$$\dfrac{
+  e~\text{is not a constructor application} \qquad
   \Gamma;\, \rho_q \vdash_e e : \tau \mathbin{!} \rho_0 \qquad
   \text{unify}(\tau, \texttt{Exn})
 }{
   \Gamma;\, \rho_q \vdash_e \textbf{raise}~e : {?}\alpha \mathbin{!} \lbrace \texttt{Exn} \rbrace \cup \rho_0
-} \;\textsc{T-Raise}$$
+} \;\textsc{T-Raise-Val}$$
 
-T-Raise is **enforced** by the impl: the variant being raised is checked against the active throws-row's exception-group membership (`infer.nx`, the `state_throw_row` channel). [T-TryCatch](#T-TryCatch) is **enforced** symmetrically: the catch arms' patterns are projected against the same row.
+The split records variant identity in the effect row. T-Raise-Ctor fires when the raise expression is syntactically a constructor application (e.g. $\textbf{raise}~\texttt{NotFound}(\textit{path}: p)$) — the row gets the precise constructor name $\lbrace \texttt{NotFound} \rbrace$. T-Raise-Val fires when the raise expression is a variable, projection, or other non-constructor form yielding $\texttt{Exn}$ (typically a catch-bound binding being re-raised: $\textbf{catch}~e \to \textbf{raise}~e$); the row gets the catch-all sentinel $\lbrace \texttt{Exn} \rbrace$, which subsumes any variant via [U-Row-Exn](#U-Row-Exn). Both rules produce the universal type $?\alpha$ since $\textbf{raise}$ never returns to its caller. The companion [T-TryCatch](#T-TryCatch) consumes these row entries — specific-variant arms subtract specific entries, catch-all arms subtract $\texttt{Exn}$ and any constructors covered by U-Row-Exn.
 
 [T-Handler](#T-Handler) types $\textbf{handler}~x~[\textbf{require}~\rho]~\textbf{do}~\overline{\ell = e}~\textbf{end}$ — a record-of-lambdas implementing the methods of port $x$. We assume a global lookup $\text{methods}(x)$ returning the method signatures declared for port $x$ (populated by port declarations, see §1):
 
@@ -712,12 +759,17 @@ $$\dfrac{
 
 $\text{distinct}(\overline{\ell})$ holds iff $\lvert\overline{\ell}\rvert = \lvert\lbrace \ell_1, \ldots, \ell_k \rbrace\rvert$ — the label sequence has no duplicates. This makes record types label-sets, not multisets: $\lbrace a:1, a:2\rbrace$ is rejected at construction time, so [T-Proj](#T-Proj) and $\text{fields}$ never face an ambiguous lookup.
 
+<a id="T-Proj"></a>
+
 $$\dfrac{
   \Gamma;\, \rho_q \vdash_e e : \tau \mathbin{!} \rho_0 \qquad
+  \neg\text{linear}(\tau) \qquad
   (\ell : \sigma) \in \text{fields}(\tau)
 }{
   \Gamma;\, \rho_q \vdash_e e.\ell : \sigma \mathbin{!} \rho_0
 } \;\textsc{T-Proj}$$
+
+The $\neg\text{linear}(\tau)$ premise rejects projection on linear records. Since $\text{linear}$ is structural (§Linearity), it holds whenever $\tau$ is itself $\%\sigma$/$@\sigma$/$[\lvert\,\sigma\,\rvert]$ *or* any field's type is linear. Allowing $e.\ell$ on such a record would consume $e$ via the sub-derivation while exposing only one field — silently dropping the other linear obligations. Linear-record destructuring is funneled exclusively through pattern matching ([P-Record](#pattern-matching)), where $\biguplus$ requires every linear field's binding to be picked up. This matches the consumption-channel list in [types.md](../types) (function call, pattern match, return, assignment).
 
 ### Statements
 
@@ -733,15 +785,21 @@ $$\text{default}(\tau) = \begin{cases}
 \tau & \text{otherwise (applied recursively to all subterms)}
 \end{cases}$$
 
-$\text{wrapSigil}$ wraps the inferred type with the modality corresponding to the binding's sigil:
+$\text{wrapSigil}$ wraps the inferred type with the modality corresponding to the binding's sigil. It is **idempotent**: wrapping with a modality the type already carries at the outermost level returns the type unchanged, avoiding ill-formed double-wraps like $\%\%\sigma$ or $@@\sigma$ that no surface syntax can describe.
 
 $$\text{wrapSigil}(\mu, \tau) = \begin{cases}
+\tau & \text{if } \mu = \% \wedge \tau = \%\sigma \\
 \%\tau & \text{if } \mu = \% \\
+\tau & \text{if } \mu = \mathord{\sim} \wedge \tau = \mathord{\sim}\sigma \\
 \mathord{\sim}\tau & \text{if } \mu = \mathord{\sim} \\
+\tau & \text{if } \mu = @ \wedge \tau = @\sigma \\
 @\tau & \text{if } \mu = @ \\
+\tau & \text{if } \mu = \& \wedge \tau = \&\sigma \\
 \&\tau & \text{if } \mu = \& \\
 \tau & \text{if } \mu = \varepsilon
 \end{cases}$$
+
+Idempotency makes $\textbf{let}~\%x = \textit{make\_linear}()$ produce $\%T$ regardless of whether $\textit{make\_linear}$ returns $T$ (weakened) or $\%T$ — the binding's stated modality is the truth. Pattern $\text{strip}$ removes one layer; idempotent $\text{wrapSigil}$ ensures that one layer is always present, never two.
 
 <a id="T-Let"></a>
 
@@ -749,6 +807,7 @@ $$\dfrac{
   \begin{array}{l}
   \Gamma;\, \rho_q \vdash_e e : \tau \mathbin{!} \rho_0 \\[2pt]
   \tau' = \text{default}(\tau) \\[2pt]
+  \mu = \mathord{\sim} \implies \neg\text{linear}(\tau') \\[2pt]
   \tau_f = \text{wrapSigil}(\mu, \tau') \qquad
   S = \text{mono}(\tau_f) \\[2pt]
   q = \begin{cases} 1 & \text{if } \text{linear}(\tau_f) \\ \omega & \text{otherwise} \end{cases}
@@ -758,6 +817,8 @@ $$\dfrac{
 } \;\textsc{T-Let}$$
 
 When the surface syntax includes a type annotation ($\textbf{let}~\mu\,x : \sigma = e$), an additional premise $\text{unify}(\tau', \sigma)$ is required and $\tau'$ is replaced by $\sigma$. When the annotation is absent, $\tau'$ remains as inferred (possibly containing unification variables that are resolved later or defaulted).
+
+The side-condition $\mu = \mathord{\sim} \implies \neg\text{linear}(\tau')$ enforces the [types.md](../types#mutable-references-) invariant that mutable-ref cells cannot hold linear values. Without it, $\textbf{let}~\mathord{\sim}r = \textit{make\_linear}()$ would produce a $\mathord{\sim}\%T$ binding; subsequent $\mathord{\sim}r$ deref-reads would each yield a fresh $\%T$ value, duplicating the linear resource. The check applies uniformly to inferred types and to explicit annotations ($\textbf{let}~\mathord{\sim}x : \%T = e$). Linearity is structural, so the check also rejects $\mathord{\sim}$ cells holding records or ADTs with any linear component.
 
 T-Let always produces a monomorphic scheme (see P8). The single exception is the variable-aliasing form below, which fires only when the surface form is exactly $\textbf{let}~x = y$ with no sigil, no annotation, and $y$ bound to a polymorphic scheme. All other shapes — annotated, sigil-prefixed, or with a non-variable RHS — fall through to T-Let.
 
@@ -798,16 +859,47 @@ $$\text{merge}(\rho_1, \rho_2) = \rho_1 \cup \rho_2 \quad\text{(row union, dedup
 
 $$\dfrac{
   \begin{array}{l}
-  \forall i.\;\text{inst}(\Gamma(h_i)) = \textbf{handler}\;P_i\;\rho_i \\[2pt]
+  \Gamma = \Gamma_h \otimes \Gamma_\text{body} \\[2pt]
+  \forall i.\;\text{strip}(\text{inst}(\Gamma_h(h_i))) = \textbf{handler}\;P_i\;\rho_i \\[2pt]
   \forall i.\;\rho_i \subseteq \rho_q \quad\text{(handler requires are satisfied by the ambient row)} \\[2pt]
   \rho_q' = \text{merge}(\rho_q,\, \lbrace \overline{P} \rbrace) \\[2pt]
-  \Gamma;\, \rho_q';\, \tau_r \vdash_s \overline{s} : \Gamma' \mathbin{!} \rho_0
+  \Gamma_\text{body};\, \rho_q';\, \tau_r \vdash_s \overline{s} : \Gamma' \mathbin{!} \rho_0
   \end{array}
 }{
   \Gamma;\, \rho_q;\, \tau_r \vdash_s \textbf{inject}~\overline{h}~\textbf{do}~\overline{s}~\textbf{end} : \Gamma' \mathbin{!} \rho_0
 } \;\textsc{T-Inject}$$
 
 The handler's require row $\rho_i$ is a *precondition* on the inject site, not a grant to the body. The body sees only $\rho_q' = \rho_q \cup \lbrace \overline{P} \rbrace$ — the original ambient plus the ports each handler implements. The earlier formulation merged $\text{ports}(\overline{\rho_i})$ into $\rho_q'$ as well, which would let the body access capabilities the surrounding context never granted, breaking capability containment. With requires moved to a containment premise instead, the inject site fails to type-check unless the surrounding scope already provides every capability each handler needs.
+
+Two linearity-related details:
+
+- **Strip on handler-pattern match.** [T-Handler](#T-Handler) wraps the handler's type with $\%$ when any arm captures a linear binding, producing $\%(\textbf{handler}\;P\;\rho)$. Without $\text{strip}$, the structural pattern $\textbf{handler}\;P_i\;\rho_i$ in this premise would not match a $\%$-wrapped handler — every captured-linear handler would be unusable. $\text{strip}$ peels the $\%$ wrapper before the structural match, mirroring its use on match scrutinees in [T-Match](#T-Match).
+- **$\otimes$-split between handler lookup and body.** $\Gamma$ is split into $\Gamma_h$ (used to look up the handler bindings $h_i$) and $\Gamma_\text{body}$ (which flows into $\overline{s}$). For unrestricted handlers ($q = \omega$), $\otimes$ assigns the binding to both partitions, so the body can still call methods on the same handler. For linear handlers ($q = 1$, e.g. $\%h$), $\otimes$ assigns the binding to exactly one partition: when used at the inject site it is *not* available in the body, preventing the documented "only one inject may consume it" promise from being silently violated by an in-body re-use.
+
+[T-PortCall](#T-PortCall) types a port-method invocation $x.\ell(\overline{\ell':e})$ inside a scope where a handler for port $x$ has been injected. Method signatures are read from the global $\text{methods}(x)$ environment populated by port declarations:
+
+<a id="T-PortCall"></a>
+
+$$\dfrac{
+  \begin{array}{c}
+  \Gamma = \Gamma_1 \otimes \ldots \otimes \Gamma_k \\[2pt]
+  \text{methods}(x).\ell = (\overline{\ell' : P}) \to \kappa;\, \alpha;\, \beta \\[2pt]
+  \alpha \subseteq \rho_q \qquad
+  x \in \rho_q \\[2pt]
+  \forall i.\;\Gamma_i;\, \rho_q \vdash_e e_i : \tau_i \mathbin{!} \rho_i \\[2pt]
+  \forall i.\;\begin{cases} \text{unify}(\tau_i, \text{strip}(P_i)) & \text{if } P_i = \%\sigma \wedge \neg\text{linear}(\tau_i) \\ \text{unify}(\tau_i, P_i) & \text{otherwise} \end{cases}
+  \end{array}
+}{
+  \Gamma;\, \rho_q \vdash_e x.\ell(\overline{\ell' : e}) : \kappa \mathbin{!} \beta \cup \textstyle\bigcup_i \rho_i
+} \;\textsc{T-PortCall}$$
+
+T-PortCall is the missing link between handler declarations and call sites. Three premises wire the rows:
+
+- $\alpha \subseteq \rho_q$ — the method's declared **require** row must be a subset of the ambient capability row, so the caller already holds whatever capabilities this method invocation transitively needs (delegated to the handler's body).
+- $x \in \rho_q$ — the port $x$ itself must be in the ambient row, meaning a handler for $x$ has been brought into scope by an enclosing [T-Inject](#T-Inject) (or by the function's own require annotation).
+- $\beta$ joins the call's effect row — exceptions a method may raise propagate to the caller's $\rho_e$.
+
+The argument unification follows [T-App](#T-App)'s shape, including the $\%$-weakening carve-out. Linear arguments ($\tau_i$ already linear) bypass weakening and unify directly against the linear parameter slot. The result type $\kappa$ is the method's declared return type; no instantiation of method-level type parameters is needed because port methods are monomorphic at declaration (any polymorphism is on the port's type parameters, resolved when the port is referenced).
 
 <a id="T-TryCatch"></a>
 
@@ -816,7 +908,8 @@ $$\dfrac{
   \Gamma;\, \rho_q;\, \tau_r \vdash_s \overline{s_\text{try}} : \Gamma_1 \mathbin{!} \rho_\text{try} \\[4pt]
   \forall i.\;\Gamma_1 \vdash p_i : \texttt{Exn} \Rightarrow \Gamma_i \\[2pt]
   \forall i.\;\Gamma_i;\, \rho_q;\, \tau_r \vdash_s \overline{s_i} : \Gamma_i' \mathbin{!} \rho_i \\[4pt]
-  \rho_\text{residual} = \begin{cases} \rho_\text{try} \setminus \lbrace\texttt{Exn}\rbrace & \text{if } \text{exhaustive}(\texttt{Exn}, \overline{p}) \\ \rho_\text{try} & \text{otherwise} \end{cases}
+  \overline{C}_\text{caught} = \text{caughtVariants}(\overline{p}) \\[2pt]
+  \rho_\text{residual} = \begin{cases} \rho_\text{try} \setminus (\lbrace\texttt{Exn}\rbrace \cup \overline{C}_\text{caught}) & \text{if } \text{hasCatchAll}(\overline{p}) \\ \rho_\text{try} \setminus \overline{C}_\text{caught} & \text{otherwise} \end{cases}
   \end{array}
 }{
   \Gamma;\, \rho_q;\, \tau_r \vdash_s \textbf{try}~\overline{s_\text{try}}~\textbf{catch}~\overline{p_i \to s_i}~\textbf{end} : \Gamma_1 \mathbin{!} \rho_\text{residual} \cup \textstyle\bigcup_i \rho_i
@@ -824,14 +917,65 @@ $$\dfrac{
 
 The output environment is $\Gamma_1$ (from the try block). The catch arms extend $\Gamma_1$ with pattern bindings but the output of the whole construct is $\Gamma_1$.
 
-The $\rho_\text{residual}$ split is the soundness fix for partial catches. Stripping $\lbrace\texttt{Exn}\rbrace$ unconditionally would let an uncaught variant escape into a context whose effect row claims purity. Only when the catch arms exhaustively cover $\texttt{Exn}$ — which, since $\texttt{Exn}$ is an extensible sum, in practice requires a wildcard $\_$ arm or a catch-all $x : \texttt{Exn}$ binding — is the row safely cleared. The $\text{exhaustive}$ predicate is the same Maranget check used in [T-Match](#T-Match). Note that arms may add new effects $\rho_i$ (if a handler arm itself raises), which always join the residual row regardless of exhaustiveness.
+Variant-precise residual computation requires two auxiliaries:
+
+$$\text{caughtVariants}(\overline{p}) = \bigcup_i \begin{cases}
+\lbrace c \rbrace & \text{if}~p_i = c(\overline{\ell : p'})~\text{and}~c \in \text{variants}(\texttt{Exn}) \\
+\text{members}(G) & \text{if}~p_i = G~\text{and}~G~\text{is an exception group} \\
+\emptyset & \text{otherwise (wildcard, variable pattern)}
+\end{cases}$$
+
+$$\text{hasCatchAll}(\overline{p}) = \exists i.\;p_i = \_ \;\vee\; p_i~\text{is a variable pattern}~x$$
+
+The catch-all condition $\text{hasCatchAll}$ is *syntactic*: only an explicit wildcard arm $\_ \to \ldots$ or a single-variable arm $e \to \ldots$ (binding the exception value at type $\texttt{Exn}$) clears the catch-all sentinel and any remaining declared-variant entries. A *closed enumeration* of currently-declared $\texttt{Exn}$ variants does **not** count — because $\texttt{Exn}$ is extensible across modules, a closed enumeration that is exhaustive at the catch site can become inexhaustive when a downstream module declares a new variant, silently corrupting the throws-row of any function whose body contains the now-stale catch. Requiring a syntactic catch-all closes that cross-module hole.
+
+Variant subtraction enables partial catches: catching only $\texttt{NotFound}$ from a try-row of $\lbrace \texttt{NotFound}, \texttt{PermDenied} \rbrace$ leaves $\lbrace \texttt{PermDenied} \rbrace$ in the residual. Group catches (e.g. $\textbf{catch}~\vert~\texttt{IOError} \to \ldots$) expand to their member set via $\text{members}(G)$ at parse time; the formal rule sees only the expanded constructor list (see [Exception Groups](../exception-groups)). Arms may add new effects $\rho_i$ (if an arm itself raises), which always join the residual row regardless of catch-all status.
+
+<a id="T-LetPat"></a>
 
 $$\dfrac{
+  \neg\text{diverges}(e) \qquad
   \Gamma;\, \rho_q \vdash_e e : \tau \mathbin{!} \rho_0 \qquad
   \text{exhaustive}(\tau, [p]) \qquad
   \Gamma \vdash p : \tau \Rightarrow \Gamma'
 }{
   \Gamma;\, \rho_q;\, \tau_r \vdash_s \textbf{let}~p = e : \Gamma' \mathbin{!} \rho_0
 } \;\textsc{T-LetPat}$$
+
+<a id="T-LetPat-Diverge"></a>
+
+$$\dfrac{
+  \text{diverges}(e) \qquad
+  \Gamma;\, \rho_q \vdash_e e : \tau \mathbin{!} \rho_0 \qquad
+  \Gamma \vdash p : \tau \Rightarrow \Gamma'
+}{
+  \Gamma;\, \rho_q;\, \tau_r \vdash_s \textbf{let}~p = e : \Gamma' \mathbin{!} \rho_0
+} \;\textsc{T-LetPat-Diverge}$$
+
+$\text{diverges}(e)$ holds iff $e$ is syntactically $\textbf{raise}~e'$ (for any $e'$) — the only expression form that produces no value. The split rules avoid the ill-defined case $\text{exhaustive}(?\alpha, [p])$ that would otherwise arise: T-Raise gives $\textbf{raise}$ the type $?\alpha$ (a fresh unification variable), against which the Maranget head-shape rules (Exh-Bool, Exh-Sum, Exh-Record) cannot fire — a non-wildcard pattern like $\texttt{Some}(y)$ would leave the check stuck. T-LetPat-Diverge bypasses exhaustiveness because divergence semantically *short-circuits* the binding: the pattern is never actually destructured at runtime. The pattern is still typed via $\Gamma \vdash p : \tau$ so the body's $\Gamma'$ contains the right bindings (their types are $?\alpha$-instantiations, but they are unreachable). This carve-out mirrors the $\text{tail}(\overline{s})$ classification of $\textbf{let}~\mu\,x = \textbf{raise}~e'$ as $\bot$ (§Expressions, T-If/T-Match).
+
+### Statement Sequences
+
+Function bodies, branch arms, and the bodies of $\textbf{inject}$ and $\textbf{try}$ are all sequences $\overline{s} = s_1; s_2; \ldots; s_n$. The sequence judgment $\Gamma;\,\rho_q;\,\tau_r \vdash_s \overline{s} : \Gamma' \mathbin{!} \rho_e$ is built from two rules:
+
+<a id="T-Seq-Empty"></a>
+
+$$\dfrac{}{
+  \Gamma;\, \rho_q;\, \tau_r \vdash_s \cdot : \Gamma \mathbin{!} \lbrace\rbrace
+} \;\textsc{T-Seq-Empty}$$
+
+<a id="T-Seq-Cons"></a>
+
+$$\dfrac{
+  \begin{array}{l}
+  \Gamma;\, \rho_q;\, \tau_r \vdash_s s : \Gamma_1 \mathbin{!} \rho_1 \\[2pt]
+  \Gamma_1;\, \rho_q;\, \tau_r \vdash_s \overline{s'} : \Gamma_2 \mathbin{!} \rho_2 \\[2pt]
+  \text{tail}(s) \neq \bot \;\vee\; \overline{s'} = \cdot
+  \end{array}
+}{
+  \Gamma;\, \rho_q;\, \tau_r \vdash_s s; \overline{s'} : \Gamma_2 \mathbin{!} \rho_1 \cup \rho_2
+} \;\textsc{T-Seq-Cons}$$
+
+T-Seq-Cons threads the environment ($\Gamma_1$ from the head feeds into the tail) and unions the effect rows. The premise $\text{tail}(s) \neq \bot \vee \overline{s'} = \cdot$ rejects **dead statements after divergence**: if $s$ is $\textbf{return}~e$, $\textbf{raise}~e$ (as expression statement), or $\textbf{let}~\mu\,x = \textbf{raise}~e'$, then $\text{tail}(s) = \bot$ and the sequence must end there. Programs with statements after a $\textbf{return}$ are rejected at type-checking time rather than silently dropped — the rejection surfaces a likely programmer error (writing past a return) and avoids the question of how to type-check unreachable code. The same $\text{tail}$ predicate used in [T-If](#T-If)/[T-Match](#T-Match) is reused here, so divergence handling stays uniform across the spec.
 
 {% endraw %}

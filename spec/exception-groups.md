@@ -47,6 +47,8 @@ end
 
 This is syntactic sugar -- the compiler expands `| ParseError ->` into one arm per member.
 
+In the formal type system ([type-system-formal.md](../type-system-formal)), throws-rows are variant-precise: each member of a group becomes its own row entry. Group catches subtract the union of expanded member constructors from the row. The formal rules never observe a group as such — only its post-expansion constructor list (see `caughtVariants` and `members` in T-TryCatch).
+
 ## Catching Specific Exceptions
 
 For precise handling, match individual exception types and destructure their fields:
@@ -101,4 +103,4 @@ Groups are expanded at catch sites -- there is no hierarchical nesting at runtim
 
 ---
 
-See also: [Checked Exceptions and Capabilities](../effects), [Syntax](../syntax)
+See also: [Checked Exceptions and Capabilities](../effects), [Type System — Formal Rules](../type-system-formal), [Syntax](../syntax)

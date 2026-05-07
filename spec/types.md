@@ -109,6 +109,8 @@ Composite linear values (records, ADTs, arrays) must be explicitly consumed via:
 - Pattern matching (destructuring extracts the value)
 - Return (propagating ownership to the caller)
 
+Field projection (`r.field`) is **not** a consumption channel for linear records: a single projection would expose only one field while silently dropping the other linear obligations on the value. The type system rejects projection on any record whose type is structurally linear; pattern matching is the only way to extract individual fields.
+
 ### Linearity Weakening
 
 A plain `T` value can be passed to a function expecting `%T`. The value is treated as linear for the duration of the call.
