@@ -127,7 +127,7 @@ $$\begin{array}{rcl}
 
 $\text{typedef}(x)$ denotes the definition of named type $x$ in the global type-definition environment.
 
-Other functions are introduced where first used: $\text{linear}$, $\text{autoDrop}$ (Linearity), $\text{strip}$ (Pattern Matching), $\text{open}$ and $\text{selectInt}$/$\text{selectFloat}$ (Expressions), $\text{default}$, $\text{wrapSigil}$ (Statements), $\text{merge}$, $\text{ports}$ (Statements), $\text{tail}$ (Expressions).
+Other functions are introduced where first used: $\text{linear}$, $\text{autoDrop}$ (Linearity), $\text{strip}$ (Pattern Matching), $\text{open}$ and $\text{selectInt}$/$\text{selectFloat}$ (Expressions), $\text{default}$, $\text{wrapSigil}$ (Statements), $\text{merge}$ (Statements), $\text{tail}$ (Expressions), $\text{methods}$ (Expressions).
 
 ### Linearity
 
@@ -572,7 +572,7 @@ $$\dfrac{
 
 $$\tau_h^\star = \begin{cases} \%\tau_h & \text{if } \Gamma_\text{cap} \neq \emptyset \\ \tau_h & \text{otherwise} \end{cases}$$
 
-The handler is pure ($\mathbin{!} \lbrace\rbrace$) — its construction has no effect; effects are deferred until the handler is injected and a method is invoked. Each arm $e_j$ must be a lambda whose function type matches the port's declared signature for method $\ell_j$. The handler's require row $\rho_\text{req}$ aggregates each arm's declared require row $\alpha_j$ (carried on the lambda's arrow type and validated against the lambda body in [T-Lambda](#T-Lambda)/[T-App](#T-App)) and the optional surface annotation $\rho_\text{annot}$ (defaulting to $\lbrace\rbrace$ if absent). [T-Inject](#T-Inject) reads $\rho_\text{req}$ via $\text{ports}(\overline{\rho_i})$ to extend the ambient capability row when the handler is in scope. Closure linearization mirrors [T-Lambda](#T-Lambda): if any arm captures a linear binding, the entire handler value becomes $\%\tau_h$ — only one $\textbf{inject}$ may consume it.
+The handler is pure ($\mathbin{!} \lbrace\rbrace$) — its construction has no effect; effects are deferred until the handler is injected and a method is invoked. Each arm $e_j$ must be a lambda whose function type matches the port's declared signature for method $\ell_j$. The handler's require row $\rho_\text{req}$ aggregates each arm's declared require row $\alpha_j$ (carried on the lambda's arrow type and validated against the lambda body in [T-Lambda](#T-Lambda)/[T-App](#T-App)) and the optional surface annotation $\rho_\text{annot}$ (defaulting to $\lbrace\rbrace$ if absent). [T-Inject](#T-Inject) checks that $\rho_\text{req}$ is satisfied by the surrounding ambient row at the inject site. Closure linearization mirrors [T-Lambda](#T-Lambda): if any arm captures a linear binding, the entire handler value becomes $\%\tau_h$ — only one $\textbf{inject}$ may consume it.
 
 $$\dfrac{
   x :^{\omega} \forall\overline{\alpha}.\,\tau \in \Gamma \qquad
@@ -682,25 +682,24 @@ $$\dfrac{
   \Gamma;\, \rho_q;\, \tau_r \vdash_s \mathord{\sim}x \leftarrow e : \Gamma \mathbin{!} \rho_0
 } \;\textsc{T-Assign}$$
 
-[T-Inject](#T-Inject) combines capability rows from injected handlers via two auxiliaries. $\text{merge}$ unions two rows:
+[T-Inject](#T-Inject) extends the ambient capability row with the ports each injected handler provides, after checking that the ambient row already satisfies what each handler requires. $\text{merge}$ unions two rows:
 
 $$\text{merge}(\rho_1, \rho_2) = \rho_1 \cup \rho_2 \quad\text{(row union, deduplicating by type identity)}$$
-
-$\text{ports}$ collects the capability names that a set of handlers provides:
-
-$$\text{ports}(\overline{\rho}) = \textstyle\bigcup_i \lbrace\, P \in \rho_i \mid P~\text{is a capability name} \,\rbrace$$
 
 <a id="T-Inject"></a>
 
 $$\dfrac{
   \begin{array}{l}
   \forall i.\;\text{inst}(\Gamma(h_i)) = \textbf{handler}\;P_i\;\rho_i \\[2pt]
-  \rho_q' = \text{merge}(\rho_q,\, \lbrace \overline{P} \rbrace \cup \text{ports}(\overline{\rho_i})) \\[2pt]
+  \forall i.\;\rho_i \subseteq \rho_q \quad\text{(handler requires are satisfied by the ambient row)} \\[2pt]
+  \rho_q' = \text{merge}(\rho_q,\, \lbrace \overline{P} \rbrace) \\[2pt]
   \Gamma;\, \rho_q';\, \tau_r \vdash_s \overline{s} : \Gamma' \mathbin{!} \rho_0
   \end{array}
 }{
   \Gamma;\, \rho_q;\, \tau_r \vdash_s \textbf{inject}~\overline{h}~\textbf{do}~\overline{s}~\textbf{end} : \Gamma' \mathbin{!} \rho_0
 } \;\textsc{T-Inject}$$
+
+The handler's require row $\rho_i$ is a *precondition* on the inject site, not a grant to the body. The body sees only $\rho_q' = \rho_q \cup \lbrace \overline{P} \rbrace$ — the original ambient plus the ports each handler implements. The earlier formulation merged $\text{ports}(\overline{\rho_i})$ into $\rho_q'$ as well, which would let the body access capabilities the surrounding context never granted, breaking capability containment. With requires moved to a containment premise instead, the inject site fails to type-check unless the surrounding scope already provides every capability each handler needs.
 
 <a id="T-TryCatch"></a>
 
