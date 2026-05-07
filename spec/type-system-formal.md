@@ -631,17 +631,22 @@ $$\dfrac{
   \Gamma;\, \rho_q;\, \tau_r \vdash_s \textbf{inject}~\overline{h}~\textbf{do}~\overline{s}~\textbf{end} : \Gamma' \mathbin{!} \rho_0
 } \;\textsc{T-Inject}$$
 
+<a id="T-TryCatch"></a>
+
 $$\dfrac{
   \begin{array}{l}
   \Gamma;\, \rho_q;\, \tau_r \vdash_s \overline{s_\text{try}} : \Gamma_1 \mathbin{!} \rho_\text{try} \\[4pt]
   \forall i.\;\Gamma_1 \vdash p_i : \texttt{Exn} \Rightarrow \Gamma_i \\[2pt]
-  \forall i.\;\Gamma_i;\, \rho_q;\, \tau_r \vdash_s \overline{s_i} : \Gamma_i' \mathbin{!} \rho_i
+  \forall i.\;\Gamma_i;\, \rho_q;\, \tau_r \vdash_s \overline{s_i} : \Gamma_i' \mathbin{!} \rho_i \\[4pt]
+  \rho_\text{residual} = \begin{cases} \rho_\text{try} \setminus \lbrace\texttt{Exn}\rbrace & \text{if } \text{exhaustive}(\texttt{Exn}, \overline{p}) \\ \rho_\text{try} & \text{otherwise} \end{cases}
   \end{array}
 }{
-  \Gamma;\, \rho_q;\, \tau_r \vdash_s \textbf{try}~\overline{s_\text{try}}~\textbf{catch}~\overline{p_i \to s_i}~\textbf{end} : \Gamma_1 \mathbin{!} (\rho_\text{try} \setminus \lbrace\texttt{Exn}\rbrace) \cup \textstyle\bigcup_i \rho_i
+  \Gamma;\, \rho_q;\, \tau_r \vdash_s \textbf{try}~\overline{s_\text{try}}~\textbf{catch}~\overline{p_i \to s_i}~\textbf{end} : \Gamma_1 \mathbin{!} \rho_\text{residual} \cup \textstyle\bigcup_i \rho_i
 } \;\textsc{T-TryCatch}$$
 
 The output environment is $\Gamma_1$ (from the try block). The catch arms extend $\Gamma_1$ with pattern bindings but the output of the whole construct is $\Gamma_1$.
+
+The $\rho_\text{residual}$ split is the soundness fix for partial catches. Stripping $\lbrace\texttt{Exn}\rbrace$ unconditionally would let an uncaught variant escape into a context whose effect row claims purity. Only when the catch arms exhaustively cover $\texttt{Exn}$ — which, since $\texttt{Exn}$ is an extensible sum, in practice requires a wildcard $\_$ arm or a catch-all $x : \texttt{Exn}$ binding — is the row safely cleared. The $\text{exhaustive}$ predicate is the same Maranget check used in [T-Match](#T-Match). Note that arms may add new effects $\rho_i$ (if a handler arm itself raises), which always join the residual row regardless of exhaustiveness.
 
 $$\dfrac{
   \Gamma;\, \rho_q \vdash_e e : \tau \mathbin{!} \rho_0 \qquad
