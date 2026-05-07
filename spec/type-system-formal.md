@@ -490,13 +490,14 @@ $$\dfrac{
   \Gamma_\text{cap} = \lbrace x :^{1} S \in \Gamma \mid x \in \text{fv}(\overline{s}) \rbrace \\[2pt]
   \Gamma_\omega = \lbrace x :^{\omega} S \in \Gamma \mid x \in \text{fv}(\overline{s}) \rbrace \\[2pt]
   \forall x \in \text{fv}(\overline{s}) \cap \text{dom}(\Gamma).\;\Gamma(x) \neq \mathord{\sim}\sigma \quad\text{(no ref capture)} \\[2pt]
-  \Gamma_\omega,\, \Gamma_\text{cap},\, \overline{x_i :^{\omega} \tau_i};\, \rho_q;\, \tau_r \vdash_s \overline{s} : \Gamma' \mathbin{!} \rho_e
+  q_i = \begin{cases} 1 & \text{if } \text{linear}(\tau_i) \\ \omega & \text{otherwise} \end{cases} \\[2pt]
+  \Gamma_\omega,\, \Gamma_\text{cap},\, \overline{x_i :^{q_i} \tau_i};\, \rho_q;\, \tau_r \vdash_s \overline{s} : \Gamma' \mathbin{!} \rho_e
   \end{array}
 }{
   \Gamma_\text{cap};\, \rho_q' \vdash_e \textbf{fn}~(\overline{\ell : \tau}) \to \tau_r;\, \rho_q;\, \rho_e~\textbf{do}~\overline{s}~\textbf{end} : \tau_\to \mathbin{!} \lbrace\rbrace
 } \;\textsc{T-Lambda}$$
 
-The lambda is pure ($\mathbin{!} \lbrace\rbrace$). It consumes $\Gamma_\text{cap}$ (captured linear bindings). The body environment includes $\Gamma_\omega$ (captured unrestricted bindings), $\Gamma_\text{cap}$, and the parameters $\overline{x_i :^{\omega} \tau_i}$. Body effects become part of $\tau_\to = (\overline{\ell : \tau}) \to \tau_r;\, \rho_q;\, \rho_e$. If $\Gamma_\text{cap} \neq \emptyset$, $\tau_\to$ becomes $\%\tau_\to$.
+The lambda is pure ($\mathbin{!} \lbrace\rbrace$). It consumes $\Gamma_\text{cap}$ (captured linear bindings). The body environment includes $\Gamma_\omega$ (captured unrestricted bindings), $\Gamma_\text{cap}$, and the parameters $\overline{x_i :^{q_i} \tau_i}$ — each parameter's usage $q_i$ matches its type's linearity (mirroring [T-Let](#T-Let)). Body effects become part of $\tau_\to = (\overline{\ell : \tau}) \to \tau_r;\, \rho_q;\, \rho_e$. If $\Gamma_\text{cap} \neq \emptyset$, $\tau_\to$ becomes $\%\tau_\to$.
 
 $$\dfrac{
   \Gamma;\, \rho_q \vdash_e e : \tau \mathbin{!} \rho_0 \qquad
