@@ -279,22 +279,24 @@ $$\dfrac{
   \Gamma(c) = \forall\overline{\alpha}.\,(\overline{\ell : F}) \to \tau' \\[2pt]
   \text{unify}(\text{strip}(\tau),\, \tau'[\overline{\alpha := {?}\beta}]) \qquad
   \lvert\overline{p}\rvert = \lvert\overline{F}\rvert \\[2pt]
-  \Gamma \vdash p_1 : F_1[\overline{\alpha := {?}\beta}] \Rightarrow \Gamma_1 \qquad \ldots \qquad \Gamma_{k-1} \vdash p_k : F_k[\overline{\alpha := {?}\beta}] \Rightarrow \Gamma_k
+  \forall i.\;\Gamma \vdash p_i : F_i[\overline{\alpha := {?}\beta}] \Rightarrow \Gamma_i \\[2pt]
+  \biguplus_i (\Gamma_i \setminus \Gamma)~\text{is defined}
   \end{array}
 }{
-  \Gamma \vdash c(\overline{\ell : p}) : \tau \Rightarrow \Gamma_k
+  \Gamma \vdash c(\overline{\ell : p}) : \tau \Rightarrow \Gamma \uplus \textstyle\biguplus_i (\Gamma_i \setminus \Gamma)
 } \;\textsc{P-Ctor}$$
 
-Field patterns are checked sequentially, threading the environment: each sub-pattern extends $\Gamma$ with new bindings that subsequent sub-patterns can see.
+Field patterns bind in parallel: each $p_i$ is checked against the same input $\Gamma$, and the new bindings $\Gamma_i \setminus \Gamma$ are combined by disjoint union $\uplus$. Disjoint union fails if any two field patterns introduce the same variable name (e.g. $c(a: x, b: x)$), so a single use of $x$ across fields is rejected at the rule level instead of silently shadowing.
 
 $$\dfrac{
   \begin{array}{l}
   \text{distinct}(\overline{\ell}) \qquad
   \forall i.\;\tau_i = \text{fields}(\text{strip}(\tau)).\ell_i \\[2pt]
-  \Gamma \vdash p_1 : \tau_1 \Rightarrow \Gamma_1 \qquad \ldots \qquad \Gamma_{k-1} \vdash p_k : \tau_k \Rightarrow \Gamma_k
+  \forall i.\;\Gamma \vdash p_i : \tau_i \Rightarrow \Gamma_i \\[2pt]
+  \biguplus_i (\Gamma_i \setminus \Gamma)~\text{is defined}
   \end{array}
 }{
-  \Gamma \vdash \lbrace \overline{\ell : p} \rbrace : \tau \Rightarrow \Gamma_k
+  \Gamma \vdash \lbrace \overline{\ell : p} \rbrace : \tau \Rightarrow \Gamma \uplus \textstyle\biguplus_i (\Gamma_i \setminus \Gamma)
 } \;\textsc{P-Record}$$
 
 Exhaustiveness is checked via Maranget's pattern matrix algorithm:
