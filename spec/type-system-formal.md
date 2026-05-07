@@ -47,6 +47,8 @@ The core calculus omits several surface language features that are either desuga
 - **Exception / exception group declarations** — extend the $\texttt{Exn}$ sum type in $\Gamma$. Same status as port declarations.
 - **While / for loops** — present in the surface syntax but desugared; not in the core calculus.
 - **Import statements** — resolved before type checking; not modeled here.
+- **List literals and the $\mathord{::}$ cons operator** — desugared to the prelude $\texttt{List}$ enum: $[\,]$ becomes $\texttt{Nil}$, $e_h :: e_t$ becomes $\texttt{Cons}(v: e_h,\, \text{rest}: e_t)$, $[e_1, \ldots, e_n]$ becomes a right-associated chain of $\texttt{Cons}$ ending in $\texttt{Nil}$. The list type $[\tau]$ is an alias for $\texttt{List}\langle\tau\rangle$. List patterns desugar identically. Typing and exhaustiveness are then handled by [T-App](#T-App) (constructor application), [P-Ctor](#P-Ctor), and [Exh-Sum](#Exh-Sum) — no list-specific rules are needed.
+- **Array values** — the linear type $[\lvert\tau\rvert]$ has no in-core introduction or elimination rule. Construction, indexing, length, mutation, and iteration go through stdlib intrinsic functions (e.g. $\texttt{array\_init} : (n: \texttt{i64}, v: \tau) \to [\lvert\tau\rvert]$, $\texttt{array\_get} : (a: \&[\lvert\tau\rvert], i: \texttt{i64}) \to \tau$) that are populated into $\Gamma$ as preconditions. The type system observes only their declared signatures via [T-App](#T-App). Array exhaustiveness in [match](#T-Match) is handled by allowing only wildcard-like patterns (a value-level constructor for arrays is not exposed).
 
 ### Types
 
@@ -250,6 +252,14 @@ $$\dfrac{
   \text{unify}(x\langle\overline{\tau}\rangle, R)
 } \;\textsc{U-Expand}$$
 
+$$\dfrac{
+  \text{unify}(\tau_1, \tau_2)
+}{
+  \text{unify}([\tau_1],\, \texttt{List}\langle\tau_2\rangle)
+} \;\textsc{U-ListSugar}$$
+
+U-ListSugar bridges the type-level alias: $[\tau]$ in source is identical to the prelude $\texttt{List}\langle\tau\rangle$ enum (see §1, "List literals and the :: cons operator"). Both directions are reachable by the symmetry convention.
+
 U-Borrow auto-derefs $\&\sigma$ only when it appears on the left (the *actual* position — see the argument-order convention at the start of this section). U-Expand applies in both argument orders via the symmetry convention — the implementation handles both $\text{unify}(x\langle\overline{\tau}\rangle, R)$ and $\text{unify}(R, x\langle\overline{\tau}\rangle)$.
 
 $$\textbf{P7}~\text{(Unification).}\quad \text{unify}(\tau_1, \tau_2)~\text{terminates and returns a most general unifier or fails}$$
@@ -307,6 +317,8 @@ $$\dfrac{
   \Gamma \vdash n : \tau \Rightarrow \Gamma
 } \;\textsc{P-Lit}$$
 
+<a id="P-Ctor"></a>
+
 $$\dfrac{
   \begin{array}{l}
   \Gamma(c) = \forall\overline{\alpha}.\,(\overline{\ell : F}) \to \tau' \\[2pt]
@@ -344,6 +356,8 @@ $$\dfrac{
 }{
   \text{check}(M, \texttt{bool} :: \overline{\tau}')
 } \;\textsc{Exh-Bool}$$
+
+<a id="Exh-Sum"></a>
 
 $$\dfrac{
   \begin{array}{l}
