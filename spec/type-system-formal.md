@@ -613,12 +613,17 @@ The handler is pure ($\mathbin{!} \lbrace\rbrace$) — its construction has no e
 $$\dfrac{
   x :^{\omega} \forall\overline{\alpha}.\,\tau \in \Gamma \qquad
   \tau' = \text{inst}(\forall\overline{\alpha}.\,\tau) \qquad
-  \sigma = \text{strip}(\tau')
+  \sigma = \text{stripBorrow}(\tau')
 }{
   \Gamma;\, \rho_q \vdash_e \&x : \&\sigma \mathbin{!} \lbrace\rbrace
 } \;\textsc{T-Borrow}$$
 
-Borrowing does not consume the binding. Only unrestricted bindings can be borrowed.
+$$\text{stripBorrow}(\tau) = \begin{cases}
+\sigma & \text{if } \tau \in \lbrace \%\sigma,\, @\sigma,\, \&\sigma,\, \mathord{\sim}\sigma \rbrace \\
+\tau & \text{otherwise}
+\end{cases}$$
+
+Borrowing does not consume the binding. Only unrestricted bindings can be borrowed. T-Borrow uses $\text{stripBorrow}$ rather than $\text{strip}$ because borrowing a $\mathord{\sim}\tau$ binding should yield a $\&\tau$ borrow of the cell's contents, not a nonsensical $\&(\mathord{\sim}\tau)$ borrow-of-cell. The pattern-side $\text{strip}$ deliberately keeps $\mathord{\sim}$ in place — refs cannot be match scrutinees — so the two operators diverge precisely at the $\mathord{\sim}$ case.
 
 <a id="T-Force"></a>
 
