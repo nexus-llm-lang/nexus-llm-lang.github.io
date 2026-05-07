@@ -507,6 +507,8 @@ $$\text{selectFloat}: \quad
 \texttt{f64} & \texttt{f64} & — & \texttt{f64}
 \end{array}$$
 
+<a id="T-ArithInt"></a>
+
 $$\dfrac{
   \begin{array}{l}
   \Gamma = \Gamma_1 \otimes \Gamma_2 \\[2pt]
@@ -519,6 +521,8 @@ $$\dfrac{
 }{
   \Gamma;\, \rho_q \vdash_e e_1 \oplus e_2 : \tau \mathbin{!} \rho_1 \cup \rho_2
 } \;\textsc{T-ArithInt}$$
+
+<a id="T-ArithFloat"></a>
 
 $$\dfrac{
   \begin{array}{l}
@@ -535,7 +539,52 @@ $$\dfrac{
 
 Unresolved type variables (${?}\alpha$) are treated as $\texttt{intlit}$ in $\text{selectInt}$ and as $\texttt{floatlit}$ in $\text{selectFloat}$.
 
-Integer operators ($+$, $-$, $*$, etc.) use $\text{selectInt}$; float operators ($+.$, $-.$, etc.) use $\text{selectFloat}$. The two cannot mix.
+The $\oplus$ in [T-ArithInt](#T-ArithInt) ranges over the integer arithmetic, bitwise, and shift operators: $\oplus \in \lbrace +,\, -,\, *,\, /,\, \%,\, \mathbin{\\&},\, \mathbin{\vert},\, \mathbin{\hat{}},\, \ll,\, \gg \rbrace$. Float operators $\oplus_f \in \lbrace +.,\, -.,\, *.,\, /. \rbrace$ use $\text{selectFloat}$ in [T-ArithFloat](#T-ArithFloat). Integer and float operators are syntactically distinct (`+` vs `+.`) and cannot mix.
+
+<a id="T-Cmp"></a>
+
+$$\dfrac{
+  \begin{array}{l}
+  \Gamma = \Gamma_1 \otimes \Gamma_2 \\[2pt]
+  \Gamma_1;\, \rho_q \vdash_e e_1 : \tau_1 \mathbin{!} \rho_1 \qquad
+  \Gamma_2;\, \rho_q \vdash_e e_2 : \tau_2 \mathbin{!} \rho_2 \\[2pt]
+  \text{unify}(\tau_1, \tau_2)
+  \end{array}
+}{
+  \Gamma;\, \rho_q \vdash_e e_1 \odot e_2 : \texttt{bool} \mathbin{!} \rho_1 \cup \rho_2
+} \;\textsc{T-Cmp}$$
+
+$\odot$ ranges over comparison operators $\lbrace ==,\, !=,\, <,\, \leq,\, >,\, \geq \rbrace$. Both operands must unify (e.g. both numeric, both strings, both chars); the result is always $\texttt{bool}$. Equality on records and ADTs reduces structurally, requiring the operand types to match.
+
+<a id="T-Logic"></a>
+
+$$\dfrac{
+  \begin{array}{l}
+  \Gamma = \Gamma_1 \otimes \Gamma_2 \\[2pt]
+  \Gamma_1;\, \rho_q \vdash_e e_1 : \tau_1 \mathbin{!} \rho_1 \qquad
+  \Gamma_2;\, \rho_q \vdash_e e_2 : \tau_2 \mathbin{!} \rho_2 \\[2pt]
+  \text{unify}(\tau_1, \texttt{bool}) \qquad
+  \text{unify}(\tau_2, \texttt{bool})
+  \end{array}
+}{
+  \Gamma;\, \rho_q \vdash_e e_1 \boxdot e_2 : \texttt{bool} \mathbin{!} \rho_1 \cup \rho_2
+} \;\textsc{T-Logic}$$
+
+$\boxdot \in \lbrace \mathbin{\\&\\&},\, \mathbin{\vert\vert} \rbrace$. Note that the right-hand row $\rho_2$ joins unconditionally — this is **not** short-circuit-aware effect tracking; if you need pure short-circuit semantics, write the equivalent $\textbf{if}$.
+
+<a id="T-Concat"></a>
+
+$$\dfrac{
+  \begin{array}{l}
+  \Gamma = \Gamma_1 \otimes \Gamma_2 \\[2pt]
+  \Gamma_1;\, \rho_q \vdash_e e_1 : \tau_1 \mathbin{!} \rho_1 \qquad
+  \Gamma_2;\, \rho_q \vdash_e e_2 : \tau_2 \mathbin{!} \rho_2 \\[2pt]
+  \text{unify}(\tau_1, \texttt{string}) \qquad
+  \text{unify}(\tau_2, \texttt{string})
+  \end{array}
+}{
+  \Gamma;\, \rho_q \vdash_e e_1 \mathbin{+\\!+} e_2 : \texttt{string} \mathbin{!} \rho_1 \cup \rho_2
+} \;\textsc{T-Concat}$$
 
 $$\dfrac{
   \begin{array}{l}
