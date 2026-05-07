@@ -526,13 +526,14 @@ $$\dfrac{
   \Gamma_c;\, \rho_q \vdash_e e_c : \tau_c \mathbin{!} \rho_c \qquad
   \text{unify}(\tau_c, \texttt{bool}) \\[2pt]
   \Gamma_b;\, \rho_q;\, \tau_r \vdash_s \overline{s_1} : \Gamma_1' \mathbin{!} \rho_1 \\[2pt]
-  \Gamma_b;\, \rho_q;\, \tau_r \vdash_s \overline{s_2} : \Gamma_2' \mathbin{!} \rho_2
+  \Gamma_b;\, \rho_q;\, \tau_r \vdash_s \overline{s_2} : \Gamma_2' \mathbin{!} \rho_2 \\[2pt]
+  \text{tail}(\overline{s_1}) \neq \bot \wedge \text{tail}(\overline{s_2}) \neq \bot \implies \text{unify}(\text{tail}(\overline{s_1}), \text{tail}(\overline{s_2}))
   \end{array}
 }{
-  \Gamma;\, \rho_q \vdash_e \textbf{if}~e_c~\textbf{then}~\overline{s_1}~\textbf{else}~\overline{s_2} : \texttt{unit} \mathbin{!} \rho_c \cup \rho_1 \cup \rho_2
+  \Gamma;\, \rho_q \vdash_e \textbf{if}~e_c~\textbf{then}~\overline{s_1}~\textbf{else}~\overline{s_2} : \sigma \mathbin{!} \rho_c \cup \rho_1 \cup \rho_2
 } \;\textsc{T-If}$$
 
-Both branches receive the **same** $\Gamma_b$ (since only one executes at runtime).
+where $\sigma$ is the common type of the non-diverging branches: if both $\text{tail}(\overline{s_i}) \neq \bot$, $\sigma$ equals the unified branch tail; if exactly one branch diverges, $\sigma$ is the surviving branch's tail; if both diverge, $\sigma$ is a fresh ${?}\alpha$. Both branches receive the **same** $\Gamma_b$ (since only one executes at runtime). The if-without-else form (surface only) desugars to $\textbf{if}~e_c~\textbf{then}~\overline{s_1}~\textbf{else}~()$ and therefore has type $\texttt{unit}$. Mirrors [T-Match](#T-Match)'s divergent-arm carve-out for symmetry.
 
 To unify the result types of match arms ([T-Match](#T-Match)), we introduce $\text{tail}$, which extracts the type produced by the last statement in a sequence:
 
