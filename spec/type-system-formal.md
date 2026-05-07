@@ -37,7 +37,8 @@ s & ::= & \textbf{let}~\mu\,x = e & \text{binding} \\
 p & ::= & x & \text{variable pattern} \\
   & \mid & \_ \mid n & \text{wildcard / literal pattern} \\
   & \mid & c(\overline{\ell : p}) & \text{constructor pattern (} c \in \text{dom}(\Gamma) \text{)} \\
-  & \mid & \lbrace \overline{\ell : p} \rbrace & \text{record pattern}
+  & \mid & \lbrace \overline{\ell : p} \rbrace & \text{record pattern} \\
+  & \mid & p_1 \mathbin{\vert} p_2 & \text{or-pattern (alternation)}
 \end{array}$$
 
 The core calculus omits several surface language features that are either desugared or handled as environment preconditions:
@@ -343,6 +344,20 @@ $$\dfrac{
 }{
   \Gamma \vdash \lbrace \overline{\ell : p} \rbrace : \tau \Rightarrow \Gamma \uplus \textstyle\biguplus_i (\Gamma_i \setminus \Gamma)
 } \;\textsc{P-Record}$$
+
+<a id="P-Or"></a>
+
+$$\dfrac{
+  \begin{array}{l}
+  \Gamma \vdash p_1 : \tau \Rightarrow \Gamma_1 \qquad
+  \Gamma \vdash p_2 : \tau \Rightarrow \Gamma_2 \\[2pt]
+  \Gamma_1 \setminus \Gamma = \Gamma_2 \setminus \Gamma \quad\text{(both alternatives bind the same names at the same types and usages)}
+  \end{array}
+}{
+  \Gamma \vdash p_1 \mathbin{\vert} p_2 : \tau \Rightarrow \Gamma_1
+} \;\textsc{P-Or}$$
+
+P-Or constrains both alternatives to introduce **identical** binding sets — same names, same types, same usage annotations — so the body that follows the pattern can refer to those bindings unambiguously regardless of which alternative matched. The output environment can be taken from either side ($\Gamma_1$, by convention). For exhaustiveness, an or-pattern $p_1 \mathbin{\vert} p_2$ in matrix row $(p_1 \mathbin{\vert} p_2 :: \overline{r})$ expands to two rows $(p_1 :: \overline{r})$ and $(p_2 :: \overline{r})$ before the standard $\text{spec}$/$D$ algorithm runs.
 
 Exhaustiveness is checked via Maranget's pattern matrix algorithm:
 
