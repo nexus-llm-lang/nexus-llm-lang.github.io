@@ -202,7 +202,27 @@ $$\dfrac{
   \end{array}
 }{
   \text{unify}(\lbrace \overline{\tau_1} \mid {?}t_1 \rbrace, \lbrace \overline{\tau_2} \mid {?}t_2 \rbrace)
-} \;\textsc{U-Row}$$
+} \;\textsc{U-Row-Open-Open}$$
+
+$$\dfrac{
+  \overline{\tau_1} = \overline{\tau_2}~\text{as multisets (order-irrelevant)}
+}{
+  \text{unify}(\lbrace \overline{\tau_1} \rbrace, \lbrace \overline{\tau_2} \rbrace)
+} \;\textsc{U-Row-Closed-Closed}$$
+
+$$\dfrac{
+  \begin{array}{l}
+  \overline{c} = \overline{\tau_1} \cap \overline{\tau_2} \qquad
+  \overline{r_1} = \overline{\tau_1} \setminus \overline{c} \qquad
+  \overline{r_2} = \overline{\tau_2} \setminus \overline{c} \\[4pt]
+  \overline{r_2} = \emptyset \qquad
+  \text{unify}({?}t_2, \lbrace \overline{r_1} \rbrace)
+  \end{array}
+}{
+  \text{unify}(\lbrace \overline{\tau_1} \rbrace, \lbrace \overline{\tau_2} \mid {?}t_2 \rbrace)
+} \;\textsc{U-Row-Closed-Open}$$
+
+The three U-Row rules cover every combination of closed/open arguments. Closed-closed succeeds only when the multisets are equal — neither side has a tail to absorb the difference. Closed-open is the asymmetric mixed case: the right-hand tail must absorb whatever the left has beyond the common prefix, but the left being closed means the right cannot have entries the left lacks ($\overline{r_2} = \emptyset$). The open-closed case follows by the symmetry convention stated at the start of §Unification.
 
 $$\dfrac{
   \text{unify}(\tau_1, \tau_2)
