@@ -330,20 +330,24 @@ $$\dfrac{
   \text{check}(M, \tau_1 :: \overline{\tau}')
 } \;\textsc{Exh-Record}$$
 
-$\text{spec}_R(M, \overline{\ell})$ specializes the matrix for a record scrutinee: rows whose first pattern is $\lbrace \overline{\ell : p} \rbrace$ contribute $\overline{p}$ prepended to the rest; wildcard rows are replicated with $\lvert\overline{\ell}\rvert$ fresh wildcards.
+$\text{spec}_R(M, \overline{\ell})$ specializes the matrix for a record scrutinee: rows whose first pattern is $\lbrace \overline{\ell : p} \rbrace$ contribute $\overline{p}$ prepended to the rest; wildcard-like rows (matching $\text{wild}$, defined below) are replicated with $\lvert\overline{\ell}\rvert$ fresh wildcards.
 
 $$\dfrac{
-  D = \lbrace\, \overline{r} \mid (\_ :: \overline{r}) \in M \,\rbrace \qquad
+  D = \lbrace\, \overline{r} \mid (p :: \overline{r}) \in M,\; \text{wild}(p) \,\rbrace \qquad
   \text{check}(D, \overline{\tau}')
 }{
   \text{check}(M, \tau_1 :: \overline{\tau}')
 } \;\textsc{Exh-Default}$$
 
-Exh-Default applies when the first column has no complete constructor coverage — it computes the default matrix $D$ by collecting rows whose first pattern is a wildcard or variable.
+Exh-Default applies when the first column has no complete constructor coverage — it computes the default matrix $D$ by collecting rows whose first pattern is wildcard-like.
 
-$$\text{spec}(M, c) = \lbrace\, \overline{p'} \mathbin{+\!\!+} \overline{r} \mid (c(\overline{p'}) :: \overline{r}) \in M \,\rbrace \;\cup\; \lbrace\, \underbrace{\_,\ldots,\_}_{a(c)} \mathbin{+\!\!+} \overline{r} \mid (\_ :: \overline{r}) \in M \,\rbrace$$
+$$\text{wild}(p) = (p = \_) \;\vee\; (p~\text{is a variable pattern}~x)$$
 
-where $a(c)$ is the arity of constructor $c$. Rows whose first pattern is $c(\overline{p'})$ contribute $\overline{p'}$ prepended to the rest; wildcard rows are replicated with $a(c)$ fresh wildcards.
+A variable pattern $x$ binds the scrutinee under name $x$; from an exhaustiveness standpoint it succeeds against every value, exactly like $\_$. Treating $x$ as wildcard-like in the matrix algorithm restores Maranget's invariant that $\textbf{match}~e~\lbrace x \to \ldots \rbrace$ is exhaustive — which is also required for [T-LetPat](#T-LetPat) to admit single-variable patterns.
+
+$$\text{spec}(M, c) = \lbrace\, \overline{p'} \mathbin{+\!\!+} \overline{r} \mid (c(\overline{p'}) :: \overline{r}) \in M \,\rbrace \;\cup\; \lbrace\, \underbrace{\_,\ldots,\_}_{a(c)} \mathbin{+\!\!+} \overline{r} \mid (p :: \overline{r}) \in M,\; \text{wild}(p) \,\rbrace$$
+
+where $a(c)$ is the arity of constructor $c$. Rows whose first pattern is $c(\overline{p'})$ contribute $\overline{p'}$ prepended to the rest; wildcard-like rows (including variable patterns) are replicated with $a(c)$ fresh wildcards.
 
 $$\textbf{P6}~\text{(Exhaustiveness).}\quad \text{check}(M, [\tau]) = \text{ok} \implies \forall v : \tau.\;\exists i.\; v \in \text{match}(p_i)$$
 
