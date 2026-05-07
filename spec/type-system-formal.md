@@ -578,6 +578,8 @@ $$\dfrac{
   \Gamma;\, \rho_q \vdash_e \textbf{raise}~e : {?}\alpha \mathbin{!} \lbrace \texttt{Exn} \rbrace \cup \rho_0
 } \;\textsc{T-Raise}$$
 
+T-Raise is **enforced** by the impl: the variant being raised is checked against the active throws-row's exception-group membership (`infer.nx`, the `state_throw_row` channel). [T-TryCatch](#T-TryCatch) is **enforced** symmetrically: the catch arms' patterns are projected against the same row.
+
 [T-Handler](#T-Handler) types $\textbf{handler}~x~[\textbf{require}~\rho]~\textbf{do}~\overline{\ell = e}~\textbf{end}$ — a record-of-lambdas implementing the methods of port $x$. We assume a global lookup $\text{methods}(x)$ returning the method signatures declared for port $x$ (populated by port declarations, see §1):
 
 $$\text{methods}(x) = \lbrace\; \ell_j : (\overline{\pi_j}) \to \kappa_j;\, \alpha_j;\, \beta_j \;\mid\; j \in J \;\rbrace$$
