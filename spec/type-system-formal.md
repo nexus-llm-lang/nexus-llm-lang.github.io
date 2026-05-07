@@ -66,7 +66,7 @@ b & ::= & \texttt{i32} \mid \texttt{i64} \mid \texttt{f32} \mid \texttt{f64} \mi
 
 We write $\overline{X}$ for a finite sequence $X_1, \ldots, X_n$. $\alpha, \beta, \gamma$ range over type variables; ${?}\alpha$ denotes a unification variable introduced during inference (the distinction matters in generalization). $\lvert\overline{X}\rvert$ denotes the length of a sequence.
 
-$\texttt{intlit}$ and $\texttt{floatlit}$ are inference-internal types assigned to integer and float literals before their concrete type is known. They are resolved early via unification or defaulted to $\texttt{i64}$/$\texttt{f64}$ at binding sites ([T-Let](#T-Let)).
+$\texttt{intlit}$ and $\texttt{floatlit}$ denote inference-internal *kind-restricted unification variables* assigned to integer and float literals before their concrete type is known. Each occurrence of [T-IntLit](#T-IntLit) / [T-FloatLit](#T-FloatLit) introduces a **fresh** variable so that two unrelated literals don't get accidentally unified through a shared name. They are resolved by unification (U-IntLit / U-FloatLit emit substitutions) or, if still unresolved at a binding site, defaulted to $\texttt{i64}$/$\texttt{f64}$ via $\text{default}$ in [T-Let](#T-Let). The $\text{kind}(\cdot)$ of $\texttt{intlit}$ is $\lbrace \texttt{i32}, \texttt{i64} \rbrace$ and of $\texttt{floatlit}$ is $\lbrace \texttt{f32}, \texttt{f64} \rbrace$ — unification with any other type fails.
 
 ### Modalities
 
@@ -155,19 +155,23 @@ Unification is symmetric: $\text{unify}(\tau_1, \tau_2) = \text{unify}(\tau_2, \
 
 This convention is what makes U-Borrow's asymmetry well-defined: $\&\sigma$ on the left (an actual borrow value being supplied) auto-derefs to $\sigma$; $\&\sigma$ on the right (a context demanding a borrow) does not. That choice means borrows can be passed where the underlying type is expected, but plain values are never auto-borrowed — call sites must use $\&x$ explicitly.
 
+<a id="U-Refl"></a>
+
 $$\dfrac{}{\text{unify}(\tau, \tau) = \emptyset} \;\textsc{U-Refl}$$
 
 $$\dfrac{\neg\text{occurs}(\alpha, \tau)}{\text{unify}({?}\alpha, \tau) = \lbrace {?}\alpha := \tau \rbrace} \;\textsc{U-Var}
 \qquad
 \dfrac{\text{occurs}(\alpha, \tau)}{\text{unify}({?}\alpha, \tau) = \text{error}} \;\textsc{U-Occurs}$$
 
-$$\dfrac{}{\text{unify}(\texttt{intlit}, \texttt{i32}) = \emptyset} \quad
-\dfrac{}{\text{unify}(\texttt{intlit}, \texttt{i64}) = \emptyset} \;\textsc{U-IntLit}$$
+$$\dfrac{}{\text{unify}(\texttt{intlit}, \texttt{i32}) = \lbrace \texttt{intlit} := \texttt{i32} \rbrace} \quad
+\dfrac{}{\text{unify}(\texttt{intlit}, \texttt{i64}) = \lbrace \texttt{intlit} := \texttt{i64} \rbrace} \;\textsc{U-IntLit}$$
 
-$$\dfrac{}{\text{unify}(\texttt{floatlit}, \texttt{f32}) = \emptyset} \quad
-\dfrac{}{\text{unify}(\texttt{floatlit}, \texttt{f64}) = \emptyset} \;\textsc{U-FloatLit}$$
+$$\dfrac{}{\text{unify}(\texttt{floatlit}, \texttt{f32}) = \lbrace \texttt{floatlit} := \texttt{f32} \rbrace} \quad
+\dfrac{}{\text{unify}(\texttt{floatlit}, \texttt{f64}) = \lbrace \texttt{floatlit} := \texttt{f64} \rbrace} \;\textsc{U-FloatLit}$$
 
-Numeric literal types are not rewritten by unification — the substitution is $\emptyset$, merely checking compatibility. U-Var, U-IntLit, and U-FloatLit apply in both argument orders via the symmetry convention above.
+Two $\texttt{intlit}$ (or two $\texttt{floatlit}$) occurrences unify by [U-Refl](#U-Refl): the syntactic match yields the empty substitution, leaving the variables linked through subsequent rewriting once either side meets a concrete type.
+
+U-IntLit and U-FloatLit *do* rewrite — they substitute the literal's inference-internal type to the matched concrete type, propagating the resolution to all occurrences linked by previous unifications. U-Var, U-IntLit, and U-FloatLit apply in both argument orders via the symmetry convention above.
 
 $$\dfrac{
   \begin{array}{l}
@@ -386,9 +390,12 @@ $$\Gamma;\, \rho_q \vdash_e e : \tau \mathbin{!} \rho_e$$
 
 All linear bindings in $\Gamma$ must be consumed by the derivation; $\otimes$ distributes them among sub-expressions. $\rho_e$ ($\mathbin{!}$) is the effect produced. Literal rules require $\Gamma$ to contain no linear bindings.
 
-$$\dfrac{}{\Gamma;\, \rho_q \vdash_e n : \texttt{intlit} \mathbin{!} \lbrace\rbrace} \;\textsc{T-IntLit}
+<a id="T-IntLit"></a>
+<a id="T-FloatLit"></a>
+
+$$\dfrac{\texttt{intlit}~\text{fresh}}{\Gamma;\, \rho_q \vdash_e n : \texttt{intlit} \mathbin{!} \lbrace\rbrace} \;\textsc{T-IntLit}
 \qquad
-\dfrac{}{\Gamma;\, \rho_q \vdash_e f : \texttt{floatlit} \mathbin{!} \lbrace\rbrace} \;\textsc{T-FloatLit}$$
+\dfrac{\texttt{floatlit}~\text{fresh}}{\Gamma;\, \rho_q \vdash_e f : \texttt{floatlit} \mathbin{!} \lbrace\rbrace} \;\textsc{T-FloatLit}$$
 
 $$\dfrac{}{\Gamma;\, \rho_q \vdash_e b : \texttt{bool} \mathbin{!} \lbrace\rbrace} \;\textsc{T-Bool}
 \qquad
