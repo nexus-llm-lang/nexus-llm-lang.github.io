@@ -144,7 +144,16 @@ Two additional behaviors are embedded in specific rules rather than stated as st
 
 ### Unification
 
-Unification is symmetric: $\text{unify}(\tau_1, \tau_2) = \text{unify}(\tau_2, \tau_1)$ unless otherwise noted. The rules below are written with the "interesting" argument on the left; the symmetric case is implied. U-Borrow and U-Expand are intentionally asymmetric and do **not** have symmetric counterparts.
+Unification is symmetric: $\text{unify}(\tau_1, \tau_2) = \text{unify}(\tau_2, \tau_1)$ unless otherwise noted. The rules below are written with the "interesting" argument on the left; the symmetric case is implied. U-Borrow is intentionally asymmetric (no symmetric counterpart); U-Expand is asymmetric in form but applies in both argument orders by the symmetry convention.
+
+**Argument-order convention.** Where the rules below are asymmetric, the **left** argument is the *actual* (the type produced by an expression or read out of a binding) and the **right** argument is the *expected* (the type a context demands — a parameter slot, an annotation, a return type). All call sites in the typing rules follow this convention:
+
+- [T-App](#T-App): $\text{unify}(\tau_i, P_i)$ with the argument's actual type on the left
+- [T-Let](#T-Let): $\text{unify}(\tau', \sigma)$ with the inferred type on the left and the annotation on the right
+- [T-Return](#T-Return): $\text{unify}(\tau, \tau_r)$ with the expression's type on the left
+- [T-Assign](#T-Assign): $\text{unify}(\sigma, \tau)$ with the assigned expression on the left
+
+This convention is what makes U-Borrow's asymmetry well-defined: $\&\sigma$ on the left (an actual borrow value being supplied) auto-derefs to $\sigma$; $\&\sigma$ on the right (a context demanding a borrow) does not. That choice means borrows can be passed where the underlying type is expected, but plain values are never auto-borrowed — call sites must use $\&x$ explicitly.
 
 $$\dfrac{}{\text{unify}(\tau, \tau) = \emptyset} \;\textsc{U-Refl}$$
 
@@ -237,7 +246,7 @@ $$\dfrac{
   \text{unify}(x\langle\overline{\tau}\rangle, R)
 } \;\textsc{U-Expand}$$
 
-U-Borrow is intentionally asymmetric (auto-derefs only the left argument). U-Expand applies in both argument orders via the symmetry convention — the implementation handles both $\text{unify}(x\langle\overline{\tau}\rangle, R)$ and $\text{unify}(R, x\langle\overline{\tau}\rangle)$.
+U-Borrow auto-derefs $\&\sigma$ only when it appears on the left (the *actual* position — see the argument-order convention at the start of this section). U-Expand applies in both argument orders via the symmetry convention — the implementation handles both $\text{unify}(x\langle\overline{\tau}\rangle, R)$ and $\text{unify}(R, x\langle\overline{\tau}\rangle)$.
 
 $$\textbf{P7}~\text{(Unification).}\quad \text{unify}(\tau_1, \tau_2)~\text{terminates and returns a most general unifier or fails}$$
 
