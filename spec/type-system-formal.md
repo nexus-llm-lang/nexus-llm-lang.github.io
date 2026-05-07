@@ -399,7 +399,20 @@ $$\dfrac{
   \Gamma;\, \rho_q \vdash_e x : \tau' \mathbin{!} \lbrace\rbrace
 } \;\textsc{T-Var}$$
 
-If $q = 1$, the binding $x$ is consumed by this use. For $\mathord{\sim}x$: if $\tau' = \mathord{\sim}\sigma$, the expression has type $\sigma$ (dereference). For $@x$: if $\tau' = @\sigma$, the expression has type $\sigma$ (see also [T-Force](#T-Force)).
+If $q = 1$, the binding $x$ is consumed by this use. T-Var applies to the bare variable form $x$ ($\mu = \varepsilon$). Sigil-prefixed variable forms have dedicated rules: [T-Borrow](#T-Borrow) for $\&x$, [T-Force](#T-Force) for $@x$ (which subsumes $@e$ for any expression), and [T-Deref](#T-Deref) below for $\mathord{\sim}x$.
+
+<a id="T-Deref"></a>
+
+$$\dfrac{
+  x :^{\omega} \forall\overline{\alpha}.\,\tau \in \Gamma \qquad
+  \tau' = \text{inst}(\forall\overline{\alpha}.\,\tau) \qquad
+  \tau' = \mathord{\sim}\sigma \qquad
+  \Gamma \setminus \lbrace x \rbrace ~\text{has no linear bindings}
+}{
+  \Gamma;\, \rho_q \vdash_e \mathord{\sim}x : \sigma \mathbin{!} \lbrace\rbrace
+} \;\textsc{T-Deref}$$
+
+T-Deref reads through a mutable reference cell. The binding is not consumed (refs are $q = \omega$ — matching [T-Assign](#T-Assign)'s precondition $x :^\omega (\emptyset, \mathord{\sim}\tau)$). Mirrors [T-Borrow](#T-Borrow)'s structure: variable-only, no row effect, instantiation against the looked-up scheme.
 
 To allow functions with fewer capabilities/effects to be called in a context with more (row subsumption in [T-App](#T-App)), we introduce $\text{open}$:
 
