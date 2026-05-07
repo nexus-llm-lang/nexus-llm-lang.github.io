@@ -402,22 +402,24 @@ $$\textbf{P6}~\text{(Exhaustiveness).}\quad \text{check}(M, [\tau]) = \text{ok} 
 
 $$\Gamma;\, \rho_q \vdash_e e : \tau \mathbin{!} \rho_e$$
 
-All linear bindings in $\Gamma$ must be consumed by the derivation; $\otimes$ distributes them among sub-expressions. $\rho_e$ ($\mathbin{!}$) is the effect produced. Literal rules require $\Gamma$ to contain no linear bindings.
+All linear bindings in $\Gamma$ must be consumed by the derivation; $\otimes$ distributes them among sub-expressions. $\rho_e$ ($\mathbin{!}$) is the effect produced. Literal rules carry the side-condition $\text{pure}(\Gamma)$, defined below, to make "no unspent linears at a leaf" a checkable premise rather than a narrative obligation:
+
+$$\text{pure}(\Gamma) = \forall x :^{q} S \in \Gamma.\;q = \omega$$
 
 <a id="T-IntLit"></a>
 <a id="T-FloatLit"></a>
 
-$$\dfrac{\texttt{intlit}~\text{fresh}}{\Gamma;\, \rho_q \vdash_e n : \texttt{intlit} \mathbin{!} \lbrace\rbrace} \;\textsc{T-IntLit}
+$$\dfrac{\text{pure}(\Gamma) \qquad \texttt{intlit}~\text{fresh}}{\Gamma;\, \rho_q \vdash_e n : \texttt{intlit} \mathbin{!} \lbrace\rbrace} \;\textsc{T-IntLit}
 \qquad
-\dfrac{\texttt{floatlit}~\text{fresh}}{\Gamma;\, \rho_q \vdash_e f : \texttt{floatlit} \mathbin{!} \lbrace\rbrace} \;\textsc{T-FloatLit}$$
+\dfrac{\text{pure}(\Gamma) \qquad \texttt{floatlit}~\text{fresh}}{\Gamma;\, \rho_q \vdash_e f : \texttt{floatlit} \mathbin{!} \lbrace\rbrace} \;\textsc{T-FloatLit}$$
 
-$$\dfrac{}{\Gamma;\, \rho_q \vdash_e b : \texttt{bool} \mathbin{!} \lbrace\rbrace} \;\textsc{T-Bool}
+$$\dfrac{\text{pure}(\Gamma)}{\Gamma;\, \rho_q \vdash_e b : \texttt{bool} \mathbin{!} \lbrace\rbrace} \;\textsc{T-Bool}
 \qquad
-\dfrac{}{\Gamma;\, \rho_q \vdash_e ch : \texttt{char} \mathbin{!} \lbrace\rbrace} \;\textsc{T-Char}$$
+\dfrac{\text{pure}(\Gamma)}{\Gamma;\, \rho_q \vdash_e ch : \texttt{char} \mathbin{!} \lbrace\rbrace} \;\textsc{T-Char}$$
 
-$$\dfrac{}{\Gamma;\, \rho_q \vdash_e s : \texttt{string} \mathbin{!} \lbrace\rbrace} \;\textsc{T-Str}
+$$\dfrac{\text{pure}(\Gamma)}{\Gamma;\, \rho_q \vdash_e s : \texttt{string} \mathbin{!} \lbrace\rbrace} \;\textsc{T-Str}
 \qquad
-\dfrac{}{\Gamma;\, \rho_q \vdash_e () : \texttt{unit} \mathbin{!} \lbrace\rbrace} \;\textsc{T-Unit}$$
+\dfrac{\text{pure}(\Gamma)}{\Gamma;\, \rho_q \vdash_e () : \texttt{unit} \mathbin{!} \lbrace\rbrace} \;\textsc{T-Unit}$$
 
 <a id="T-Var"></a>
 
