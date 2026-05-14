@@ -688,16 +688,20 @@ $$\text{open}(\rho) = \begin{cases}
 $$\dfrac{
   \begin{array}{c}
   \Gamma = \Gamma_f \otimes \Gamma_1 \otimes \ldots \otimes \Gamma_k \\[2pt]
-  \Gamma_f;\, \rho_q \vdash_e f : (\overline{\ell : P}) \to \tau_r;\, \rho_q';\, \rho_e' \mathbin{!} \rho_f \\[2pt]
+  \Gamma_f;\, \rho_q \vdash_e f : (\overline{\ell' : P}) \to \tau_r;\, \rho_q';\, \rho_e' \mathbin{!} \rho_f \\[2pt]
+  \lbrace \overline{\ell} \rbrace = \lbrace \overline{\ell'} \rbrace \quad\text{(label sets match; no duplicates; full coverage)} \\[2pt]
+  \pi: \lbrace 1,\ldots,k \rbrace \to \lbrace 1,\ldots,k \rbrace,\; \ell_i = \ell'_{\pi(i)} \quad\text{(unique permutation by label name)} \\[2pt]
   \forall i.\;\Gamma_i;\, \rho_q \vdash_e e_i : \tau_i \mathbin{!} \rho_i \\[2pt]
-  \forall i.\;\begin{cases} \text{unify}(\tau_i, \text{strip}(P_i)) & \text{if } P_i = \%\sigma \wedge \neg\text{linear}(\tau_i) \\ \text{unify}(\tau_i, P_i) & \text{otherwise} \end{cases} \\[2pt]
+  \forall i.\;\begin{cases} \text{unify}(\tau_i, \text{strip}(P_{\pi(i)})) & \text{if } P_{\pi(i)} = \%\sigma \wedge \neg\text{linear}(\tau_i) \\ \text{unify}(\tau_i, P_{\pi(i)}) & \text{otherwise} \end{cases} \\[2pt]
   \text{unify}(\rho_q, \text{open}(\rho_q'))
   \end{array}
 }{
   \Gamma;\, \rho_q \vdash_e f(\overline{\ell : e}) : \tau_r \mathbin{!} \rho_e' \cup \rho_f \cup \textstyle\bigcup_i \rho_i
 } \;\textsc{T-App}$$
 
-The weakening condition is explicit: when $P_i = \%\sigma$ and $\tau_i$ is not linear, unification targets the inner type $\sigma$ (stripping the $\%$ wrapper). This does not apply to other linear forms like $@\sigma$.
+The caller's argument labels $\overline{\ell}$ are matched against the callee's parameter labels $\overline{\ell'}$ **by name**, not by position. The permutation $\pi$ aligns the caller's $i$-th argument to the callee's $\pi(i)$-th parameter so that $\ell_i = \ell'_{\pi(i)}$; both directions of the label-set equality must hold (every callee parameter is supplied, no extra caller labels). The permutation is unique because labels are required to be distinct on each side (the surface parser rejects duplicate-label calls and parameter lists). This formalises the *order-independent labeled arguments* guarantee from [semantics.md](../semantics) §Label Order Independence — `f(b: 2, a: 1)` and `f(a: 1, b: 2)` produce the same derivation up to $\pi$.
+
+The weakening condition is explicit: when $P_{\pi(i)} = \%\sigma$ and $\tau_i$ is not linear, unification targets the inner type $\sigma$ (stripping the $\%$ wrapper). This does not apply to other linear forms like $@\sigma$.
 
 **Capability-row enforcement is deferred** (nexus-mqin.14): the T-App premise $\text{unify}(\rho_q, \text{open}(\rho_q'))$ and the corresponding $\rho_q$ slot on T-Lambda's arrow type are part of the formal rule, but the self-host typechecker constructs lambda arrows with empty $\rho_q'$ and discards the callee's $\rho_q'$ at call sites. Capability admission is currently enforced by a downstream pass on MIR rather than by typecheck. The spec rule remains the reference target; closing the gap is tracked by mqin.14 (impl) — symmetric to how throws-row enforcement was tightened in mqin.1.1.
 
