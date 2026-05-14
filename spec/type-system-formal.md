@@ -192,6 +192,25 @@ $$\begin{array}{rcl}
 
 The sequence-level $\text{fv}$ accounts for shadowing: a $\textbf{let}~x = \ldots$ removes $x$ from the tail's free set, so a later capture site sees through the binding to whatever $x$ refers to in *its* enclosing scope. Without the subtraction, $\textbf{fn}\;()~\textbf{do}\;\textbf{let}~x = 1;\;\textbf{return}~x~\textbf{end}$ would compute $\text{fv} = \lbrace x \rbrace$ and try to capture an outer $x$ that does not exist.
 
+Free unification variables of a *type* (used by $\text{occurs}$ in unification) include both type-kinded `${?}\alpha$` and row-kinded `${?}r$`. Rigid quantifiers ($\alpha$, $r$) are not free unification variables — they're parameters of the surrounding scheme, not refinement targets:
+
+$$\begin{array}{rcl}
+\text{fv}(b) = \text{fv}(\texttt{intlit}) = \text{fv}(\texttt{floatlit}) & = & \emptyset \\
+\text{fv}(\alpha) & = & \emptyset \quad\text{(rigid type variable)} \\
+\text{fv}({?}\alpha) & = & \lbrace {?}\alpha \rbrace \\
+\text{fv}((\overline{\ell : \tau}) \to \tau_r;\,\rho_q;\,\rho_e) & = & \textstyle\bigcup_i \text{fv}(\tau_i) \cup \text{fv}(\tau_r) \cup \text{fv}(\rho_q) \cup \text{fv}(\rho_e) \\
+\text{fv}(\lbrace \overline{\ell : \tau} \rbrace) & = & \textstyle\bigcup_i \text{fv}(\tau_i) \\
+\text{fv}(x\langle \overline{\tau} \rangle) & = & \textstyle\bigcup_i \text{fv}(\tau_i) \\
+\text{fv}([\tau]) = \text{fv}([\lvert\,\tau\,\rvert]) & = & \text{fv}(\tau) \\
+\text{fv}(\%\tau) = \text{fv}(@\tau) = \text{fv}(\&\tau) = \text{fv}(\mathord{\sim}\tau) & = & \text{fv}(\tau) \\
+\text{fv}(\textbf{handler}\;x\;\rho) & = & \text{fv}(\rho) \\
+\text{fv}(\lbrace \overline{\tau} \rbrace) & = & \textstyle\bigcup_i \text{fv}(\tau_i) \quad\text{(closed row)} \\
+\text{fv}(\lbrace \overline{\tau} \mid r \rbrace) & = & \textstyle\bigcup_i \text{fv}(\tau_i) \quad\text{(open row with rigid tail)} \\
+\text{fv}(\lbrace \overline{\tau} \mid {?}r \rbrace) & = & \textstyle\bigcup_i \text{fv}(\tau_i) \cup \lbrace {?}r \rbrace \quad\text{(open row with unification tail)}
+\end{array}$$
+
+The last clause is load-bearing for unification termination: when [U-Var](#U-Var) attempts $\text{unify}({?}\alpha, \tau)$ with $\tau$ containing an open row $\lbrace \overline{\tau} \mid {?}\alpha \rbrace$, the $\text{occurs}({?}\alpha, \tau)$ check inspects $\text{fv}(\tau) \ni {?}\alpha$ and rejects, preventing the cycle $({?}\alpha \mathrel{:=} \lbrace \overline{\tau} \mid {?}\alpha \rbrace)$ that would diverge under substitution. Symmetrically for ${?}r$: a row unification variable participates in $\text{occurs}$ exactly when its enclosing type's $\text{fv}$ includes it.
+
 ### Linearity
 
 $\text{linear}(\tau)$ is a structural (recursive) predicate: holds if $\tau$ is $\%\sigma$, $@\sigma$, or $[\lvert\,\sigma\,\rvert]$ at the outermost level, or if any transitive component of $\tau$ is linear (fields of records, type arguments of named types, element types of lists, elements of rows). Example: $\text{linear}(\text{Pair}\langle\%\texttt{i64}, \texttt{i64}\rangle)$ holds.
