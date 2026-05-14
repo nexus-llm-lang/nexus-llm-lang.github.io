@@ -37,12 +37,15 @@ s & ::= & \textbf{let}~\mu\,x = e & \text{binding} \\
   & \mid & \textbf{try}~\overline{s}~\textbf{catch}~\overline{p \to s}~\textbf{end} & \text{exception handling} \\
   & \mid & \textbf{while}~e~\textbf{do}~\overline{s}~\textbf{end} & \text{while loop} \\
   & \mid & e & \text{expression statement} \\[6pt]
-p & ::= & x & \text{variable pattern} \\
+p & ::= & x & \text{variable pattern (} x \notin \text{dom}(\Gamma)~\text{or}~\Gamma(x)~\text{is not a constructor scheme)} \\
   & \mid & \_ \mid n & \text{wildcard / literal pattern} \\
-  & \mid & c(\overline{\ell : p}) & \text{constructor pattern (} c \in \text{dom}(\Gamma) \text{)} \\
+  & \mid & c & \text{nullary constructor pattern (} c \in \text{dom}(\Gamma),~\text{arity 0)} \\
+  & \mid & c(\overline{\ell : p}) & \text{constructor pattern (} c \in \text{dom}(\Gamma),~\text{arity} \geq 1 \text{)} \\
   & \mid & \lbrace \overline{\ell : p} \rbrace & \text{record pattern} \\
   & \mid & p_1 \mathbin{\vert} p_2 & \text{or-pattern (alternation)}
 \end{array}$$
+
+Bare identifiers in pattern position are disambiguated **by $\Gamma$-lookup**: if the identifier resolves to a constructor scheme in $\Gamma$, it parses as a nullary constructor pattern (via [P-CtorNullary](#P-CtorNullary)); otherwise it parses as a variable binder (via [P-Var](#P-Var)). The split mirrors the surface convention "zero-field exceptions omit parentheses both at declaration and at match" (see [Exception Groups](../exception-groups)) and matches `src/typecheck/exhaustive.nx`'s pattern dispatch, which checks $\text{variants}$ before treating a bare identifier as a binder.
 
 The core calculus omits several surface language features that are either desugared or handled as environment preconditions:
 
@@ -533,6 +536,18 @@ $$\dfrac{
 } \;\textsc{P-Ctor}$$
 
 Field patterns bind in parallel: each $p_i$ is checked against the same input $\Gamma$, and the new bindings $\Gamma_i \setminus \Gamma$ are combined by disjoint union $\uplus$. Disjoint union fails if any two field patterns introduce the same variable name (e.g. $c(a: x, b: x)$), so a single use of $x$ across fields is rejected at the rule level instead of silently shadowing.
+
+<a id="P-CtorNullary"></a>
+
+$$\dfrac{
+  \Gamma(c) = \forall\overline{\alpha}.\,\tau' \qquad
+  \tau'~\text{is not an arrow type} \qquad
+  \text{unify}(\text{strip}(\tau),\, \tau'[\overline{\alpha := {?}\beta}])
+}{
+  \Gamma \vdash c : \tau \Rightarrow \Gamma
+} \;\textsc{P-CtorNullary}$$
+
+P-CtorNullary handles the bare-identifier form of a zero-field constructor, e.g.\ catching $\textbf{exception}~\texttt{MissingMain}$ (declared without a parameter list) via $\textbf{catch}~\texttt{MissingMain} \to \ldots$. The premise $\Gamma(c) = \forall\overline{\alpha}.\,\tau'$ with $\tau'$ a value type (not an arrow) distinguishes the nullary case from the variable pattern [P-Var](#P-Var): P-Var fires only when the identifier is *not* a constructor (the grammar's variable-pattern side-condition). For a sum-type variant $\texttt{None}$ with declaration $\textbf{type}~\texttt{Option}\langle T \rangle = \texttt{None} \mathbin{\vert} \texttt{Some}(\textit{val}: T)$, [D-Type-Sum](#D-Type-Sum) installs $\texttt{None} :^{\omega} \forall T.\, \texttt{Option}\langle T \rangle$ in $\Gamma$ (the zero-field constructor has the named type itself as its scheme, not an arrow), so P-CtorNullary applies. The output $\Gamma$ is unchanged — nullary constructors bind no field variables.
 
 $$\dfrac{
   \begin{array}{l}
@@ -1279,14 +1294,14 @@ $$\dfrac{
 
 $$\dfrac{
   \begin{array}{l}
-  D = \textbf{type}~x\langle \overline{\alpha} \rangle = c_1(\overline{\ell_1 : \tau_1}) \mathbin{\vert} \ldots \mathbin{\vert} c_n(\overline{\ell_n : \tau_n}) \\[2pt]
-  S_i = \forall \overline{\alpha}.\,(\overline{\ell_i : \tau_i}) \to x\langle \overline{\alpha} \rangle \quad (i = 1, \ldots, n)
+  D = \textbf{type}~x\langle \overline{\alpha} \rangle = c_1\,\overline{F_1} \mathbin{\vert} \ldots \mathbin{\vert} c_n\,\overline{F_n} \quad\text{where each}~\overline{F_i}~\text{is either}~(\overline{\ell_i : \tau_i})~\text{or empty} \\[2pt]
+  S_i = \begin{cases} \forall \overline{\alpha}.\,(\overline{\ell_i : \tau_i}) \to x\langle \overline{\alpha} \rangle & \text{if}~\overline{F_i}~\text{is non-empty (arity} \geq 1\text{)} \\ \forall \overline{\alpha}.\, x\langle \overline{\alpha} \rangle & \text{if}~\overline{F_i}~\text{is empty (nullary)} \end{cases}
   \end{array}
 }{
   \mathcal{T} \;\vdash_d\; D \;\Rightarrow\; \mathcal{T}\!\begin{bmatrix} \Gamma & \mathrel{:=} & \Gamma,\, \overline{c_i :^{\omega} S_i} \\ \text{typedef}(x) & \mathrel{:=} & \forall \overline{\alpha}.\, x\langle \overline{\alpha} \rangle \\ \text{variants}(x) & \mathrel{:=} & \lbrace c_1, \ldots, c_n \rbrace \end{bmatrix}
 } \;\textsc{D-Type-Sum}$$
 
-D-Type-Sum simultaneously installs each constructor $c_i$ as an $\omega$-bound polymorphic function in $\Gamma$ (so [T-App](#T-App) types constructor application uniformly with function application), registers $x$ in $\text{typedef}$, and records the variant set so that [Exh-Sum](#Exh-Sum) and [P-Ctor](#P-Ctor) can read constructors by name.
+D-Type-Sum simultaneously installs each constructor $c_i$ as an $\omega$-bound polymorphic entry in $\Gamma$: an arrow type when the constructor has fields, a *value-typed* scheme when it is nullary (e.g.\ $\texttt{None}$ in $\textbf{type}~\texttt{Option}\langle T \rangle = \texttt{None} \mathbin{\vert} \texttt{Some}(\textit{val}: T)$ is bound at $\forall T.\, \texttt{Option}\langle T \rangle$, not at $\forall T.\, () \to \texttt{Option}\langle T \rangle$). The value-typed form is what lets the surface form $\texttt{None}$ (no parentheses) type-check as an expression via [T-Var](#T-Var) and as a pattern via [P-CtorNullary](#P-CtorNullary). $x$ is registered in $\text{typedef}$, and the variant set is recorded so that [Exh-Sum](#Exh-Sum) and [P-Ctor](#P-Ctor) / [P-CtorNullary](#P-CtorNullary) can read constructors by name.
 
 <a id="D-Type-Sum-Opaque"></a>
 
@@ -1328,10 +1343,13 @@ Port declarations populate $\text{methods}$ alone; they do not enter a value-lev
 <a id="D-Exception"></a>
 
 $$\dfrac{
-  D = \textbf{exception}~C(\overline{\ell : \tau}) \qquad S = (\overline{\ell : \tau}) \to \texttt{Exn}
+  D = \textbf{exception}~C\,\overline{F} \qquad
+  S = \begin{cases} (\overline{\ell : \tau}) \to \texttt{Exn} & \text{if}~\overline{F} = (\overline{\ell : \tau}),~\text{non-empty} \\ \texttt{Exn} & \text{if}~\overline{F}~\text{is omitted (nullary)} \end{cases}
 }{
   \mathcal{T} \;\vdash_d\; D \;\Rightarrow\; \mathcal{T}\!\begin{bmatrix} \Gamma & \mathrel{:=} & \Gamma,\, C :^{\omega} S \\ \text{variants}(\texttt{Exn}) & \mathrel{:=} & \text{variants}(\texttt{Exn}) \cup \lbrace C \rbrace \end{bmatrix}
 } \;\textsc{D-Exception}$$
+
+Exception declarations admit both the parameterised form $\textbf{exception}~\texttt{NotFound}(\textit{path}: \texttt{string})$ — installed as an arrow constructor — and the nullary form $\textbf{exception}~\texttt{MissingMain}$ (no parentheses on declaration or use) — installed as a value of type $\texttt{Exn}$, matching the *"Zero-field exceptions omit parentheses"* convention from [Exception Groups](../exception-groups). The nullary form is the unique reason [P-CtorNullary](#P-CtorNullary) exists; the parameterised form goes through ordinary [P-Ctor](#P-Ctor).
 
 Exception declarations are the only rule that mutates a *pre-existing* table entry: $\text{variants}(\texttt{Exn})$ is the union of every $\textbf{exception}$ declaration reached from the program root. The *cross-module extensibility hazard* called out in [T-TryCatch](#T-TryCatch) — a closed-enumeration catch over a $\texttt{Exn}$ row becoming inexhaustive when a downstream module adds a variant — is exactly the cross-module application of D-Exception against the importer's $\text{variants}(\texttt{Exn})$.
 
