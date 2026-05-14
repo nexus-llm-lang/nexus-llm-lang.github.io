@@ -1181,16 +1181,15 @@ The output environment is $\text{closeBlock}(\Gamma_1, \Gamma)$ — $\Gamma_1$ (
 Variant-precise residual computation requires two auxiliaries:
 
 $$\text{caughtVariants}(\overline{p}) = \bigcup_i \begin{cases}
-\lbrace c \rbrace & \text{if}~p_i = c(\overline{\ell : p'})~\text{and}~c \in \text{variants}(\texttt{Exn}) \\
-\text{members}(G) & \text{if}~p_i = G~\text{and}~G~\text{is an exception group} \\
+\lbrace c \rbrace & \text{if}~p_i = c~\text{or}~p_i = c(\overline{\ell : p'})~\text{and}~c \in \text{variants}(\texttt{Exn}) \\
 \emptyset & \text{otherwise (wildcard, variable pattern)}
 \end{cases}$$
 
-$\text{members}(G)$ returns the declared constructor set of an exception group. Given a top-level declaration $\textbf{exception group}~G = C_1 \mathrel{\vert} C_2 \mathrel{\vert} \ldots \mathrel{\vert} C_n$ (see [Exception Groups](../exception-groups)):
+A group-name pattern $G$ has no clause here — group patterns are flattened to their member set $\lbrace C_1, \ldots, C_n \rbrace$ at parse time (see §Row Types) and surface as a fan of constructor-pattern arms before reaching the typing rules. caughtVariants therefore sees only individual constructors $c$. The auxiliary $\text{members}(G)$ is the parse-time projection that gives that fan its contents; it is *not* read by any typing rule but is referenced by D-ExceptionGroup and the parse-time expansion narrative.
 
-$$\text{members}(G) = \lbrace C_1, C_2, \ldots, C_n \rbrace$$
+$$\text{members}(G) = \lbrace C_1, C_2, \ldots, C_n \rbrace \quad\text{where}~G~\text{was declared}~\textbf{exception group}~G = C_1 \mathrel{\vert} \ldots \mathrel{\vert} C_n$$
 
-Exception groups are flattened to their member sets at parse time (see §Row Types, line on syntactic-shortcut groups), so a derivation tree never observes a $G$ pattern directly — $\text{members}$ is the metatheoretic projection that recovers the expansion when the spec needs to refer to "the variants $G$ stands for". Nesting is resolved transitively: if $G_2 = G_1 \mathrel{\vert} C_k$ and $G_1 = C_1 \mathrel{\vert} C_2$, then $\text{members}(G_2) = \lbrace C_1, C_2, C_k \rbrace$.
+Nesting is resolved transitively: if $G_2 = G_1 \mathrel{\vert} C_k$ and $G_1 = C_1 \mathrel{\vert} C_2$, then $\text{members}(G_2) = \lbrace C_1, C_2, C_k \rbrace$.
 
 $$\text{hasCatchAll}(\overline{p}) = \exists i.\;p_i = \_ \;\vee\; p_i~\text{is a variable pattern}~x$$
 
@@ -1361,7 +1360,7 @@ $$\dfrac{
   \mathcal{T} \;\vdash_d\; D \;\Rightarrow\; \mathcal{T}[\text{members}(G) \mathrel{:=} \lbrace C_1, \ldots, C_n \rbrace]
 } \;\textsc{D-ExceptionGroup}$$
 
-Group declarations affect only the parse-time expansion table $\text{members}$; the [caughtVariants](#T-TryCatch) auxiliary reads this table when a catch arm names a group.
+Group declarations affect only the parse-time expansion table $\text{members}$. No typing rule reads $\text{members}$ directly — the parser uses it to fan out $\textbf{catch}~\vert~G \to \ldots$ into one arm per constructor before the rule fires.
 
 <a id="D-Let-Top"></a>
 
