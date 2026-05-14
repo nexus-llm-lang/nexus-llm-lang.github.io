@@ -1136,6 +1136,12 @@ $$\text{caughtVariants}(\overline{p}) = \bigcup_i \begin{cases}
 \emptyset & \text{otherwise (wildcard, variable pattern)}
 \end{cases}$$
 
+$\text{members}(G)$ returns the declared constructor set of an exception group. Given a top-level declaration $\textbf{exception group}~G = C_1 \mathrel{\vert} C_2 \mathrel{\vert} \ldots \mathrel{\vert} C_n$ (see [Exception Groups](../exception-groups)):
+
+$$\text{members}(G) = \lbrace C_1, C_2, \ldots, C_n \rbrace$$
+
+Exception groups are flattened to their member sets at parse time (see §Row Types, line on syntactic-shortcut groups), so a derivation tree never observes a $G$ pattern directly — $\text{members}$ is the metatheoretic projection that recovers the expansion when the spec needs to refer to "the variants $G$ stands for". Nesting is resolved transitively: if $G_2 = G_1 \mathrel{\vert} C_k$ and $G_1 = C_1 \mathrel{\vert} C_2$, then $\text{members}(G_2) = \lbrace C_1, C_2, C_k \rbrace$.
+
 $$\text{hasCatchAll}(\overline{p}) = \exists i.\;p_i = \_ \;\vee\; p_i~\text{is a variable pattern}~x$$
 
 The catch-all condition $\text{hasCatchAll}$ is *syntactic*: only an explicit wildcard arm $\_ \to \ldots$ or a single-variable arm $e \to \ldots$ (binding the exception value at type $\texttt{Exn}$) clears the catch-all sentinel and any remaining declared-variant entries. A *closed enumeration* of currently-declared $\texttt{Exn}$ variants does **not** count — because $\texttt{Exn}$ is extensible across modules, a closed enumeration that is exhaustive at the catch site can become inexhaustive when a downstream module declares a new variant, silently corrupting the throws-row of any function whose body contains the now-stale catch. Requiring a syntactic catch-all closes that cross-module hole.
