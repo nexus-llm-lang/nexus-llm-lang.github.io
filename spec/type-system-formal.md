@@ -1288,6 +1288,33 @@ $$\dfrac{
 
 D-Type-Sum simultaneously installs each constructor $c_i$ as an $\omega$-bound polymorphic function in $\Gamma$ (so [T-App](#T-App) types constructor application uniformly with function application), registers $x$ in $\text{typedef}$, and records the variant set so that [Exh-Sum](#Exh-Sum) and [P-Ctor](#P-Ctor) can read constructors by name.
 
+<a id="D-Type-Sum-Opaque"></a>
+
+$$\dfrac{
+  \begin{array}{l}
+  D = \textbf{opaque type}~x\langle \overline{\alpha} \rangle = c_1(\overline{\ell_1 : \tau_1}) \mathbin{\vert} \ldots \mathbin{\vert} c_n(\overline{\ell_n : \tau_n}) \\[2pt]
+  S_i = \forall \overline{\alpha}.\,(\overline{\ell_i : \tau_i}) \to x\langle \overline{\alpha} \rangle \quad (i = 1, \ldots, n) \\[2pt]
+  M~\text{is the defining module}
+  \end{array}
+}{
+  \mathcal{T} \;\vdash_d\; D \;\Rightarrow\; \mathcal{T}\!\begin{bmatrix} \Gamma & \mathrel{:=} & \Gamma,\, \overline{c_i :^{\omega} S_i}~\text{(only when typing inside}~M\text{)} \\ \text{typedef}(x) & \mathrel{:=} & \forall \overline{\alpha}.\, x\langle \overline{\alpha} \rangle \\ \text{variants}(x) & \mathrel{:=} & \lbrace c_1, \ldots, c_n \rbrace~\text{(only when typing inside}~M\text{)} \end{bmatrix}
+} \;\textsc{D-Type-Sum-Opaque}$$
+
+D-Type-Sum-Opaque restricts the visibility of the constructor entries and the $\text{variants}$ set to the *defining module* $M$: outside $M$, $x$ is in $\text{typedef}$ as an abstract named type (which can be referenced in signatures) but $\overline{c_i}$ are absent from $\Gamma$ and $\text{variants}(x)$ reports the empty set. Importing code therefore cannot apply $c_i$ as a constructor ([T-App](#T-App) looks $c_i$ up in $\Gamma$ and fails) or write a $c_i(\overline{\ell : p})$ pattern ([P-Ctor](#P-Ctor) also fails the lookup); construction and destructuring are only possible through the module's exported functions. The opaque modifier is accepted only on sum-type definitions in the surface grammar; record types and aliases have no opaque variant (`src/frontend/parse_topdef.nx::parse_type_def` reads `is_opaque` only for the enum branch).
+
+<a id="D-External"></a>
+
+$$\dfrac{
+  \begin{array}{l}
+  D = \textbf{external}~x = \texttt{"} w \texttt{"} : \langle \overline{\alpha} \rangle (\overline{\ell : \tau}) \to \tau_r \\[2pt]
+  S = \forall \overline{\alpha}.\,(\overline{\ell : \tau}) \to \tau_r;\,\lbrace\rbrace;\,\lbrace\rbrace \quad\text{(empty require / throws)}
+  \end{array}
+}{
+  \mathcal{T} \;\vdash_d\; D \;\Rightarrow\; \mathcal{T}[\Gamma \mathrel{:=} \Gamma,\, x :^{\omega} S]
+} \;\textsc{D-External}$$
+
+External declarations bind a name $x$ to a fixed Wasm export $w$ at a stated arrow type. The type-parameter list $\langle \overline{\alpha} \rangle$ may be empty (monomorphic external) or non-empty (polymorphic in the same predicative System-F sense as [T-Let-PolyFn](#T-Let-PolyFn)): the parser accepts both forms (`parse_external_sig`'s `type_params` field). The require and throw rows are forced to empty because the Wasm side has no Nexus-level effects to track; capability access through an external is mediated by the surrounding `inject` if the external takes capability-shaped parameters. The mapping between $x$ and the Wasm symbol $w$ is consumed by the backend codegen — the type system observes only $S$.
+
 <a id="D-Port"></a>
 
 $$\dfrac{
@@ -1327,5 +1354,11 @@ $$\dfrac{
 } \;\textsc{D-Let-Top}$$
 
 A top-level $\textbf{let}$ is type-checked as an ordinary statement under an empty ambient capability row, an empty effect row, and a $\bot$ return-type (no enclosing function), and reuses [T-Let](#T-Let), [T-Let-PolyFn](#T-Let-PolyFn), or [T-Let-Alias](#T-Let-Alias) according to the RHS shape. The pure-row premise rejects top-level expressions that require capabilities the program root cannot grant; an $\textbf{inject}$ at the top level is the recommended way to introduce capabilities for an evaluating block.
+
+### Visibility (export)
+
+Every declaration above admits an optional `export` prefix in the surface syntax (`export let foo = ...`, `export type Foo = ...`, etc.). The modifier does *not* alter the rule's effect on $\mathcal{T}$ within the declaring module — `export` and non-`export` declarations populate $\Gamma$ / $\text{typedef}$ / $\text{methods}$ / $\text{variants}$ / $\text{members}$ identically *inside* their module. The modifier governs **inter-module visibility**: only `export`ed entries enter the importing module's $\mathcal{T}$ when an `import` statement is resolved. Import resolution is described in [imports.md](../imports) and runs before the per-module declaration judgments above fire; the spec does not need a separate rule for `export` because it produces no new constraint on a single-module derivation.
+
+D-Type-Sum-Opaque is the one place where module identity directly enters a typing rule: the constructor visibility depends on whether the typing-time module is the defining module $M$. All other rules are module-local in the trivial sense (their effects apply inside whichever module is being type-checked).
 
 {% endraw %}
