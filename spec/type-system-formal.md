@@ -153,6 +153,22 @@ q_1 = \omega & \omega & — & \omega
 
 $\cdot$ means the binding is absent from that side of the split. A linear binding ($q = 1$) splits as $(1, \cdot)$ or $(\cdot, 1)$ — the choice of which side receives it is arbitrary (determined by the derivation). An unrestricted binding ($q = \omega$) splits as $(\omega, \omega)$ — both sides share it. "$—$" is forbidden ($1 + 1$ would use a linear resource twice).
 
+$\Gamma$ is a **finite partial map** from binder names to $(q, S)$ pairs. There is at most one entry per name; shadowing within a single $\Gamma$ does not occur because env extension by comma overwrites a same-name binding (the inner binder hides the outer at the term-syntax level; the sequence-level $\text{fv}$ already strips shadowed names from a tail's free set, see §Free Variables). The following operations are defined on $\Gamma$ and used throughout the typing rules:
+
+$$\begin{array}{rcl}
+\text{dom}(\Gamma) & = & \lbrace x \mid (x :^q S) \in \Gamma \rbrace \quad\text{(a name set)} \\[2pt]
+\Gamma(x) & = & \text{the unique } (q, S)~\text{such that}~(x :^q S) \in \Gamma; \text{ undefined if}~x \notin \text{dom}(\Gamma) \\[2pt]
+\Gamma \setminus \lbrace x \rbrace & = & \lbrace y :^q S \in \Gamma \mid y \neq x \rbrace \\[2pt]
+\Gamma_1 \setminus \Gamma_2 & = & \lbrace x :^q S \in \Gamma_1 \mid x \notin \text{dom}(\Gamma_2) \rbrace \\[2pt]
+\Gamma_1 \uplus \Gamma_2 & = & \begin{cases} \Gamma_1 \cup \Gamma_2 & \text{if}~\text{dom}(\Gamma_1) \cap \text{dom}(\Gamma_2) = \emptyset \\ \text{undefined} & \text{otherwise} \end{cases} \\[2pt]
+\Gamma,\, x :^q S & = & (\Gamma \setminus \lbrace x \rbrace) \cup \lbrace x :^q S \rbrace \quad\text{(comma is overwriting extension)}
+\end{array}$$
+
+Two readings follow from these definitions:
+
+- **$\Gamma_i \setminus \Gamma$ in the pattern rules** ([P-Ctor](#P-Ctor), [P-Record](#P-Record), [P-Or](#pattern-matching)) reads as "the bindings $\Gamma_i$ introduced beyond $\Gamma$". Since each $\Gamma_i$ extends the same input $\Gamma$ with a few new pattern binders, $\Gamma_i \setminus \Gamma$ is exactly the new-binding contribution of one sub-pattern; $\biguplus_i (\Gamma_i \setminus \Gamma)$ then asserts the new binders are mutually disjoint across sub-patterns.
+- **$\otimes$-split is non-deterministic.** The table relates $(q_1, q_2)$ to $q$ pointwise; multiple satisfying choices exist when $q = 1$ (either $(1, \cdot)$ or $(\cdot, 1)$). The spec rule is satisfied if *any* choice makes both sub-derivations type-check. The implementation makes a single deterministic pick (`src/typecheck/infer.nx`'s left-then-right scan); soundness does not depend on which.
+
 ### Auxiliary Functions
 
 $$\begin{array}{rcl}
