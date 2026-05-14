@@ -109,12 +109,15 @@ let mock_logger = handler Logger do
 end
 ```
 
-Handler `require { ... }` propagates: injecting `console_logger` adds `Console` to the caller's requirements.
+Handler `require { ... }` is a **precondition on every `inject` site**: a handler value with `require { Console }` may only be injected inside a scope that already provides `Console` (i.e. whose enclosing function declares `require { Console }` or whose surroundings injected a `Console` handler). The injection does **not** retroactively add `Console` to the calling function's requirements — the caller must already hold it.
+
+This is the rule formalised by [T-Inject](./type-system-formal#T-Inject): the handler's require row $\rho_i$ must satisfy $\rho_i \subseteq \rho_q$, where $\rho_q$ is the ambient row at the inject site. The opposite reading (propagation, where injecting a `require {Console}` handler would push `Console` upward into the caller's signature) was considered and rejected — it would let a function reach capabilities its declared signature does not advertise, breaking capability containment as an audit property.
 
 The type checker enforces:
 - Handler methods must match cap signatures exactly
 - All cap methods must be implemented (exhaustive)
 - Handler method bodies inherit the handler's `require` clause
+- At each `inject`, the handler's `require` must be a subset of the surrounding scope's ambient row
 
 ## Inject
 
@@ -131,7 +134,7 @@ end
 Rules:
 - `inject` must reduce requirements -- injecting an unused handler is a type error
 - Multiple handlers can be injected in a single `inject` statement: `inject h1, h2 do ... end`
-- Handler requirements propagate to the enclosing scope
+- A handler's own `require` row must be satisfied by the ambient row at the inject site (it does **not** propagate upward to the caller's signature)
 
 ## Exception Groups
 
