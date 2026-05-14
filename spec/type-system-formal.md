@@ -96,6 +96,41 @@ The capability row $\rho_q$ admits two disjoint sources of entries:
 
 These two sources share the row vocabulary because $\rho_q$ unification, weakening, and `require` checking treat both kinds of entries uniformly. The disjointness is by declaration site: system-capability names are reserved (parser rejects redeclaration); port/cap names are user-defined and live in the same namespace as type/term identifiers.
 
+### Row Set Operations
+
+The typing rules use three set-like operations on rows: subset ($\subseteq$), entry-name set difference ($\setminus$), and membership ($\in$). Each is defined uniformly over closed and open rows. Where a row tail variable ${?}r$ appears, the operation is interpreted *up to row unification*: it holds iff there is a substitution of the unification tails that makes the closed-row equation hold, and that substitution is committed as a side-effect (the same convention as elsewhere in §Unification).
+
+**Subset** ($\rho_1 \subseteq \rho_2$).
+
+$$\begin{array}{rcl}
+\lbrace \overline{\tau_1} \rbrace \subseteq \lbrace \overline{\tau_2} \rbrace & \Longleftrightarrow & \overline{\tau_1} \subseteq \overline{\tau_2}~\text{(multiset inclusion)} \\
+\lbrace \overline{\tau_1} \rbrace \subseteq \lbrace \overline{\tau_2} \mid {?}r \rbrace & \Longleftrightarrow & \exists \overline{\tau'}.\;{?}r \mathrel{:=} \overline{\tau'},\;\overline{\tau_1} \subseteq \overline{\tau_2} \cup \overline{\tau'} \\
+\lbrace \overline{\tau_1} \mid {?}r \rbrace \subseteq \lbrace \overline{\tau_2} \rbrace & \Longleftrightarrow & {?}r \mathrel{:=} \lbrace\rbrace,\;\overline{\tau_1} \subseteq \overline{\tau_2} \\
+\lbrace \overline{\tau_1} \mid {?}r_1 \rbrace \subseteq \lbrace \overline{\tau_2} \mid {?}r_2 \rbrace & \Longleftrightarrow & \overline{\tau_1} \subseteq \overline{\tau_2} \cup \overline{\tau'},\;{?}r_1 \mathrel{:=} \lbrace \overline{\tau''} \mid {?}r_2 \rbrace
+\end{array}$$
+
+The open-on-the-right cases refine ${?}r$ to absorb the entries missing on its side; the open-on-the-left cases pin ${?}r_1$ so that its (yet unknown) entries can only come from what the right side already provides (closed) or from ${?}r_2$ (open). Concretely: at the call to [T-Inject](#T-Inject), $\rho_i \subseteq \rho_q$ with $\rho_i = \lbrace \texttt{Logger} \mid {?}r_1 \rbrace$ and $\rho_q = \lbrace \texttt{Logger}, \texttt{Fs} \rbrace$ refines ${?}r_1 \mathrel{:=} \lbrace\rbrace$ — the handler's row-poly tail collapses because the ambient row is closed.
+
+**Set difference** ($\rho \setminus S$ where $S$ is a name set). This is a syntactic transformation; it does not constrain unification variables. The tail (if any) is preserved verbatim:
+
+$$\rho \setminus S = \begin{cases}
+\lbrace \overline{\tau} \setminus S \rbrace & \text{if}~\rho = \lbrace \overline{\tau} \rbrace \\
+\lbrace (\overline{\tau} \setminus S) \mid {?}r \rbrace & \text{if}~\rho = \lbrace \overline{\tau} \mid {?}r \rbrace
+\end{cases}$$
+
+Reading: a catch arm subtracts caught-variant names from the *known* part of the try-body's throws row; whatever the tail ${?}r$ stands for (variants the body could raise that the typer hasn't pinned yet) is forwarded unchanged into the residual. [T-TryCatch](#T-TryCatch)'s $\rho_\text{residual}$ uses exactly this operation; the catch-all carve-out additionally subtracts $\texttt{Exn}$.
+
+**Membership** ($x \in \rho$).
+
+$$\begin{array}{rcl}
+x \in \lbrace \overline{\tau} \rbrace & \Longleftrightarrow & x \in \overline{\tau}~\text{(set membership)} \\
+x \in \lbrace \overline{\tau} \mid {?}r \rbrace & \Longleftrightarrow & x \in \overline{\tau} \quad\text{or}\quad {?}r \mathrel{:=} \lbrace x \mid {?}r' \rbrace~(\text{fresh}~{?}r')
+\end{array}$$
+
+The open-row branch may pin ${?}r$ to expose the missing entry; this matches the way [T-PortCall](#T-PortCall)'s $x \in \rho_q$ premise admits a call whose port is not yet visible in the ambient row but can be introduced by refining the row tail.
+
+These three definitions all reduce to row unification at base; their separate names exist only because the typing rules read more naturally when "is in / is contained / minus" appear instead of bare $\text{unify}$.
+
 ---
 
 ## 2. Typing Rules
