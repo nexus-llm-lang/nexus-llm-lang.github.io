@@ -26,7 +26,7 @@ The predicate `is_auto_droppable(τ)` (`src/typecheck/linearity.nx:147`) defines
 ```
 auto_droppable(τ) ≡
   τ ∈ { i32, i64, f32, f64, IntLit, FloatLit, bool, char, string, unit }
-∨ τ = [σ]                        — array (any element type, see Bug 1)
+∨ τ = [|σ|]                      — array (any element type, see Bug 1)
 ∨ τ = %σ ∧ auto_droppable(σ)     — linear wrapper around a droppable inner
 ∨ τ = &σ ∧ auto_droppable(σ)     — borrow wrapper
 ∨ τ = ~σ ∧ auto_droppable(σ)     — mutable wrapper
@@ -35,7 +35,7 @@ auto_droppable(τ) ≡
 
 The recursion clauses imply `%i64`, `&string`, and `~bool` are auto-droppable; `%Handle` (a record) is not. The negative clause for `@σ` holds even when `σ` is itself auto-droppable: `@i64` must still be forced or threaded through an explicit consumption form.
 
-> **Spec coverage gap (`nexus-218q`)**: `semantics.md` §Linearity bullet 2 currently lists only `i64, f64, bool, string, unit`. The actual implementation accepts `i32, f32, IntLit, FloatLit, char, [σ]` plus the three wrapper recursions. The arrays-of-anything carve-out is also under audit (see Bug 1 below).
+> **Spec coverage gap (`nexus-218q`)**: `semantics.md` §Linearity bullet 2 currently lists only `i64, f64, bool, string, unit`. The actual implementation accepts `i32, f32, IntLit, FloatLit, char, [|σ|]` plus the three wrapper recursions (`[|σ|]` is the array sigil per [types.md](./types) and [type-system-formal.md](./type-system-formal#section-1) — `[σ]` is the immutable list type and is **not** auto-droppable). The arrays-of-anything carve-out is also under audit (see Bug 1 below).
 
 ## Linear Consumption
 
@@ -73,7 +73,7 @@ The form `let _ = e` parses as a `Let` with binder name `"_"`. The linearity che
 
 > **Open bug (`nexus-x5ww`)**: `let_binds_linear` only inspects the *outer* type wrapper. A value whose linearity is *structural* — for example, a record `Handle(fd: %i64)` returned from a function whose declared return type is `Handle` rather than `%Handle` — slips past the predicate, and `let _ = make()` silently discards it. The same hole affects closures whose linearity is induced by capture rather than by an outer `%`.
 
-> **Open bug (`nexus-218q`, array clause)**: `is_auto_droppable` returns `true` for `[σ]` regardless of whether `σ` is linear. Combined with the wildcard hole above, `let _ = make_handles()` returning `[%Handle]` would be silently discarded.
+> **Open bug (`nexus-218q`, array clause)**: `is_auto_droppable` returns `true` for `[|σ|]` regardless of whether `σ` is linear. Combined with the wildcard hole above, `let _ = make_handles()` returning `[|%Handle|]` would be silently discarded. (The notation `[|σ|]` is the array sigil — distinct from the immutable list `[σ]`, which is *not* auto-droppable.)
 
 ## Lazy Thunks (`@T`)
 
