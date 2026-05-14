@@ -1141,7 +1141,9 @@ T-PortCall is the missing link between handler declarations and call sites. Thre
 - $x \in \rho_q$ — the port $x$ itself must be in the ambient row, meaning a handler for $x$ has been brought into scope by an enclosing [T-Inject](#T-Inject) (or by the function's own require annotation).
 - $\beta$ joins the call's effect row — exceptions a method may raise propagate to the caller's $\rho_e$.
 
-The argument unification follows [T-App](#T-App)'s shape, including the $\%$-weakening carve-out. Linear arguments ($\tau_i$ already linear) bypass weakening and unify directly against the linear parameter slot. The result type $\kappa$ is the method's declared return type; no instantiation of method-level type parameters is needed because port methods are monomorphic at declaration (any polymorphism is on the port's type parameters, resolved when the port is referenced).
+The argument unification follows [T-App](#T-App)'s shape, including the $\%$-weakening carve-out. Linear arguments ($\tau_i$ already linear) bypass weakening and unify directly against the linear parameter slot. The result type $\kappa$ is the method's declared return type; no instantiation step is needed because **port declarations are monomorphic at every level** — port names $X$ take no type parameters in the surface grammar (`cap X do ... end`, never `cap X<T> do ... end`), and method signatures inside a port are not generalised by [D-Port](#D-Port). The parser rejects the polymorphic-port form at the declaration site; the spec therefore needs no rule for "instantiating a port's type parameters at the call site".
+
+If polymorphic ports become a surface feature in the future (e.g.\ for a collection-style cap `Vec<T>`), D-Port would have to store a scheme $\forall \overline{\alpha}.\,\text{methods}$ and T-PortCall would read the concrete instantiation $\overline{\sigma}$ off the injected handler's type (extending $\textbf{handler}\;X\;\rho$ to $\textbf{handler}\;X\langle \overline{\sigma}\rangle\;\rho$). This is recorded here as a forward-pointer, not a current rule.
 
 <a id="T-TryCatch"></a>
 
