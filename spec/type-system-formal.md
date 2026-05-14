@@ -35,6 +35,7 @@ s & ::= & \textbf{let}~\mu\,x = e & \text{binding} \\
   & \mid & \mathord{\sim}x \leftarrow e & \text{assignment} \\
   & \mid & \textbf{inject}~\overline{h}~\textbf{do}~\overline{s}~\textbf{end} & \text{capability injection} \\
   & \mid & \textbf{try}~\overline{s}~\textbf{catch}~\overline{p \to s}~\textbf{end} & \text{exception handling} \\
+  & \mid & \textbf{while}~e~\textbf{do}~\overline{s}~\textbf{end} & \text{while loop} \\
   & \mid & e & \text{expression statement} \\[6pt]
 p & ::= & x & \text{variable pattern} \\
   & \mid & \_ \mid n & \text{wildcard / literal pattern} \\
@@ -48,7 +49,7 @@ The core calculus omits several surface language features that are either desuga
 - **Constructors** ($c$) — assumed predefined in $\Gamma$ with a function type (n-ary) or a value type (nullary). Application $f(\overline{\ell : e})$ covers both function calls and constructor application. In patterns, $c$ is syntactically distinguished from variable patterns $x$.
 - **Port declarations** — top-level declarations that populate $\Gamma$ with method signatures. Not terms; they are preconditions on $\Gamma$.
 - **Exception / exception group declarations** — extend the $\texttt{Exn}$ sum type in $\Gamma$. Same status as port declarations.
-- **While / for loops** — present in the surface syntax but desugared; not in the core calculus.
+- **For loops** — present in the surface syntax but desugared to a $\textbf{while}$ with an explicit index counter and bound; the formal rule covers only $\textbf{while}$ (see [T-While](#T-While)).
 - **Import statements** — resolved before type checking; not modeled here.
 - **List literals and the $\mathord{::}$ cons operator** — desugared to the prelude $\texttt{List}$ enum: $[\,]$ becomes $\texttt{Nil}$, $e_h :: e_t$ becomes $\texttt{Cons}(v: e_h,\, \text{rest}: e_t)$, $[e_1, \ldots, e_n]$ becomes a right-associated chain of $\texttt{Cons}$ ending in $\texttt{Nil}$. The list type $[\tau]$ is an alias for $\texttt{List}\langle\tau\rangle$. List patterns desugar identically. Typing and exhaustiveness are then handled by [T-App](#T-App) (constructor application), [P-Ctor](#P-Ctor), and [Exh-Sum](#Exh-Sum) — no list-specific rules are needed.
 - **Array values** — the linear type $[\lvert\tau\rvert]$ has no in-core introduction or elimination rule. Construction, indexing, length, mutation, and iteration go through stdlib intrinsic functions (e.g. $\texttt{array\_init} : (n: \texttt{i64}, v: \tau) \to [\lvert\tau\rvert]$, $\texttt{array\_get} : (a: \&[\lvert\tau\rvert], i: \texttt{i64}) \to \tau$) that are populated into $\Gamma$ as preconditions. The type system observes only their declared signatures via [T-App](#T-App). Array exhaustiveness in [match](#T-Match) is handled by allowing only wildcard-like patterns (a value-level constructor for arrays is not exposed).
@@ -1163,6 +1164,29 @@ $$\text{hasCatchAll}(\overline{p}) = \exists i.\;p_i = \_ \;\vee\; p_i~\text{is 
 The catch-all condition $\text{hasCatchAll}$ is *syntactic*: only an explicit wildcard arm $\_ \to \ldots$ or a single-variable arm $e \to \ldots$ (binding the exception value at type $\texttt{Exn}$) clears the catch-all sentinel and any remaining declared-variant entries. A *closed enumeration* of currently-declared $\texttt{Exn}$ variants does **not** count — because $\texttt{Exn}$ is extensible across modules, a closed enumeration that is exhaustive at the catch site can become inexhaustive when a downstream module declares a new variant, silently corrupting the throws-row of any function whose body contains the now-stale catch. Requiring a syntactic catch-all closes that cross-module hole.
 
 Variant subtraction enables partial catches: catching only $\texttt{NotFound}$ from a try-row of $\lbrace \texttt{NotFound}, \texttt{PermDenied} \rbrace$ leaves $\lbrace \texttt{PermDenied} \rbrace$ in the residual. Group catches (e.g. $\textbf{catch}~\vert~\texttt{IOError} \to \ldots$) expand to their member set via $\text{members}(G)$ at parse time; the formal rule sees only the expanded constructor list (see [Exception Groups](../exception-groups)). Arms may add new effects $\rho_i$ (if an arm itself raises), which always join the residual row regardless of catch-all status.
+
+<a id="T-While"></a>
+
+$$\dfrac{
+  \begin{array}{l}
+  \Gamma;\, \rho_q \vdash_e e_c : \tau_c \mathbin{!} \rho_c \qquad
+  \text{unify}(\tau_c, \texttt{bool}) \\[2pt]
+  \Gamma;\, \rho_q;\, \tau_r \vdash_s \overline{s} : \Gamma' \mathbin{!} \rho_b \\[2pt]
+  \lbrace x :^1 S \in \Gamma' \rbrace = \lbrace x :^1 S \in \Gamma \rbrace \quad\text{(P-Loop: linear set preserved across iterations)}
+  \end{array}
+}{
+  \Gamma;\, \rho_q;\, \tau_r \vdash_s \textbf{while}~e_c~\textbf{do}~\overline{s}~\textbf{end} : \Gamma \mathbin{!} \rho_c \cup \rho_b
+} \;\textsc{T-While}$$
+
+T-While types a while loop as a statement of unit-shaped effect: the body may run zero or more times, so the output environment is fixed to the input $\Gamma$ (no new bindings escape — the loop is block-scoped) and the linear set must be **invariant across one iteration**. P-Loop is the loop-specific analogue of P-Block: every linear binding in $\Gamma$ must survive unchanged in $\Gamma'$, and $\Gamma'$ contains no linear binding absent from $\Gamma$. Equivalently — using the env-difference notation from §Environment and Usage — the linear *restriction* of $\Gamma'$ matches that of $\Gamma$ as sets of $(name, q=1, scheme)$ triples.
+
+The premise rejects three failure modes:
+
+- **Consume-then-loop.** If body iteration 1 consumes a linear $\%h$ from $\Gamma$ ($\%h \in \Gamma$ but $\%h \notin \Gamma'$), iteration 2 has no $\%h$ — would be a use-after-consume on a value the type system claims is still available outside the loop. P-Loop's $\subseteq$ direction rejects this.
+- **Leak-into-loop.** If the body introduces a new linear $\%g$ that survives to body end ($\%g \in \Gamma'$ but $\%g \notin \Gamma$), the loop would either accumulate $\%g$ instances across iterations or silently drop them. P-Loop's $\supseteq$ direction rejects this — matching the impl's "while body must preserve linear set" check (`src/typecheck/linearity.nx`).
+- **Shadow-rebind of outer linear.** A body $\textbf{let}~\%h = \ldots$ that shadows an outer $\%h$ to a different scheme falls under leak-into-loop after the inner shadow's consumption: the shadow's scheme differs from $\Gamma(\%h)$, so the set equality fails.
+
+Surface `for x in start..end do s̄ end` desugars to `while` with an explicit counter binding and increment; the desugaring is handled at lowering, before T-While fires. Surface `break` / `continue` are also lowered (to early-exit on a synthesized boolean), so the core calculus sees only the form above. The output Γ is the *input* Γ even when the body diverges (`return` inside the body short-circuits the enclosing function via $\textbf{return}$'s own typing; T-While simply records that the loop produces no observable binding update).
 
 <a id="T-LetPat"></a>
 
