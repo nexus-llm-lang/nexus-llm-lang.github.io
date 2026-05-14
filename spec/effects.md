@@ -64,6 +64,8 @@ export exception PermissionDenied(msg: string, code: i64)
 
 ## Capabilities
 
+> **Terminology — cap ≡ port.** Surface syntax uses the `cap` keyword; the formal typing rules in [type-system-formal.md](./type-system-formal) call the same construct a **port** (see $\text{methods}(x)$, T-PortCall, T-Inject). The two names refer to one declaration form — a capability interface entering $\Gamma$ as a row-entry symbol plus a method-signature table.
+
 A `cap` defines a capability interface -- a set of function signatures that must be provided by the environment:
 
 ```nexus
