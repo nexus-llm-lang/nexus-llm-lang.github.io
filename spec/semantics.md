@@ -37,7 +37,7 @@ Sigils are not annotations -- they impose runtime behavioral constraints.
 - **Stack-confined**: mutable bindings exist only on the stack of the defining function
 - **No escape**: cannot be returned, stored in heap structures, or captured by closures
 - **Assignment**: `~x <- expr` updates the value
-- **Concurrency**: cannot be captured by `conc` tasks (prevents data races)
+- **Concurrency**: cannot be captured into a thunk (`@`) that may evaluate in parallel — preserves stack confinement and prevents data races (see [lazy.md](./lazy))
 
 ### Linearity (`%`)
 
@@ -123,26 +123,35 @@ let result = match x do
 end
 ```
 
-All non-diverging arm bodies must produce the same type. Arms containing a `return` statement diverge and do not contribute to the unified result type.
+All non-diverging arm bodies must produce the same type. An arm **diverges** — and is excluded from the unified result type — when its last statement is:
+
+- `return e` (function-level return)
+- `raise e` used as an expression statement
+- `let μx = raise e'` (the binding's RHS never produces a value)
+
+If every arm diverges, the match expression's type is a fresh type variable (left to be pinned by surrounding context). See the `tail`/`branchType` definitions in [type-system-formal.md](./type-system-formal#T-Match) for the formal carve-out reused by `if`/`else` and pattern-let.
+
+```nexus
+let result = match x do
+  | A -> 5
+  | B -> raise NotFound(path: "x")   // diverges — `B` does not pin the result type
+end  // result : i64 (from arm A)
+```
 
 ## Concurrency Model
 
-### Structured Concurrency (`conc`)
+Nexus expresses parallelism through the `@` (thunk) sigil rather than a dedicated `conc`/`task` block — the latter was removed during the migration to data-dependency-driven scheduling. Independent thunks within a force expression evaluate in parallel via DAG scheduling; data dependencies determine execution order, not lexical position.
 
 ```nexus
-conc do
-  task worker1 do
-    // ...
-  end
-  task worker2 do
-    // ...
-  end
-end
+let @p1 = compute1()
+let @p2 = compute2()
+let r   = @{ r1: p1, r2: p2 }   // both thunks forced in parallel
 ```
 
-- `conc` spawns multiple `task` units and blocks until **all** complete
-- Tasks cannot capture mutable (`~`) bindings from the enclosing scope
-- The compiled WASM output uses OS-thread parallelism via `std::thread::scope`
+- `@` thunks are unevaluated until forced (`@x`, `@{...}`)
+- A force expression with N independent thunks may evaluate them concurrently
+- Thunks cannot capture mutable (`~`) bindings — the `~` stack-confinement rule rules out cross-thread aliasing
+- Compiled WASM uses OS-thread parallelism via WASI threads; see [lazy.md](./lazy) for the full force / DAG scheduling semantics
 
 ## Implicit Unit Return
 

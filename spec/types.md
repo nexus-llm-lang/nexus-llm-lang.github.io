@@ -187,7 +187,7 @@ This ensures mutation remains localized and predictable.
 
 - Cannot hold linear types (`~` on `%T` is forbidden)
 - Cannot be captured by lambdas
-- Cannot cross `conc` task boundaries
+- Cannot be captured into a `@` thunk (which may evaluate on another thread — see [lazy.md](./lazy))
 
 ## Sigil Compatibility Matrix
 
