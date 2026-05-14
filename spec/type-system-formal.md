@@ -357,7 +357,7 @@ The kind $\kappa_i$ of each $X_i$ is **inferred from $X_i$'s occurrence position
 
 It is a static error for $X_i$ to appear in both kinds of position within one signature, or to be unused; the kind is unique when well-formed. The surface syntax `fn <R>(...)` carries no kind annotation — kind inference recovers $\kappa_i$ from the body. This is faithful to the implementation (`convert_ud_to_var` in `src/typecheck/check.nx`), which represents both kinds with the same $\texttt{TyVar}(n)$ constructor; the unifier then learns the kind from the first row/non-row context the variable meets.
 
-The $X_i$ are user-named quantifiers (predicative System-F extended with row kind). There is **no implicit generalization**: every let-binding produces a monomorphic scheme via $\text{mono}$. The only carve-out is [T-Let-Alias](#T-Let-Alias), which copies an existing polymorphic scheme verbatim when the RHS is a bare polymorphic variable.
+The $X_i$ are user-named quantifiers (predicative System-F extended with row kind). There is **no implicit generalization**: every let-binding produces a monomorphic scheme via $\text{mono}$. The two carve-outs are [T-Let-PolyFn](#T-Let-PolyFn) (the introduction site — fires when the RHS is a $\textbf{fn}$ literal with an explicit type-parameter list, generalizing the inferred arrow over $\overline{X_i}$) and [T-Let-Alias](#T-Let-Alias) (the forwarding site — copies an existing polymorphic scheme verbatim when the RHS is a bare polymorphic variable).
 
 $$\text{mono}(\tau) = \forall\emptyset.\,\tau \qquad\text{(monomorphic scheme; empty quantifier list)}$$
 
@@ -373,7 +373,7 @@ $\text{inst}$ is used at every variable use site ([T-Var](#T-Var)). When the sch
 
 $$\textbf{P8}~\text{(No implicit generalization).}\quad\text{For any binding}~x :^{q} S~\text{introduced by [T-Let](#T-Let) or [T-LetPat](#T-LetPat)},~S = \text{mono}(\tau)~\text{for some}~\tau.$$
 
-Polymorphic schemes ($\forall\overline{X{:}\kappa}.\,\tau$ with $\overline{X} \neq \emptyset$) enter $\Gamma$ only via top-level $\textbf{fn}$ declarations or [T-Let-Alias](#T-Let-Alias).
+Polymorphic schemes ($\forall\overline{X{:}\kappa}.\,\tau$ with $\overline{X} \neq \emptyset$) enter $\Gamma$ only via [T-Let-PolyFn](#T-Let-PolyFn) (top-level $\textbf{fn}$ declarations) or [T-Let-Alias](#T-Let-Alias) (bare-variable forwarding).
 
 **Worked example (row polymorphism).** The library function
 
@@ -923,6 +923,33 @@ $$\dfrac{
 } \;\textsc{T-Let-Alias}$$
 
 T-Let-Alias preserves polymorphism across plain rebinding: subsequent uses of $x$ re-instantiate $\forall\overline{\alpha}.\,\sigma$ via [T-Var](#T-Var) just as uses of $y$ would. Without this rule, $\textbf{let}~f = \textit{id}$ would instantiate $\textit{id}$ once at the binding site (collapsing $f$ to a monotyped arrow), defeating the polymorphism of $\textit{id}$ at every use of $f$. The carve-out is intentionally narrow — RHS must be a bare variable — so that $\text{mono}$-by-default remains the rule, not the exception. Implementation: see `infer.nx::alias_poly_scheme`.
+
+<a id="T-Let-PolyFn"></a>
+
+The second carve-out fires when the RHS is a $\textbf{fn}$ literal carrying an explicit type-parameter list. This is the **only** way a fresh polymorphic scheme enters $\Gamma$ (per the narrative of §Polymorphism Introduction); T-Let-Alias only forwards an existing scheme.
+
+$$\dfrac{
+  \begin{array}{l}
+  e = \textbf{fn}~\langle X_1, \ldots, X_n\rangle\,(\overline{\ell : \tau}) \to \tau_r;\, \rho_q;\, \rho_e~\textbf{do}~\overline{s}~\textbf{end} \qquad n \geq 1 \\[2pt]
+  \forall i.\;\kappa_i~\text{is the inferred kind of}~X_i~\text{(see §Polymorphism Introduction)} \\[2pt]
+  \Gamma,\, \overline{X_i{:}\kappa_i};\, \rho_q' \vdash_e \textbf{fn}~(\overline{\ell : \tau}) \to \tau_r;\, \rho_q;\, \rho_e~\textbf{do}~\overline{s}~\textbf{end} : \tau_\to \mathbin{!} \lbrace\rbrace \\[2pt]
+  \quad\text{(typed as in [T-Lambda](#T-Lambda) with}~\overline{X_i}~\text{treated as rigid type/row symbols in}~\Gamma\text{)} \\[2pt]
+  \tau_\to~\text{is not}~\%\sigma \qquad
+  S = \forall X_1{:}\kappa_1 \ldots X_n{:}\kappa_n.\,\tau_\to
+  \end{array}
+}{
+  \Gamma;\, \rho_q;\, \tau_r \vdash_s \textbf{let}~x = e : \Gamma,\, x :^{\omega} S \mathbin{!} \lbrace\rbrace
+} \;\textsc{T-Let-PolyFn}$$
+
+T-Let-PolyFn formalises the rewrite given in §Polymorphism Introduction. The body $\overline{s}$ is typed under $\Gamma$ extended with the type-parameter symbols $\overline{X_i{:}\kappa_i}$: each $X_i$ behaves as a **rigid** variable — not a fresh unification variable. Parameter and return annotations that mention $X_i$ pass through unification unchanged (they unify only with themselves), so the body cannot specialise $X_i$ to a concrete type. Generalisation happens once, at the binding site, by quantifying the inferred $\tau_\to$ over $\overline{X_i}$.
+
+Three restrictions are inherited from the surface notation:
+
+- **Sigil-free, annotation-free LHS.** The carve-out fires only on $\textbf{let}~x = e$ without sigil or type annotation. Sigil-prefixed (`%x`, `~x`) or annotated forms fall through to [T-Let](#T-Let), which produces a monomorphic scheme; user code wanting a polymorphic scheme on a sigil binding does not exist in the surface.
+- **No linear closure.** The premise $\tau_\to \neq \%\sigma$ rejects polymorphic generalisation over a closure that captured a linear binding — a $\%$-wrapped arrow is one-shot at every instantiation, which is incoherent with $\forall$. Capture-free lambdas (the common case for top-level $\textbf{fn}$ declarations) and lambdas closing only over $\omega$ bindings satisfy this premise.
+- **Quantifier list is non-empty.** When $n = 0$, the rule reduces to T-Let (with $S = \text{mono}(\tau_\to)$); there is no observable difference, so the spec presents the polymorphic case as the carve-out.
+
+Together with T-Let-Alias, these two rules exhaust the entry-points for polymorphic schemes in $\Gamma$, justifying P8's "no implicit generalization" property mechanically rather than only by side-remark.
 
 $$\dfrac{
   \Gamma;\, \rho_q \vdash_e e : \tau \mathbin{!} \rho_0 \qquad
