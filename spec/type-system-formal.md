@@ -1211,4 +1211,79 @@ $$\dfrac{
 
 T-Seq-Cons threads the environment ($\Gamma_1$ from the head feeds into the tail) and unions the effect rows. The premise $\text{tail}(s) \neq \bot \vee \overline{s'} = \cdot$ rejects **dead statements after divergence**: if $s$ is $\textbf{return}~e$, $\textbf{raise}~e$ (as expression statement), or $\textbf{let}~\mu\,x = \textbf{raise}~e'$, then $\text{tail}(s) = \bot$ and the sequence must end there. Programs with statements after a $\textbf{return}$ are rejected at type-checking time rather than silently dropped — the rejection surfaces a likely programmer error (writing past a return) and avoids the question of how to type-check unreachable code. The same $\text{tail}$ predicate used in [T-If](#T-If)/[T-Match](#T-Match) is reused here, so divergence handling stays uniform across the spec.
 
+---
+
+## 3. Top-Level Declarations
+
+A program is a sequence of top-level declarations followed by zero or more top-level $\textbf{let}$ bindings. Declarations populate the global tables — $\Gamma$ (term bindings), $\text{typedef}$ (named type schemes), $\text{variants}$ (sum-type constructor sets), $\text{methods}$ (port method signatures), and $\text{members}$ (exception-group expansion) — that the per-expression rules in §2 read as preconditions. §1 described these declarations as "not terms; preconditions on $\Gamma$"; the judgments in this section spell out exactly how the preconditions are produced.
+
+We write $\mathcal{T} = \langle \Gamma,\, \text{typedef},\, \text{variants},\, \text{methods},\, \text{members} \rangle$ for the five-tuple of tables. The declaration judgment
+
+$$\mathcal{T} \;\vdash_d\; \text{decl} \;\Rightarrow\; \mathcal{T}'$$
+
+says that processing $\text{decl}$ against the current tables produces the updated tables $\mathcal{T}'$. Sequencing through a file folds the rules left-to-right; processing through imports updates the tables before the importing module's own declarations fire (see [imports.md](../imports) for module ordering).
+
+In each rule below, components of $\mathcal{T}$ not mentioned in the conclusion are unchanged. All tables grow monotonically — declarations only extend; existing entries are never removed or rewritten.
+
+<a id="D-Type-Record"></a>
+
+$$\dfrac{
+  D = \textbf{type}~x\langle \overline{\alpha} \rangle = \lbrace \overline{\ell : \tau} \rbrace
+}{
+  \mathcal{T} \;\vdash_d\; D \;\Rightarrow\; \mathcal{T}[\text{typedef}(x) \mathrel{:=} \forall \overline{\alpha}.\, \lbrace \overline{\ell : \tau} \rbrace]
+} \;\textsc{D-Type-Record}$$
+
+<a id="D-Type-Sum"></a>
+
+$$\dfrac{
+  \begin{array}{l}
+  D = \textbf{type}~x\langle \overline{\alpha} \rangle = c_1(\overline{\ell_1 : \tau_1}) \mathbin{\vert} \ldots \mathbin{\vert} c_n(\overline{\ell_n : \tau_n}) \\[2pt]
+  S_i = \forall \overline{\alpha}.\,(\overline{\ell_i : \tau_i}) \to x\langle \overline{\alpha} \rangle \quad (i = 1, \ldots, n)
+  \end{array}
+}{
+  \mathcal{T} \;\vdash_d\; D \;\Rightarrow\; \mathcal{T}\!\begin{bmatrix} \Gamma & \mathrel{:=} & \Gamma,\, \overline{c_i :^{\omega} S_i} \\ \text{typedef}(x) & \mathrel{:=} & \forall \overline{\alpha}.\, x\langle \overline{\alpha} \rangle \\ \text{variants}(x) & \mathrel{:=} & \lbrace c_1, \ldots, c_n \rbrace \end{bmatrix}
+} \;\textsc{D-Type-Sum}$$
+
+D-Type-Sum simultaneously installs each constructor $c_i$ as an $\omega$-bound polymorphic function in $\Gamma$ (so [T-App](#T-App) types constructor application uniformly with function application), registers $x$ in $\text{typedef}$, and records the variant set so that [Exh-Sum](#Exh-Sum) and [P-Ctor](#P-Ctor) can read constructors by name.
+
+<a id="D-Port"></a>
+
+$$\dfrac{
+  D = \textbf{port}~X~\textbf{do}~\overline{\textbf{fn}~\ell_j(\overline{\pi_j}) \to \kappa_j;\,\alpha_j;\,\beta_j}~\textbf{end}
+}{
+  \mathcal{T} \;\vdash_d\; D \;\Rightarrow\; \mathcal{T}[\text{methods}(X) \mathrel{:=} \lbrace \ell_j : (\overline{\pi_j}) \to \kappa_j;\,\alpha_j;\,\beta_j \mid j \in J \rbrace]
+} \;\textsc{D-Port}$$
+
+Port declarations populate $\text{methods}$ alone; they do not enter a value-level binding in $\Gamma$ for $X$. $X$ becomes available as a row-entry symbol in $\rho_q$ via the *user-declared port names* source described in §Row Types, and as a method-lookup namespace via [T-PortCall](#T-PortCall).
+
+<a id="D-Exception"></a>
+
+$$\dfrac{
+  D = \textbf{exception}~C(\overline{\ell : \tau}) \qquad S = (\overline{\ell : \tau}) \to \texttt{Exn}
+}{
+  \mathcal{T} \;\vdash_d\; D \;\Rightarrow\; \mathcal{T}\!\begin{bmatrix} \Gamma & \mathrel{:=} & \Gamma,\, C :^{\omega} S \\ \text{variants}(\texttt{Exn}) & \mathrel{:=} & \text{variants}(\texttt{Exn}) \cup \lbrace C \rbrace \end{bmatrix}
+} \;\textsc{D-Exception}$$
+
+Exception declarations are the only rule that mutates a *pre-existing* table entry: $\text{variants}(\texttt{Exn})$ is the union of every $\textbf{exception}$ declaration reached from the program root. The *cross-module extensibility hazard* called out in [T-TryCatch](#T-TryCatch) — a closed-enumeration catch over a $\texttt{Exn}$ row becoming inexhaustive when a downstream module adds a variant — is exactly the cross-module application of D-Exception against the importer's $\text{variants}(\texttt{Exn})$.
+
+<a id="D-ExceptionGroup"></a>
+
+$$\dfrac{
+  D = \textbf{exception group}~G = C_1 \mathbin{\vert} \ldots \mathbin{\vert} C_n
+}{
+  \mathcal{T} \;\vdash_d\; D \;\Rightarrow\; \mathcal{T}[\text{members}(G) \mathrel{:=} \lbrace C_1, \ldots, C_n \rbrace]
+} \;\textsc{D-ExceptionGroup}$$
+
+Group declarations affect only the parse-time expansion table $\text{members}$; the [caughtVariants](#T-TryCatch) auxiliary reads this table when a catch arm names a group.
+
+<a id="D-Let-Top"></a>
+
+$$\dfrac{
+  \Gamma;\,\lbrace\rbrace;\,\bot \;\vdash_s\; \textbf{let}~\mu\,x = e \;:\; \Gamma' \mathbin{!} \lbrace\rbrace
+}{
+  \mathcal{T} \;\vdash_d\; \textbf{let}~\mu\,x = e \;\Rightarrow\; \mathcal{T}[\Gamma \mathrel{:=} \Gamma']
+} \;\textsc{D-Let-Top}$$
+
+A top-level $\textbf{let}$ is type-checked as an ordinary statement under an empty ambient capability row, an empty effect row, and a $\bot$ return-type (no enclosing function), and reuses [T-Let](#T-Let), [T-Let-PolyFn](#T-Let-PolyFn), or [T-Let-Alias](#T-Let-Alias) according to the RHS shape. The pure-row premise rejects top-level expressions that require capabilities the program root cannot grant; an $\textbf{inject}$ at the top level is the recommended way to introduce capabilities for an evaluating block.
+
 {% endraw %}
