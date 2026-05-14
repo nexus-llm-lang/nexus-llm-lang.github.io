@@ -945,13 +945,22 @@ $$\dfrac{
 
 $$\text{merge}(\rho_1, \rho_2) = \rho_1 \cup \rho_2 \quad\text{(row union, deduplicating by type identity)}$$
 
-Block-scoped constructs ($\textbf{inject}$, $\textbf{try}$/$\textbf{catch}$, and any future bracketing form) close their inner environment back to the outer scope via $\text{closeBlock}$, which drops bindings introduced *inside* the block from the output environment. The lexical-scoping rule from [semantics.md](../semantics) — *"Bindings are visible in the block where they are defined and in nested blocks"* — is enforced statically here: an inner $\textbf{let}$ may shadow an outer name within the block, but the binding ceases to exist after the block. A companion premise rejects programs that leave a linear binding introduced *inside* the block unconsumed at block end — those resources have no consumer in the outer scope and would silently leak.
+Block-scoped constructs ($\textbf{inject}$, $\textbf{try}$/$\textbf{catch}$, and any future bracketing form) close their inner environment back to the outer scope via $\text{closeBlock}$, which drops bindings introduced *inside* the block from the output environment. The lexical-scoping rule from [semantics.md](../semantics) — *"Bindings are visible in the block where they are defined and in nested blocks"* — is enforced statically here: an inner $\textbf{let}$ may shadow an outer name within the block, but the shadow ceases to exist at block end and the outer binding becomes visible again. A companion premise rejects programs that leave a linear binding introduced *inside* the block unconsumed at block end — those resources have no consumer in the outer scope and would silently leak.
 
-$$\text{closeBlock}(\Gamma_\text{inner}, \Gamma_\text{outer}) = \lbrace x :^q S \in \Gamma_\text{inner} \mid x \in \text{dom}(\Gamma_\text{outer}) \rbrace$$
+$$\text{closeBlock}(\Gamma_\text{inner}, \Gamma_\text{outer}) = \lbrace x :^q S \mid x \in \text{dom}(\Gamma_\text{outer}) \cap \text{dom}(\Gamma_\text{inner}),\; x :^q S \in \Gamma_\text{outer} \rbrace$$
 
-$$\textbf{P-Block}~\text{(linear no-leak).}\quad\forall x :^1 S \in \Gamma_\text{inner}.\;x \in \text{dom}(\Gamma_\text{outer})$$
+Two design properties of this definition:
 
-P-Block is intentionally one-directional: a linear binding from $\Gamma_\text{outer}$ that survives unchanged through the body remains available for consumption after the block (the consumer runs in outer scope and still sees $x$). Only *newly introduced* linear bindings — those in $\text{dom}(\Gamma_\text{inner}) \setminus \text{dom}(\Gamma_\text{outer})$ — must be consumed before block end. This mirrors the function-end check in [drop.md](../drop) but is strictly stronger: function-end catches leftover linears only at the outermost frame, while P-Block catches them at every nested block boundary.
+- **Binding info comes from $\Gamma_\text{outer}$, not $\Gamma_\text{inner}$.** When an inner $\textbf{let}$ shadows an outer name, the shadow lives only in $\Gamma_\text{inner}$ during the block; at block end, the outer value is restored. Filtering $\Gamma_\text{inner}$ by outer-dom alone would leak the shadowed scheme into the outer scope and break lexical scoping (e.g.\ outer `x : i64` shadowed by inner `let x = "s"` would surface as `x : string` after the block).
+- **Membership in $\Gamma_\text{inner}$ still gates restoration.** A linear outer binding consumed inside the block is removed from $\Gamma_\text{inner}$, and the intersection therefore excludes it from the output. Consumption inside the block reaches the outer scope; only the shadowed-value channel is broken.
+
+A corollary: shadowing a *linear* outer binding inside a closed block is operationally equivalent to consume-and-rebind for the duration of the block. The outer linear remains in $\Gamma_\text{outer}$ unchanged, but P-Block (below) requires the shadow itself to be consumed before block end, and the outer's quantity/scheme is then restored by the intersection. Programs relying on subtle re-resurrection of a shadowed outer linear should use distinct names.
+
+$$\textbf{P-Block}~\text{(linear no-leak).}\quad\forall x :^1 S \in \Gamma_\text{inner}.\;x \in \text{dom}(\Gamma_\text{outer}) \wedge x :^1 S \in \Gamma_\text{outer}$$
+
+P-Block rejects two failure modes at the block boundary: (i) a linear binding introduced inside the block ($x \notin \text{dom}(\Gamma_\text{outer})$) that survives to block end has no outer consumer and silently leaks; (ii) a linear outer binding shadowed by an inner $\textbf{let}$ to a *different* scheme — $x \in \text{dom}(\Gamma_\text{outer})$ but $x :^1 S \in \Gamma_\text{inner}$ with $S$ not matching $\Gamma_\text{outer}(x)$ — must have its shadow consumed before block end so the outer binding can be restored unambiguously.
+
+P-Block is intentionally one-directional: a linear binding from $\Gamma_\text{outer}$ that survives unchanged through the body remains available for consumption after the block (the consumer runs in outer scope and still sees $x$). Only *newly introduced* linear bindings, and shadows that diverged from the outer scheme, must be consumed before block end. This mirrors the function-end check in [drop.md](../drop) but is strictly stronger: function-end catches leftover linears only at the outermost frame, while P-Block catches them at every nested block boundary.
 
 <a id="T-Inject"></a>
 
@@ -962,7 +971,7 @@ $$\dfrac{
   \forall i.\;\rho_i \subseteq \rho_q \quad\text{(handler requires are satisfied by the ambient row)} \\[2pt]
   \rho_q' = \text{merge}(\rho_q,\, \lbrace \overline{P} \rbrace) \\[2pt]
   \Gamma_\text{body};\, \rho_q';\, \tau_r \vdash_s \overline{s} : \Gamma' \mathbin{!} \rho_0 \\[2pt]
-  \forall x :^1 S \in \Gamma'.\;x \in \text{dom}(\Gamma_\text{body}) \quad\text{(P-Block: no leaked linear)}
+  \forall x :^1 S \in \Gamma'.\;x \in \text{dom}(\Gamma_\text{body}) \wedge x :^1 S \in \Gamma_\text{body} \quad\text{(P-Block: no leaked linear, no diverged shadow)}
   \end{array}
 }{
   \Gamma;\, \rho_q;\, \tau_r \vdash_s \textbf{inject}~\overline{h}~\textbf{do}~\overline{s}~\textbf{end} : \text{closeBlock}(\Gamma',\, \Gamma_\text{body}) \mathbin{!} \rho_0
@@ -1005,10 +1014,10 @@ The argument unification follows [T-App](#T-App)'s shape, including the $\%$-wea
 $$\dfrac{
   \begin{array}{l}
   \Gamma;\, \rho_q;\, \tau_r \vdash_s \overline{s_\text{try}} : \Gamma_1 \mathbin{!} \rho_\text{try} \\[2pt]
-  \forall x :^1 S \in \Gamma_1.\;x \in \text{dom}(\Gamma) \quad\text{(P-Block: try-body no leaked linear)} \\[4pt]
+  \forall x :^1 S \in \Gamma_1.\;x \in \text{dom}(\Gamma) \wedge x :^1 S \in \Gamma \quad\text{(P-Block: try-body)} \\[4pt]
   \forall i.\;\Gamma_1 \vdash p_i : \texttt{Exn} \Rightarrow \Gamma_i \\[2pt]
   \forall i.\;\Gamma_i;\, \rho_q;\, \tau_r \vdash_s \overline{s_i} : \Gamma_i' \mathbin{!} \rho_i \\[2pt]
-  \forall i.\;\forall x :^1 S \in \Gamma_i'.\;x \in \text{dom}(\Gamma) \quad\text{(P-Block: catch-arm no leaked linear)} \\[4pt]
+  \forall i.\;\forall x :^1 S \in \Gamma_i'.\;x \in \text{dom}(\Gamma) \wedge x :^1 S \in \Gamma \quad\text{(P-Block: catch-arm)} \\[4pt]
   \overline{C}_\text{caught} = \text{caughtVariants}(\overline{p}) \\[2pt]
   \rho_\text{residual} = \begin{cases} \rho_\text{try} \setminus (\lbrace\texttt{Exn}\rbrace \cup \overline{C}_\text{caught}) & \text{if } \text{hasCatchAll}(\overline{p}) \\ \rho_\text{try} \setminus \overline{C}_\text{caught} & \text{otherwise} \end{cases}
   \end{array}
