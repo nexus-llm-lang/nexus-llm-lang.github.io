@@ -198,6 +198,17 @@ $\text{linear}(\tau)$ is a structural (recursive) predicate: holds if $\tau$ is 
 
 $\text{autoDrop}(\tau)$ holds if the innermost non-modality type of $\tau$ (recursively stripping $\%$, $@$, $\&$, $\mathord{\sim}$) is in $\lbrace b, \texttt{intlit}, \texttt{floatlit}, [\lvert\,\sigma\,\rvert] \rbrace$. Types whose linear wrapper can be silently discarded.
 
+**Variable cases.** Both predicates take the *conservative* answer on unresolved unification variables and on rigid type/row quantifiers:
+
+$$\text{linear}({?}\alpha) = \text{linear}(\alpha) = \text{false}\qquad \text{autoDrop}({?}\alpha) = \text{autoDrop}(\alpha) = \text{false}$$
+
+A $\%$- or $@$-wrapper around a variable, e.g.\ $\%{?}\alpha$ or $\%\alpha$, is still linear by the outermost-wrapper clause — only a bare variable defaults to non-linear. The convention is conservative in two opposite ways:
+
+- $\text{linear} = \text{false}$ on a bare variable means [P-Var](#P-Var) assigns $q = \omega$ to a pattern bound at type $?\alpha$ (e.g.\ the divergent-RHS case where $\textbf{raise}~e$ returns $?\alpha$). The binding never carries a linear obligation; the unifier may later refine $?\alpha$ to a non-linear concrete type without re-evaluation. If a later occurrence demands linear ($\%\sigma$), unification refines $?\alpha$ at the wrapped position and the $\%$-clause makes linearity locally visible.
+- $\text{autoDrop} = \text{false}$ on a bare variable means [P-Wild](#P-Wild) rejects discarding any binding whose type is still $?\alpha$ until it's resolved — the lambda body's $\textbf{let}~\_ = e$ for $e : ?\alpha$ is statically rejected as a possible silent leak. This is conservative *the other direction*: we prefer false-positive errors over silent linear discard.
+
+The two conventions together preserve soundness: any program that type-checks under the variable cases also type-checks at every later refinement of those variables (provided the refinement is consistent with the rest of the derivation). Mechanically, `src/typecheck/linearity.nx`'s `is_linear_binding_type` and `is_auto_droppable` implement these defaults — both fall through to $\text{false}$ on $\texttt{TyVar}$.
+
 Linearity is entirely structural: the split $\otimes$ ensures each linear binding ($q = 1$) goes to exactly one sub-derivation, and branching constructs give both arms the same portion of $\Gamma$.
 
 Two additional behaviors are embedded in specific rules rather than stated as standalone inference rules:
