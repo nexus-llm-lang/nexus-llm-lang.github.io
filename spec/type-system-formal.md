@@ -753,6 +753,7 @@ $$\dfrac{
   \forall x \in \text{fv}(\overline{s}) \cap \text{dom}(\Gamma).\;\Gamma(x) \neq \mathord{\sim}\sigma \quad\text{(no ref capture)} \\[2pt]
   q_i = \begin{cases} 1 & \text{if } \text{linear}(\tau_i) \\ \omega & \text{otherwise} \end{cases} \\[2pt]
   \Gamma_\omega,\, \Gamma_\text{cap},\, \overline{x_i :^{q_i} \tau_i};\, \rho_q;\, \tau_r \vdash_s \overline{s} : \Gamma' \mathbin{!} \rho_e \\[2pt]
+  \forall y :^1 S \in \Gamma'.\;y \in \lbrace\overline{x_i}\rbrace \wedge \text{autoDrop}(S) \quad\text{(P-FnEnd: no leaked linear at body end)} \\[2pt]
   \tau_\to = (\overline{\ell : \tau}) \to \tau_r;\, \rho_q;\, \rho_e \\[2pt]
   \tau_\to^\star = \begin{cases} \%\tau_\to & \text{if } \Gamma_\text{cap} \neq \emptyset \\ \tau_\to & \text{otherwise} \end{cases}
   \end{array}
@@ -761,6 +762,14 @@ $$\dfrac{
 } \;\textsc{T-Lambda}$$
 
 The lambda is pure ($\mathbin{!} \lbrace\rbrace$). It consumes $\Gamma_\text{cap}$ (captured linear bindings). The body environment includes $\Gamma_\omega$ (captured unrestricted bindings), $\Gamma_\text{cap}$, and the parameters $\overline{x_i :^{q_i} \tau_i}$ — each parameter's usage $q_i$ matches its type's linearity (mirroring [T-Let](#T-Let)). The closure-linearization premise $\tau_\to^\star$ promotes the lambda's type to $\%\tau_\to$ whenever any linear binding is captured: a closure that owns a linear resource is itself one-shot, so two uses of the same closure value would imply two consumptions of the resource. The same shape is reused in [T-Handler](#T-Handler) to linearize handler values that capture linears.
+
+**P-FnEnd (function-end no-leak).** The body's output environment $\Gamma'$ must contain no linear binding except parameters whose declared type is auto-droppable. This formalises [drop.md](../drop)'s function-end check (`require_empty_or_droppable` in `src/typecheck/linearity.nx`) as a premise of T-Lambda rather than leaving it as an out-of-band obligation. Concretely:
+
+- **Captured linears** ($\Gamma_\text{cap}$) flow into the body and must be consumed before body end; otherwise they would be silently dropped when the closure value returns, but the caller still believes the resource is alive via the closure's captured-state contract.
+- **Locally introduced linears** (let-bindings inside $\overline{s}$ with linear RHS) likewise must be consumed; they have no consumer in any caller.
+- **Linear parameters** ($q_i = 1$) must either be consumed by the body (transferred via a return / raise / argument-passing channel, per [drop.md](../drop) §Linear Consumption) or have $\text{autoDrop}(\tau_i)$ — the carve-out admits e.g. an array-typed parameter whose linear wrapper is structural rather than semantically resource-bearing.
+
+P-FnEnd is the analogue at function-body scope of P-Block at block scope: both reject linear-leak at a scope boundary. T-Lambda is the only construct that crosses a function-body boundary, so the function-end check lives uniquely here; [T-Inject](#T-Inject) and [T-TryCatch](#T-TryCatch) discharge P-Block instead. The two together cover every closing scope in the language.
 
 <a id="T-Raise-Ctor"></a>
 
