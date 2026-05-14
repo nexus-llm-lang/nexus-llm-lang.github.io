@@ -8,6 +8,8 @@ title: Type System — Formal Rules
 
 This document defines the typing rules of Nexus as inference rules. It serves as a specification for property-based testing and as a reference for future mechanization.
 
+> **Terminology — port ≡ cap.** This document uses **port** as the abstract name for a capability interface (e.g. $\textbf{port}\;\texttt{Logger}$, $\text{methods}(x)$, [T-PortCall](#T-PortCall)). The corresponding surface keyword is `cap` — see [effects.md](./effects) and [syntax.md](./syntax). The two names refer to the same construct: a top-level declaration that introduces a row-entry symbol and a method signature table. The formal rules use "port" uniformly; readers should treat any `cap X do ... end` declaration in surface code as a `port X` introduction in $\Gamma$.
+
 ## 1. Syntax
 
 The abstract syntax of the core calculus. See [Syntax](../syntax) for the full surface syntax.
@@ -67,9 +69,9 @@ b & ::= & \texttt{i32} \mid \texttt{i64} \mid \texttt{f32} \mid \texttt{f64} \mi
 \rho & ::= & \lbrace \overline{\tau} \rbrace \mid \lbrace \overline{\tau} \mid {?}r \rbrace & \text{row (closed / open with row variable } {?}r\text{)}
 \end{array}$$
 
-We write $\overline{X}$ for a finite sequence $X_1, \ldots, X_n$. $\alpha, \beta, \gamma$ range over type variables; ${?}\alpha$ denotes a unification variable introduced during inference (the distinction matters in generalization). $\lvert\overline{X}\rvert$ denotes the length of a sequence.
+We write $\overline{X}$ for a finite sequence $X_1, \ldots, X_n$. $\alpha, \beta, \gamma$ range over type variables; ${?}\alpha$ denotes a type unification variable introduced during inference (the distinction matters in generalization). $r, s$ range over **row variables** (the tail position of an open row $\lbrace \overline{\tau} \mid r \rbrace$); ${?}r$ denotes a row unification variable. $\lvert\overline{X}\rvert$ denotes the length of a sequence.
 
-$\texttt{intlit}$ and $\texttt{floatlit}$ denote inference-internal *kind-restricted unification variables* assigned to integer and float literals before their concrete type is known. Each occurrence of [T-IntLit](#T-IntLit) / [T-FloatLit](#T-FloatLit) introduces a **fresh** variable so that two unrelated literals don't get accidentally unified through a shared name. They are resolved by unification (U-IntLit / U-FloatLit emit substitutions) or, if still unresolved at a binding site, defaulted to $\texttt{i64}$/$\texttt{f64}$ via $\text{default}$ in [T-Let](#T-Let). The $\text{kind}(\cdot)$ of $\texttt{intlit}$ is $\lbrace \texttt{i32}, \texttt{i64} \rbrace$ and of $\texttt{floatlit}$ is $\lbrace \texttt{f32}, \texttt{f64} \rbrace$ — unification with any other type fails.
+$\texttt{intlit}$ and $\texttt{floatlit}$ are **singleton kind-restricted constants** assigned to integer and float literals before their concrete type is known. They are *not* fresh per literal occurrence: every $n$ in source code is typed at the same shared $\texttt{intlit}$ symbol, every $f$ at the same $\texttt{floatlit}$. Resolution proceeds in two stages: (1) any unification of $\texttt{intlit}$ with a concrete type $\tau \in \text{kind}(\texttt{intlit})$ emits a substitution $\lbrace \texttt{intlit} := \tau \rbrace$ via [U-IntLit](#U-IntLit) / [U-FloatLit](#U-FloatLit), which propagates to every literal occurrence simultaneously (matching the implementation in `src/typecheck/infer.nx`); (2) if the substitution chain still leaves an $\texttt{intlit}$/$\texttt{floatlit}$ at a binding site, $\text{default}$ in [T-Let](#T-Let) pins it to $\texttt{i64}$/$\texttt{f64}$. The shared symbol behavior is harmless in practice because every well-typed program's literals either get pinned to the same concrete type by surrounding context or get defaulted at the nearest let — distinct numeric "shapes" (e.g. an $\texttt{i32}$ literal next to an $\texttt{i64}$ one) are forced into separate bindings before they meet at a unification site. The $\text{kind}(\cdot)$ of $\texttt{intlit}$ is $\lbrace \texttt{i32}, \texttt{i64} \rbrace$ and of $\texttt{floatlit}$ is $\lbrace \texttt{f32}, \texttt{f64} \rbrace$ — unification with any other type fails.
 
 ### Modalities
 
@@ -79,7 +81,7 @@ In expression position, $\mu\,x$ with $\mu \in \{\varepsilon, \%, \mathord{\sim}
 
 ### Row Types
 
-The row type $\rho$ is used for both the effect position ($\rho_e$, in $\textbf{throws}$) and the capability position ($\rho_q$, in $\textbf{require}$) of function types. Both positions share the same structure — row extension, unification, row variable instantiation — so no separate syntactic category is needed. The distinction is semantic: $\rho_e$ ranges over exception types, $\rho_q$ ranges over capabilities ($\texttt{PermFs}$, $\texttt{PermNet}$, etc.). No kind system enforces this; the invariant is maintained by the introduction rules (T-Raise adds to $\rho_e$; handler declarations add to $\rho_q$).
+The row type $\rho$ is used for both the effect position ($\rho_e$, in $\textbf{throws}$) and the capability position ($\rho_q$, in $\textbf{require}$) of function types. Both positions share the same structure — row extension, unification, row variable instantiation — so no separate syntactic category is needed. The distinction is semantic: $\rho_e$ ranges over exception types, $\rho_q$ ranges over a **mixed alphabet** of system capabilities and user-declared port names (defined immediately below). No kind system enforces the row-position invariant; it is maintained by the introduction rules (T-Raise adds to $\rho_e$; [T-Inject](#T-Inject) and port/cap declarations add to $\rho_q$).
 
 In the current language, the only effect is checked exceptions. $\rho_e$ is a row of **exception-constructor names**: each user `exception C(...)` declaration extends the global $\texttt{Exn}$ sum with constructor $C$ and simultaneously introduces $C$ as a row-entry symbol usable in $\textbf{throws}$ rows. So $\rho_e$ may be $\lbrace\rbrace$ (pure), a closed set of specific variants $\lbrace C_1, \ldots, C_n \rbrace$, an open variant row $\lbrace C_1, \ldots, C_n \mid {?}r \rbrace$, or contain the catch-all sentinel $\texttt{Exn}$ (see below).
 
@@ -87,7 +89,12 @@ $\texttt{Exn}$ itself is the **top of the exception lattice** — the type assig
 
 Exception groups (`exception group G = C_1 | C_2 | \ldots`, see [Exception Groups](../exception-groups)) are syntactic shortcuts: anywhere $G$ appears in a row position or a catch-arm pattern, it expands to its declared member set $\lbrace C_1, C_2, \ldots \rbrace$ at parse time. The formal rules never observe groups directly — only their expansions.
 
-The capability names $\texttt{PermFs}$, $\texttt{PermNet}$, $\texttt{PermConsole}$, $\texttt{PermRandom}$, $\texttt{PermClock}$, $\texttt{PermProc}$, $\texttt{PermEnv}$ correspond to WASI interface grants at runtime. See [WASM and WASI](../../env/wasm) for the complete mapping.
+The capability row $\rho_q$ admits two disjoint sources of entries:
+
+1. **System capabilities** — the closed set $\lbrace \texttt{PermFs}, \texttt{PermNet}, \texttt{PermConsole}, \texttt{PermRandom}, \texttt{PermClock}, \texttt{PermProc}, \texttt{PermEnv} \rbrace$ — corresponding to WASI interface grants at runtime. See [WASM and WASI](../../env/wasm) for the complete mapping.
+2. **User-declared port names** — each $\textbf{port}\;X\;\textbf{do}\;\ldots\;\textbf{end}$ (also written $\textbf{cap}\;X$ in [effects.md](../effects)/[syntax.md](../syntax); the two surface keywords name the same construct) introduces $X$ as a row-entry symbol usable in $\textbf{require}$ rows. [T-Inject](#T-Inject) extends $\rho_q$ with $X$ when an $X$-implementing handler is injected; [T-PortCall](#T-PortCall) reads $x \in \rho_q$ off this row to authorize the call.
+
+These two sources share the row vocabulary because $\rho_q$ unification, weakening, and `require` checking treat both kinds of entries uniformly. The disjointness is by declaration site: system-capability names are reserved (parser rejects redeclaration); port/cap names are user-defined and live in the same namespace as type/term identifiers.
 
 ---
 
@@ -134,7 +141,56 @@ $$\begin{array}{rcl}
 
 $\text{typedef}(x)$ denotes the definition of named type $x$ in the global type-definition environment.
 
-Other functions are introduced where first used: $\text{linear}$, $\text{autoDrop}$ (Linearity), $\text{strip}$ (Pattern Matching), $\text{open}$ and $\text{selectInt}$/$\text{selectFloat}$ and $\text{comparable}$ (Expressions), $\text{default}$, $\text{wrapSigil}$ (Statements), $\text{merge}$ (Statements), $\text{tail}$ (Expressions), $\text{methods}$ (Expressions), $\text{caughtVariants}$, $\text{hasCatchAll}$, $\text{members}$, $\text{diverges}$ (Statements).
+Other functions are introduced where first used: $\text{linear}$, $\text{autoDrop}$ (Linearity), $\text{strip}$ (Pattern Matching), $\text{open}$ and $\text{selectInt}$/$\text{selectFloat}$ and $\text{comparable}$ (Expressions), $\text{default}$, $\text{wrapSigil}$ (Statements), $\text{merge}$ (Statements), $\text{tail}$, $\text{branchType}$ (Expressions), $\text{methods}$ (Expressions), $\text{caughtVariants}$, $\text{hasCatchAll}$, $\text{members}$, $\text{diverges}$ (Statements), $\text{closeBlock}$ (Statements).
+
+### Free Variables
+
+$\text{fv}$ is overloaded — on a *type*, it returns the free unification variables (used by $\text{occurs}$ in the unification rules); on a *term*, it returns the free term variables (used by [T-Lambda](#T-Lambda) and [T-Handler](#T-Handler) to compute the captured-binding partition $\Gamma_\text{cap}$). Disambiguation is by the argument's syntactic category.
+
+The companion $\text{bv}(p)$ returns the binder names introduced by a pattern; it cooperates with $\text{fv}$ when stripping shadowed names from a statement-sequence's free set.
+
+Free variables of expressions (selected cases — clauses for forms with no binders trivially recurse into subterms):
+
+$$\begin{array}{rcl}
+\text{fv}(\mu\,x) & = & \lbrace x \rbrace \\
+\text{fv}(c) & = & \emptyset \\
+\text{fv}(n) = \text{fv}(f) = \text{fv}(b) = \text{fv}(s) = \text{fv}(ch) = \text{fv}(()) & = & \emptyset \\
+\text{fv}(e_1 \oplus e_2) & = & \text{fv}(e_1) \cup \text{fv}(e_2) \\
+\text{fv}(f(\overline{\ell : e})) & = & \text{fv}(f) \cup \textstyle\bigcup_i \text{fv}(e_i) \\
+\text{fv}(\textbf{fn}~(\overline{\ell : \tau}) \to \ldots~\textbf{do}~\overline{s}~\textbf{end}) & = & \text{fv}(\overline{s}) \setminus \lbrace \overline{\ell} \rbrace \\
+\text{fv}(\textbf{if}~e~\textbf{then}~\overline{s_1}~\textbf{else}~\overline{s_2}) & = & \text{fv}(e) \cup \text{fv}(\overline{s_1}) \cup \text{fv}(\overline{s_2}) \\
+\text{fv}(\textbf{match}~e~\lbrace \overline{p_i \to s_i} \rbrace) & = & \text{fv}(e) \cup \textstyle\bigcup_i (\text{fv}(\overline{s_i}) \setminus \text{bv}(p_i)) \\
+\text{fv}(\lbrace \overline{\ell : e} \rbrace) & = & \textstyle\bigcup_i \text{fv}(e_i) \\
+\text{fv}(e.\ell) & = & \text{fv}(e) \\
+\text{fv}(@e) = \text{fv}(\&x) & = & \text{fv}(e),\;\lbrace x \rbrace~\text{respectively} \\
+\text{fv}(\textbf{raise}~e) & = & \text{fv}(e) \\
+\text{fv}(\textbf{handler}~x~[\textbf{require}~\rho]~\textbf{do}~\overline{\ell = e}~\textbf{end}) & = & \textstyle\bigcup_j \text{fv}(e_j)
+\end{array}$$
+
+Free variables of statement sequences are defined cumulatively from the right, with $\text{bv}(p)$ stripping shadowed names introduced earlier in the sequence:
+
+$$\begin{array}{rcl}
+\text{fv}(\cdot) & = & \emptyset \\
+\text{fv}(\textbf{let}~\mu\,x = e;\;\overline{s'}) & = & \text{fv}(e) \cup (\text{fv}(\overline{s'}) \setminus \lbrace x \rbrace) \\
+\text{fv}(\textbf{let}~p = e;\;\overline{s'}) & = & \text{fv}(e) \cup (\text{fv}(\overline{s'}) \setminus \text{bv}(p)) \\
+\text{fv}(\textbf{return}~e;\;\overline{s'}) & = & \text{fv}(e) \cup \text{fv}(\overline{s'}) \\
+\text{fv}(\mathord{\sim}x \leftarrow e;\;\overline{s'}) & = & \lbrace x \rbrace \cup \text{fv}(e) \cup \text{fv}(\overline{s'}) \\
+\text{fv}(\textbf{inject}~\overline{h}~\textbf{do}~\overline{s_b}~\textbf{end};\;\overline{s'}) & = & \lbrace \overline{h} \rbrace \cup \text{fv}(\overline{s_b}) \cup \text{fv}(\overline{s'}) \\
+\text{fv}(\textbf{try}~\overline{s_t}~\textbf{catch}~\overline{p_i \to s_i}~\textbf{end};\;\overline{s'}) & = & \text{fv}(\overline{s_t}) \cup \textstyle\bigcup_i (\text{fv}(\overline{s_i}) \setminus \text{bv}(p_i)) \cup \text{fv}(\overline{s'}) \\
+\text{fv}(e;\;\overline{s'}) & = & \text{fv}(e) \cup \text{fv}(\overline{s'})
+\end{array}$$
+
+Bound variables of patterns:
+
+$$\begin{array}{rcl}
+\text{bv}(x) & = & \lbrace x \rbrace \\
+\text{bv}(\_) = \text{bv}(n) & = & \emptyset \\
+\text{bv}(c(\overline{\ell : p})) & = & \textstyle\bigcup_i \text{bv}(p_i) \\
+\text{bv}(\lbrace \overline{\ell : p} \rbrace) & = & \textstyle\bigcup_i \text{bv}(p_i) \\
+\text{bv}(p_1 \mathbin{\vert} p_2) & = & \text{bv}(p_1) = \text{bv}(p_2)~\text{(both alternatives must bind the same set; see [P-Or](#pattern-matching))}
+\end{array}$$
+
+The sequence-level $\text{fv}$ accounts for shadowing: a $\textbf{let}~x = \ldots$ removes $x$ from the tail's free set, so a later capture site sees through the binding to whatever $x$ refers to in *its* enclosing scope. Without the subtraction, $\textbf{fn}\;()~\textbf{do}\;\textbf{let}~x = 1;\;\textbf{return}~x~\textbf{end}$ would compute $\text{fv} = \lbrace x \rbrace$ and try to capture an outer $x$ that does not exist.
 
 ### Linearity
 
@@ -176,7 +232,7 @@ $$\dfrac{}{\text{unify}(\texttt{intlit}, \texttt{i32}) = \lbrace \texttt{intlit}
 $$\dfrac{}{\text{unify}(\texttt{floatlit}, \texttt{f32}) = \lbrace \texttt{floatlit} := \texttt{f32} \rbrace} \quad
 \dfrac{}{\text{unify}(\texttt{floatlit}, \texttt{f64}) = \lbrace \texttt{floatlit} := \texttt{f64} \rbrace} \;\textsc{U-FloatLit}$$
 
-Two $\texttt{intlit}$ (or two $\texttt{floatlit}$) occurrences unify by [U-Refl](#U-Refl): the syntactic match yields the empty substitution, leaving the variables linked through subsequent rewriting once either side meets a concrete type.
+Two $\texttt{intlit}$ (or two $\texttt{floatlit}$) occurrences unify by [U-Refl](#U-Refl) — both sides are the same singleton symbol, so syntactic identity holds trivially and the empty substitution suffices. Once *either* side later meets a concrete type via [U-IntLit](#U-IntLit) / [U-FloatLit](#U-FloatLit), the resulting substitution propagates to every $\texttt{intlit}$ / $\texttt{floatlit}$ in the term (because they all share the singleton symbol), pinning the whole chain in one step.
 
 U-IntLit and U-FloatLit *do* rewrite — they substitute the literal's inference-internal type to the matched concrete type, propagating the resolution to all occurrences linked by previous unifications. U-Var, U-IntLit, and U-FloatLit apply in both argument orders via the symmetry convention above.
 
@@ -288,36 +344,61 @@ $$\textbf{P7}~\text{(Unification).}\quad \text{unify}(\tau_1, \tau_2)~\text{term
 
 ### Polymorphism Introduction
 
-Polymorphic schemes are introduced **only** by explicit type-parameter lists on top-level function declarations:
+Polymorphic schemes are introduced **only** by explicit type-parameter lists on top-level function declarations. The quantifier list is **kind-aware** — each user-named quantifier $X$ ranges over either type variables ($\kappa = \texttt{Type}$) or row variables ($\kappa = \texttt{Row}$):
 
-$$\textbf{fn}~\textit{foo}\langle\alpha_1, \ldots, \alpha_n\rangle(\overline{\ell:\tau}) \to \tau_r;\,\rho_q;\,\rho_e \quad\rightsquigarrow\quad \forall\alpha_1\ldots\alpha_n.\,(\overline{\ell:\tau}) \to \tau_r;\,\rho_q;\,\rho_e$$
+$$\kappa ::= \texttt{Type} \mid \texttt{Row}$$
 
-The $\alpha_i$ are user-named quantifiers (predicative System-F). There is **no implicit generalization**: every let-binding produces a monomorphic scheme via $\text{mono}$. The only carve-out is [T-Let-Alias](#T-Let-Alias), which copies an existing polymorphic scheme verbatim when the RHS is a bare polymorphic variable.
+$$\textbf{fn}~\textit{foo}\langle X_1, \ldots, X_n\rangle(\overline{\ell:\tau}) \to \tau_r;\,\rho_q;\,\rho_e \quad\rightsquigarrow\quad \forall X_1{:}\kappa_1 \ldots X_n{:}\kappa_n.\,(\overline{\ell:\tau}) \to \tau_r;\,\rho_q;\,\rho_e$$
+
+The kind $\kappa_i$ of each $X_i$ is **inferred from $X_i$'s occurrence position** in the function signature:
+
+- $\kappa_i = \texttt{Type}$ if every occurrence of $X_i$ is a $\tau$ (type) position.
+- $\kappa_i = \texttt{Row}$ if every occurrence is in the tail position of an open row, $\lbrace \overline{\tau} \mid X_i \rbrace$.
+
+It is a static error for $X_i$ to appear in both kinds of position within one signature, or to be unused; the kind is unique when well-formed. The surface syntax `fn <R>(...)` carries no kind annotation — kind inference recovers $\kappa_i$ from the body. This is faithful to the implementation (`convert_ud_to_var` in `src/typecheck/check.nx`), which represents both kinds with the same $\texttt{TyVar}(n)$ constructor; the unifier then learns the kind from the first row/non-row context the variable meets.
+
+The $X_i$ are user-named quantifiers (predicative System-F extended with row kind). There is **no implicit generalization**: every let-binding produces a monomorphic scheme via $\text{mono}$. The only carve-out is [T-Let-Alias](#T-Let-Alias), which copies an existing polymorphic scheme verbatim when the RHS is a bare polymorphic variable.
 
 $$\text{mono}(\tau) = \forall\emptyset.\,\tau \qquad\text{(monomorphic scheme; empty quantifier list)}$$
 
 The pattern rules ([P-Var](#P-Var)) and assignment rule ([T-Assign](#T-Assign)) write the equivalent 2-tuple form $(\emptyset,\,\tau)$ for the same monomorphic scheme — both denote $\forall\emptyset.\,\tau$.
 
-$$\text{inst}(\forall \alpha_1 \ldots \alpha_n.\, \tau) = \tau[\alpha_1 := {?}\beta_1, \ldots, \alpha_n := {?}\beta_n] \qquad (\overline{{?}\beta}~\text{fresh})$$
+$\text{inst}$ produces a fresh unification variable of the appropriate kind for each quantifier:
+
+$$\text{inst}(\forall X_1{:}\kappa_1 \ldots X_n{:}\kappa_n.\, \tau) = \tau[X_1 := \nu_1, \ldots, X_n := \nu_n]$$
+
+$$\nu_i = \begin{cases} {?}\beta_i & \text{if}~\kappa_i = \texttt{Type},~{?}\beta_i~\text{fresh type unification variable} \\ {?}r_i & \text{if}~\kappa_i = \texttt{Row},~{?}r_i~\text{fresh row tail variable} \end{cases}$$
 
 $\text{inst}$ is used at every variable use site ([T-Var](#T-Var)). When the scheme is monomorphic ($n = 0$), $\text{inst}$ is the identity and $\tau' = \tau$.
 
 $$\textbf{P8}~\text{(No implicit generalization).}\quad\text{For any binding}~x :^{q} S~\text{introduced by [T-Let](#T-Let) or [T-LetPat](#T-LetPat)},~S = \text{mono}(\tau)~\text{for some}~\tau.$$
 
-Polymorphic schemes ($\forall\overline{\alpha}.\,\tau$ with $\overline{\alpha} \neq \emptyset$) enter $\Gamma$ only via top-level $\textbf{fn}$ declarations or [T-Let-Alias](#T-Let-Alias).
+Polymorphic schemes ($\forall\overline{X{:}\kappa}.\,\tau$ with $\overline{X} \neq \emptyset$) enter $\Gamma$ only via top-level $\textbf{fn}$ declarations or [T-Let-Alias](#T-Let-Alias).
+
+**Worked example (row polymorphism).** The library function
+
+```nexus
+fn <R>(f: () -> unit require { Logger | R }) -> unit require { Logger | R } do ...
+```
+
+has surface quantifier list $\langle R \rangle$. $R$ appears only in row-tail position ($\lbrace \texttt{Logger} \mid R \rbrace$), so kind inference sets $\kappa_R = \texttt{Row}$, yielding the scheme
+
+$$\forall R{:}\texttt{Row}.\;(f: () \to \texttt{unit};\,\lbrace \texttt{Logger} \mid R \rbrace;\,\lbrace\rbrace) \to \texttt{unit};\,\lbrace \texttt{Logger} \mid R \rbrace;\,\lbrace\rbrace$$
+
+At a call site, $\text{inst}$ replaces $R$ with a fresh row unification variable ${?}r$, which then unifies with the caller's residual capability tail by ordinary row unification.
 
 ### Pattern Matching
 
 $$\Gamma \vdash p : \tau \Rightarrow \Gamma'$$
 
-$\text{strip}$ removes the outermost modality before pattern matching. It does not remove $\mathord{\sim}$ (mutable ref) — refs cannot be match scrutinees.
+$\text{strip}$ removes the outermost modality before pattern matching. It peels $\%$ (linear) and $\&$ (borrow) only — it deliberately does **not** peel $@$ (thunk) or $\mathord{\sim}$ (mutable ref). Thunks must be forced explicitly via [T-Force](#T-Force) before destructuring; refs cannot be match scrutinees at all.
 
 $$\text{strip}(\tau) = \begin{cases}
-\sigma & \text{if } \tau \in \lbrace \%\sigma,\, @\sigma,\, \&\sigma \rbrace \\
+\sigma & \text{if } \tau \in \lbrace \%\sigma,\, \&\sigma \rbrace \\
 \tau & \text{otherwise}
 \end{cases}$$
 
-The match expression ([T-Match](#T-Match)) consumes the linear scrutinee via $\otimes$; the pattern rules operate on the stripped type.
+The match expression ([T-Match](#T-Match)) consumes the linear scrutinee via $\otimes$; the pattern rules operate on the stripped type. A scrutinee of type $@\sigma$ therefore fails to match any structural pattern, surfacing a type error that directs the user to write $\textbf{match}\;@x\;\lbrace\ldots\rbrace$ — making the force explicit and ensuring T-Force's linear-consumption obligation is discharged.
 
 <a id="P-Var"></a>
 
@@ -445,9 +526,9 @@ $$\text{pure}(\Gamma) = \forall x :^{q} S \in \Gamma.\;q = \omega$$
 <a id="T-IntLit"></a>
 <a id="T-FloatLit"></a>
 
-$$\dfrac{\text{pure}(\Gamma) \qquad \texttt{intlit}~\text{fresh}}{\Gamma;\, \rho_q \vdash_e n : \texttt{intlit} \mathbin{!} \lbrace\rbrace} \;\textsc{T-IntLit}
+$$\dfrac{\text{pure}(\Gamma)}{\Gamma;\, \rho_q \vdash_e n : \texttt{intlit} \mathbin{!} \lbrace\rbrace} \;\textsc{T-IntLit}
 \qquad
-\dfrac{\text{pure}(\Gamma) \qquad \texttt{floatlit}~\text{fresh}}{\Gamma;\, \rho_q \vdash_e f : \texttt{floatlit} \mathbin{!} \lbrace\rbrace} \;\textsc{T-FloatLit}$$
+\dfrac{\text{pure}(\Gamma)}{\Gamma;\, \rho_q \vdash_e f : \texttt{floatlit} \mathbin{!} \lbrace\rbrace} \;\textsc{T-FloatLit}$$
 
 $$\dfrac{\text{pure}(\Gamma)}{\Gamma;\, \rho_q \vdash_e b : \texttt{bool} \mathbin{!} \lbrace\rbrace} \;\textsc{T-Bool}
 \qquad
@@ -618,6 +699,17 @@ $$\dfrac{
   \Gamma;\, \rho_q \vdash_e e_1 \mathbin{+\\!+} e_2 : \texttt{string} \mathbin{!} \rho_1 \cup \rho_2
 } \;\textsc{T-Concat}$$
 
+To unify the result types of multi-branch expressions ([T-If](#T-If), [T-Match](#T-Match)), we introduce $\text{tail}$, which extracts the type produced by the last statement in a sequence, and $\text{branchType}$, which folds the per-branch tails into the conclusion type $\sigma$.
+
+$$\text{tail}(\overline{s}) = \begin{cases} \bot & \text{if last statement is } \textbf{return},\; \textbf{raise}~e\;(\text{as expression statement}),\; \text{or}\; \textbf{let}~\mu\,x = \textbf{raise}~e' \\ \tau & \text{if last statement is an expression of type } \tau \\ \texttt{unit} & \text{otherwise (} \textbf{let},\; \mathord{\sim}x \leftarrow e,\; \textbf{inject},\; \textbf{try}\text{-}\textbf{catch}) \end{cases}$$
+
+$$\text{branchType}(\overline{s_1}, \ldots, \overline{s_n}) = \begin{cases}
+{?}\alpha~(\text{fresh}) & \text{if } \forall i.\;\text{tail}(\overline{s_i}) = \bot \\
+\tau & \text{otherwise, where } \tau~\text{is any non-}\bot~\text{tail and } \forall i.\;\text{tail}(\overline{s_i}) \in \lbrace \bot, \tau \rbrace
+\end{cases}$$
+
+The "otherwise" case is well-defined because the per-branch unification premises in [T-If](#T-If) and [T-Match](#T-Match) require all non-$\bot$ tails to be pairwise-unified before $\text{branchType}$ is applied: every non-$\bot$ tail collapses to the same $\tau$, so picking "any" is canonical. Divergence propagates through a binding whose RHS is a $\textbf{raise}$: the binding never produces a value, so the arm should not be forced to unify against a concrete type. Without this case, $\textbf{match}~e~\lbrace A \to \textbf{raise}~X;\; B \to \textbf{let}~\_ = \textbf{raise}~Y \rbrace$ would have $\sigma = \texttt{unit}$ (only the B arm survives the $\bot$ filter), pinning the whole match's type spuriously.
+
 $$\dfrac{
   \begin{array}{l}
   \Gamma = \Gamma_c \otimes \Gamma_b \\[2pt]
@@ -625,19 +717,14 @@ $$\dfrac{
   \text{unify}(\tau_c, \texttt{bool}) \\[2pt]
   \Gamma_b;\, \rho_q;\, \tau_r \vdash_s \overline{s_1} : \Gamma_1' \mathbin{!} \rho_1 \\[2pt]
   \Gamma_b;\, \rho_q;\, \tau_r \vdash_s \overline{s_2} : \Gamma_2' \mathbin{!} \rho_2 \\[2pt]
-  \text{tail}(\overline{s_1}) \neq \bot \wedge \text{tail}(\overline{s_2}) \neq \bot \implies \text{unify}(\text{tail}(\overline{s_1}), \text{tail}(\overline{s_2}))
+  \text{tail}(\overline{s_1}) \neq \bot \wedge \text{tail}(\overline{s_2}) \neq \bot \implies \text{unify}(\text{tail}(\overline{s_1}), \text{tail}(\overline{s_2})) \\[2pt]
+  \sigma = \text{branchType}(\overline{s_1}, \overline{s_2})
   \end{array}
 }{
   \Gamma;\, \rho_q \vdash_e \textbf{if}~e_c~\textbf{then}~\overline{s_1}~\textbf{else}~\overline{s_2} : \sigma \mathbin{!} \rho_c \cup \rho_1 \cup \rho_2
 } \;\textsc{T-If}$$
 
-where $\sigma$ is the common type of the non-diverging branches: if both $\text{tail}(\overline{s_i}) \neq \bot$, $\sigma$ equals the unified branch tail; if exactly one branch diverges, $\sigma$ is the surviving branch's tail; if both diverge, $\sigma$ is a fresh ${?}\alpha$. Both branches receive the **same** $\Gamma_b$ (since only one executes at runtime). The if-without-else form (surface only) desugars to $\textbf{if}~e_c~\textbf{then}~\overline{s_1}~\textbf{else}~()$ and therefore has type $\texttt{unit}$. Mirrors [T-Match](#T-Match)'s divergent-arm carve-out for symmetry.
-
-To unify the result types of match arms ([T-Match](#T-Match)), we introduce $\text{tail}$, which extracts the type produced by the last statement in a sequence:
-
-$$\text{tail}(\overline{s}) = \begin{cases} \bot & \text{if last statement is } \textbf{return},\; \textbf{raise}~e\;(\text{as expression statement}),\; \text{or}\; \textbf{let}~\mu\,x = \textbf{raise}~e' \\ \tau & \text{if last statement is an expression of type } \tau \\ \texttt{unit} & \text{otherwise (} \textbf{let},\; \mathord{\sim}x \leftarrow e,\; \textbf{inject},\; \textbf{try}\text{-}\textbf{catch}) \end{cases}$$
-
-Divergence propagates through a binding whose RHS is a $\textbf{raise}$: the binding never produces a value, so the arm should not be forced to unify against a concrete type. Without this case, $\textbf{match}~e~\lbrace A \to \textbf{raise}~X;\; B \to \textbf{let}~\_ = \textbf{raise}~Y \rbrace$ would have $\sigma = \texttt{unit}$ (only the B arm survives the $\bot$ filter), pinning the whole match's type spuriously.
+$\sigma$ is fixed by the premise $\sigma = \text{branchType}(\overline{s_1}, \overline{s_2})$: when both branches yield a value, $\sigma$ is their (pairwise-unified) common tail; when one diverges, $\sigma$ is the survivor's tail; when both diverge, $\sigma$ is a fresh ${?}\alpha$. Both branches receive the **same** $\Gamma_b$ (since only one executes at runtime). The if-without-else form (surface only) desugars to $\textbf{if}~e_c~\textbf{then}~\overline{s_1}~\textbf{else}~()$ and therefore has type $\texttt{unit}$. Mirrors [T-Match](#T-Match)'s divergent-arm carve-out for symmetry.
 
 <a id="T-Match"></a>
 
@@ -648,13 +735,14 @@ $$\dfrac{
   \text{exhaustive}(\text{strip}(\tau), \overline{p}) \\[4pt]
   \forall i.\;\Gamma_b \vdash p_i : \text{strip}(\tau) \Rightarrow \Gamma_i \\[2pt]
   \forall i.\;\Gamma_i;\, \rho_q;\, \tau_r \vdash_s \overline{s_i} : \Gamma_i' \mathbin{!} \rho_i \\[4pt]
-  \forall i, j.\;\text{tail}(\overline{s_i}) \neq \bot \wedge \text{tail}(\overline{s_j}) \neq \bot \implies \text{unify}(\text{tail}(\overline{s_i}), \text{tail}(\overline{s_j}))
+  \forall i, j.\;\text{tail}(\overline{s_i}) \neq \bot \wedge \text{tail}(\overline{s_j}) \neq \bot \implies \text{unify}(\text{tail}(\overline{s_i}), \text{tail}(\overline{s_j})) \\[2pt]
+  \sigma = \text{branchType}(\overline{s_1}, \ldots, \overline{s_n})
   \end{array}
 }{
   \Gamma;\, \rho_q \vdash_e \textbf{match}~e~\lbrace \overline{p_i \to s_i} \rbrace : \sigma \mathbin{!} \rho_0 \cup \textstyle\bigcup_i \rho_i
 } \;\textsc{T-Match}$$
 
-where $\sigma$ is the common type of non-diverging ($\text{tail} \neq \bot$) arms. If all arms diverge ($\forall i.\;\text{tail}(\overline{s_i}) = \bot$), $\sigma$ is a fresh ${?}\alpha$. All arms receive the same $\Gamma_b$.
+$\sigma$ is fixed by the premise $\sigma = \text{branchType}(\overline{s_1}, \ldots, \overline{s_n})$: the common type of non-diverging ($\text{tail} \neq \bot$) arms, or a fresh ${?}\alpha$ if all arms diverge. All arms receive the same $\Gamma_b$. Because $\text{strip}$ does not peel $@$, a thunk scrutinee $\tau = @\sigma$ leaves the pattern facing $@\sigma$ rather than $\sigma$ — pattern rules ([P-Ctor](#P-Ctor), [P-Record](#pattern-matching)) then fail to unify against the constructor/record shape. The user must force the thunk explicitly: $\textbf{match}\;@x\;\lbrace\ldots\rbrace$ routes the linear consumption through [T-Force](#T-Force).
 
 <a id="T-Lambda"></a>
 
@@ -742,12 +830,14 @@ Borrowing does not consume the binding. Only unrestricted bindings can be borrow
 <a id="T-Force"></a>
 
 $$\dfrac{
-  \Gamma;\, \rho_q \vdash_e e : @\sigma \mathbin{!} \rho_0
+  \Gamma;\, \rho_q \vdash_e e : \tau \mathbin{!} \rho_0 \qquad
+  \sigma~\text{fresh} \qquad
+  \text{unify}(\tau, @\sigma)
 }{
   \Gamma;\, \rho_q \vdash_e @e : \sigma \mathbin{!} \rho_0
 } \;\textsc{T-Force}$$
 
-The thunk is consumed via [T-Var](#T-Var) ($q = 1$) in the sub-derivation.
+The thunk is consumed via [T-Var](#T-Var) ($q = 1$) in the sub-derivation. Premise uses $\text{unify}(\tau, @\sigma)$ with a fresh $\sigma$ rather than a structural pattern $\tau = @\sigma$ on the premise's right-hand side, so that an unresolved inference variable $\tau = {?}\alpha$ — common when $e$ is a generic-typed parameter inside a $\forall$-quantified body — is pinned to $@\sigma$ by the unifier instead of leaving the rule inapplicable. The two forms agree on already-concrete $\tau = @\sigma'$ shapes ($\text{unify}$ succeeds with $\sigma = \sigma'$); they diverge on unresolved $\tau$, where only the unification form makes the derivation tree mechanically constructible.
 
 $$\dfrac{
   \Gamma = \Gamma_1 \otimes \ldots \otimes \Gamma_k \qquad
@@ -855,6 +945,14 @@ $$\dfrac{
 
 $$\text{merge}(\rho_1, \rho_2) = \rho_1 \cup \rho_2 \quad\text{(row union, deduplicating by type identity)}$$
 
+Block-scoped constructs ($\textbf{inject}$, $\textbf{try}$/$\textbf{catch}$, and any future bracketing form) close their inner environment back to the outer scope via $\text{closeBlock}$, which drops bindings introduced *inside* the block from the output environment. The lexical-scoping rule from [semantics.md](../semantics) — *"Bindings are visible in the block where they are defined and in nested blocks"* — is enforced statically here: an inner $\textbf{let}$ may shadow an outer name within the block, but the binding ceases to exist after the block. A companion premise rejects programs that leave a linear binding introduced *inside* the block unconsumed at block end — those resources have no consumer in the outer scope and would silently leak.
+
+$$\text{closeBlock}(\Gamma_\text{inner}, \Gamma_\text{outer}) = \lbrace x :^q S \in \Gamma_\text{inner} \mid x \in \text{dom}(\Gamma_\text{outer}) \rbrace$$
+
+$$\textbf{P-Block}~\text{(linear no-leak).}\quad\forall x :^1 S \in \Gamma_\text{inner}.\;x \in \text{dom}(\Gamma_\text{outer})$$
+
+P-Block is intentionally one-directional: a linear binding from $\Gamma_\text{outer}$ that survives unchanged through the body remains available for consumption after the block (the consumer runs in outer scope and still sees $x$). Only *newly introduced* linear bindings — those in $\text{dom}(\Gamma_\text{inner}) \setminus \text{dom}(\Gamma_\text{outer})$ — must be consumed before block end. This mirrors the function-end check in [drop.md](../drop) but is strictly stronger: function-end catches leftover linears only at the outermost frame, while P-Block catches them at every nested block boundary.
+
 <a id="T-Inject"></a>
 
 $$\dfrac{
@@ -863,17 +961,18 @@ $$\dfrac{
   \forall i.\;\text{strip}(\text{inst}(\Gamma_h(h_i))) = \textbf{handler}\;P_i\;\rho_i \\[2pt]
   \forall i.\;\rho_i \subseteq \rho_q \quad\text{(handler requires are satisfied by the ambient row)} \\[2pt]
   \rho_q' = \text{merge}(\rho_q,\, \lbrace \overline{P} \rbrace) \\[2pt]
-  \Gamma_\text{body};\, \rho_q';\, \tau_r \vdash_s \overline{s} : \Gamma' \mathbin{!} \rho_0
+  \Gamma_\text{body};\, \rho_q';\, \tau_r \vdash_s \overline{s} : \Gamma' \mathbin{!} \rho_0 \\[2pt]
+  \forall x :^1 S \in \Gamma'.\;x \in \text{dom}(\Gamma_\text{body}) \quad\text{(P-Block: no leaked linear)}
   \end{array}
 }{
-  \Gamma;\, \rho_q;\, \tau_r \vdash_s \textbf{inject}~\overline{h}~\textbf{do}~\overline{s}~\textbf{end} : \Gamma' \mathbin{!} \rho_0
+  \Gamma;\, \rho_q;\, \tau_r \vdash_s \textbf{inject}~\overline{h}~\textbf{do}~\overline{s}~\textbf{end} : \text{closeBlock}(\Gamma',\, \Gamma_\text{body}) \mathbin{!} \rho_0
 } \;\textsc{T-Inject}$$
 
 The handler's require row $\rho_i$ is a *precondition* on the inject site, not a grant to the body. The body sees only $\rho_q' = \rho_q \cup \lbrace \overline{P} \rbrace$ — the original ambient plus the ports each handler implements. The earlier formulation merged $\text{ports}(\overline{\rho_i})$ into $\rho_q'$ as well, which would let the body access capabilities the surrounding context never granted, breaking capability containment. With requires moved to a containment premise instead, the inject site fails to type-check unless the surrounding scope already provides every capability each handler needs.
 
 Two linearity-related details:
 
-- **Strip on handler-pattern match.** [T-Handler](#T-Handler) wraps the handler's type with $\%$ when any arm captures a linear binding, producing $\%(\textbf{handler}\;P\;\rho)$. Without $\text{strip}$, the structural pattern $\textbf{handler}\;P_i\;\rho_i$ in this premise would not match a $\%$-wrapped handler — every captured-linear handler would be unusable. $\text{strip}$ peels the $\%$ wrapper before the structural match, mirroring its use on match scrutinees in [T-Match](#T-Match).
+- **Strip on handler-pattern match.** [T-Handler](#T-Handler) wraps the handler's type with $\%$ when any arm captures a linear binding, producing $\%(\textbf{handler}\;P\;\rho)$. Without $\text{strip}$, the structural pattern $\textbf{handler}\;P_i\;\rho_i$ in this premise would not match a $\%$-wrapped handler — every captured-linear handler would be unusable. $\text{strip}$ peels the $\%$ wrapper before the structural match, mirroring its use on match scrutinees in [T-Match](#T-Match). Note that $\text{strip}$ does **not** peel $@$: a handler of type $@(\textbf{handler}\;P\;\rho)$ fails this premise, requiring the user to force it explicitly (e.g. $\textbf{inject}\;@h\;\textbf{do}\;\ldots\;\textbf{end}$) so the thunk's linear consumption goes through [T-Force](#T-Force).
 - **$\otimes$-split between handler lookup and body.** $\Gamma$ is split into $\Gamma_h$ (used to look up the handler bindings $h_i$) and $\Gamma_\text{body}$ (which flows into $\overline{s}$). For unrestricted handlers ($q = \omega$), $\otimes$ assigns the binding to both partitions, so the body can still call methods on the same handler. For linear handlers ($q = 1$, e.g. $\%h$), $\otimes$ assigns the binding to exactly one partition: when used at the inject site it is *not* available in the body, preventing the documented "only one inject may consume it" promise from being silently violated by an in-body re-use.
 
 [T-PortCall](#T-PortCall) types a port-method invocation $x.\ell(\overline{\ell':e})$ inside a scope where a handler for port $x$ has been injected. Method signatures are read from the global $\text{methods}(x)$ environment populated by port declarations:
@@ -905,17 +1004,19 @@ The argument unification follows [T-App](#T-App)'s shape, including the $\%$-wea
 
 $$\dfrac{
   \begin{array}{l}
-  \Gamma;\, \rho_q;\, \tau_r \vdash_s \overline{s_\text{try}} : \Gamma_1 \mathbin{!} \rho_\text{try} \\[4pt]
+  \Gamma;\, \rho_q;\, \tau_r \vdash_s \overline{s_\text{try}} : \Gamma_1 \mathbin{!} \rho_\text{try} \\[2pt]
+  \forall x :^1 S \in \Gamma_1.\;x \in \text{dom}(\Gamma) \quad\text{(P-Block: try-body no leaked linear)} \\[4pt]
   \forall i.\;\Gamma_1 \vdash p_i : \texttt{Exn} \Rightarrow \Gamma_i \\[2pt]
-  \forall i.\;\Gamma_i;\, \rho_q;\, \tau_r \vdash_s \overline{s_i} : \Gamma_i' \mathbin{!} \rho_i \\[4pt]
+  \forall i.\;\Gamma_i;\, \rho_q;\, \tau_r \vdash_s \overline{s_i} : \Gamma_i' \mathbin{!} \rho_i \\[2pt]
+  \forall i.\;\forall x :^1 S \in \Gamma_i'.\;x \in \text{dom}(\Gamma) \quad\text{(P-Block: catch-arm no leaked linear)} \\[4pt]
   \overline{C}_\text{caught} = \text{caughtVariants}(\overline{p}) \\[2pt]
   \rho_\text{residual} = \begin{cases} \rho_\text{try} \setminus (\lbrace\texttt{Exn}\rbrace \cup \overline{C}_\text{caught}) & \text{if } \text{hasCatchAll}(\overline{p}) \\ \rho_\text{try} \setminus \overline{C}_\text{caught} & \text{otherwise} \end{cases}
   \end{array}
 }{
-  \Gamma;\, \rho_q;\, \tau_r \vdash_s \textbf{try}~\overline{s_\text{try}}~\textbf{catch}~\overline{p_i \to s_i}~\textbf{end} : \Gamma_1 \mathbin{!} \rho_\text{residual} \cup \textstyle\bigcup_i \rho_i
+  \Gamma;\, \rho_q;\, \tau_r \vdash_s \textbf{try}~\overline{s_\text{try}}~\textbf{catch}~\overline{p_i \to s_i}~\textbf{end} : \text{closeBlock}(\Gamma_1,\, \Gamma) \mathbin{!} \rho_\text{residual} \cup \textstyle\bigcup_i \rho_i
 } \;\textsc{T-TryCatch}$$
 
-The output environment is $\Gamma_1$ (from the try block). The catch arms extend $\Gamma_1$ with pattern bindings but the output of the whole construct is $\Gamma_1$.
+The output environment is $\text{closeBlock}(\Gamma_1, \Gamma)$ — $\Gamma_1$ (the try-block's evolved environment) restricted to the outer scope $\Gamma$. Bindings introduced *inside* the try-body — pattern bindings on $\textbf{let}$, locals scoped to the try — are dropped at the construct's end, matching the lexical-scoping rule. The catch-arm output environments $\Gamma_i'$ are not threaded into the construct's output: the conservative choice picks the try-success path's view of $\Gamma$, because a catch arm runs only when the try-body raised before completing, leaving the precise consumption state of outer linears statically indeterminate. Both the try-body and every catch arm carry the P-Block premise, ensuring no linear binding introduced inside either branch leaks past the construct.
 
 Variant-precise residual computation requires two auxiliaries:
 
