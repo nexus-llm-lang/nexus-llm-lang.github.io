@@ -170,6 +170,22 @@ Two readings follow from these definitions:
 - **$\Gamma_i \setminus \Gamma$ in the pattern rules** ([P-Ctor](#P-Ctor), [P-Record](#P-Record), [P-Or](#pattern-matching)) reads as "the bindings $\Gamma_i$ introduced beyond $\Gamma$". Since each $\Gamma_i$ extends the same input $\Gamma$ with a few new pattern binders, $\Gamma_i \setminus \Gamma$ is exactly the new-binding contribution of one sub-pattern; $\biguplus_i (\Gamma_i \setminus \Gamma)$ then asserts the new binders are mutually disjoint across sub-patterns.
 - **$\otimes$-split is non-deterministic.** The table relates $(q_1, q_2)$ to $q$ pointwise; multiple satisfying choices exist when $q = 1$ (either $(1, \cdot)$ or $(\cdot, 1)$). The spec rule is satisfied if *any* choice makes both sub-derivations type-check. The implementation makes a single deterministic pick (`src/typecheck/infer.nx`'s left-then-right scan); soundness does not depend on which.
 
+#### Linear consumption and the env residual $\Gamma \setminus\!\!\setminus e$
+
+An expression typing $\Gamma;\,\rho_q \vdash_e e : \tau \mathbin{!} \rho_0$ consumes a subset of $\Gamma$'s linear bindings via $\otimes$-split. The judgment shape carries no explicit output environment, but the consumption is real — every leaf use of a linear $x$ via [T-Var](#T-Var) draws $x$ into exactly one $\otimes$-partition along the derivation, removing it from any sibling partition. We write
+
+$$\Gamma \setminus\!\!\setminus e \;=\; \lbrace x :^q S \in \Gamma \mid q = \omega \;\vee\; x \notin \text{linConsumed}(e\text{'s derivation}) \rbrace$$
+
+for the **residual** of $\Gamma$ after typing $e$: every $\omega$-binding is preserved; every linear binding consumed by $e$'s derivation is removed. The set $\text{linConsumed}$ is determined by the $\otimes$-split choices the derivation made (so $\Gamma \setminus\!\!\setminus e$ is well-defined per derivation, not per syntactic $e$).
+
+Statement-judgment outputs are interpreted **modulo this residual**: where a rule's conclusion writes $\Gamma' = \Gamma,\, x :^q S$ for a fresh binder $x$, the operational reading is
+
+$$\Gamma' \;=\; (\Gamma \setminus\!\!\setminus e),\, x :^q S$$
+
+with the residual computed against the rule's expression premise(s). Every statement-level conclusion in §2 should be read this way — the residual operator is left implicit in the rules for legibility, made explicit only where its presence matters (e.g.\ P-Block's $\Gamma_\text{inner}$ already reflects body-level consumption; without the residual, a correctly-consumed inner $\%h$ would falsely appear leaked).
+
+The implementation realises this by carrying a *live-linear set* separately from the $\Gamma$ map (`LinState(vars, frame_stack)` in `src/typecheck/linearity.nx`): the set shrinks on every linear use and grows on every linear-introducing $\textbf{let}$. The spec's $\Gamma \setminus\!\!\setminus e$ is the metatheoretic projection of that live-set onto $\Gamma$'s linear restriction. Soundness of P-Block, P-FnEnd, and P-Loop depends on this projection being threaded through statement rules consistently — without it, the no-leak premises would scan an env that still contains every linear ever introduced, producing false positives on correctly-consumed bindings.
+
 ### Auxiliary Functions
 
 $$\begin{array}{rcl}
@@ -994,7 +1010,7 @@ $$\dfrac{
   q = \begin{cases} 1 & \text{if } \text{linear}(\tau_f) \\ \omega & \text{otherwise} \end{cases}
   \end{array}
 }{
-  \Gamma;\, \rho_q;\, \tau_r \vdash_s \textbf{let}~\mu\,x = e : \Gamma,\, x :^{q} S \mathbin{!} \rho_0
+  \Gamma;\, \rho_q;\, \tau_r \vdash_s \textbf{let}~\mu\,x = e : (\Gamma \setminus\!\!\setminus e),\, x :^{q} S \mathbin{!} \rho_0
 } \;\textsc{T-Let}$$
 
 When the surface syntax includes a type annotation ($\textbf{let}~\mu\,x : \sigma = e$), an additional premise $\text{unify}(\tau', \sigma)$ is required and $\tau'$ is replaced by $\sigma$. When the annotation is absent, $\tau'$ remains as inferred (possibly containing unification variables that are resolved later or defaulted).
@@ -1194,7 +1210,7 @@ $$\dfrac{
   \neg\text{diverges}(e) \qquad
   \Gamma;\, \rho_q \vdash_e e : \tau \mathbin{!} \rho_0 \qquad
   \text{exhaustive}(\tau, [p]) \qquad
-  \Gamma \vdash p : \tau \Rightarrow \Gamma'
+  (\Gamma \setminus\!\!\setminus e) \vdash p : \tau \Rightarrow \Gamma'
 }{
   \Gamma;\, \rho_q;\, \tau_r \vdash_s \textbf{let}~p = e : \Gamma' \mathbin{!} \rho_0
 } \;\textsc{T-LetPat}$$
@@ -1204,7 +1220,7 @@ $$\dfrac{
 $$\dfrac{
   \text{diverges}(e) \qquad
   \Gamma;\, \rho_q \vdash_e e : \tau \mathbin{!} \rho_0 \qquad
-  \Gamma \vdash p : \tau \Rightarrow \Gamma'
+  (\Gamma \setminus\!\!\setminus e) \vdash p : \tau \Rightarrow \Gamma'
 }{
   \Gamma;\, \rho_q;\, \tau_r \vdash_s \textbf{let}~p = e : \Gamma' \mathbin{!} \rho_0
 } \;\textsc{T-LetPat-Diverge}$$
