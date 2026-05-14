@@ -193,14 +193,16 @@ This ensures mutation remains localized and predictable.
 
 | Operation | Immutable | `~` Mutable | `%` Linear | `&` Borrow |
 |---|---|---|---|---|
-| Read | yes | yes | yes (consumes) | yes |
+| Read | yes | yes (deref) | yes (consumes) | yes |
 | Assign (`<-`) | no | yes | no | no |
-| Pass to function | yes (copy) | yes (copy) | yes (move) | yes (view) |
+| Pass to function | yes (copy) | snapshot value only | yes (move) | yes (view) |
 | Return from function | yes | no | yes | no |
 | Store in record/ADT | yes | no | yes | yes |
 | Capture in closure | yes | no | yes (makes closure linear) | yes |
-| Borrow with `&` | yes | yes | yes | yes |
+| Borrow with `&` | yes | yes (`&~r`) | yes | yes |
 | Discard with `_` | yes | yes | no (composites) | yes |
+
+The "Pass to function" entry for `~` cells reads **the current value out of the cell**; the cell itself does not escape its defining function. Writing `f(arg: ~r)` at a call site dereferences `r` and passes the resulting value (of inner type `T`, not `~T`); the callee receives a plain `T` parameter and has no way to mutate the caller's cell. To let a callee read or update the cell, take a borrow: pass `&~r` and have the callee accept a `&T` (read-only) parameter — this preserves the cell's stack-confinement (the borrow cannot outlive the cell, per the gravity rules above). Passing the cell *itself* as a `~T` parameter is rejected: it would either duplicate ownership (two stack frames holding the same cell) or violate the no-escape rule.
 
 ## Function Types
 
