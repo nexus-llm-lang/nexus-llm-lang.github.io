@@ -715,24 +715,38 @@ $$\dfrac{
   \text{check}(M, \tau_1 :: \overline{\tau}')
 } \;\textsc{Exh-Record}$$
 
-$\text{spec}_R(M, \overline{\ell})$ specializes the matrix for a record scrutinee: rows whose first pattern is $\lbrace \overline{\ell : p} \rbrace$ contribute $\overline{p}$ prepended to the rest; wildcard-like rows (matching $\text{wild}$, defined below) are replicated with $\lvert\overline{\ell}\rvert$ fresh wildcards.
+$\text{spec}_R(M, \overline{\ell})$ specializes the matrix for a record scrutinee: rows whose first pattern is $\lbrace \overline{\ell' : p} \rbrace$ contribute $\text{canonicalize}_R(\lbrace \overline{\ell' : p} \rbrace, \overline{\ell})$ prepended to the rest; wildcard-like rows (matching $\text{wild}$, defined below) are replicated with $\lvert\overline{\ell}\rvert$ fresh wildcards. The input parameter $\overline{\ell}$ is the declared field-order sequence from $\text{fields}(\tau_1)$ and serves as the canonical position-ordered representation that the matrix algorithm operates over. $\text{canonicalize}_R$ permutes each row's sub-patterns into that declared order so that two rows written with different label orderings (e.g.\ $\lbrace a : x, b : y \rbrace$ vs.\ $\lbrace b : y, a : x \rbrace$) produce identical position-indexed sub-pattern lists; without it, the matrix would treat the two rows as distinct shape templates and the per-column recursive [check](#Exh-Record) calls would receive misaligned types vs.\ patterns. Formally:
+
+$$\text{canonicalize}_R(\lbrace \overline{\ell' : p} \rbrace,\; [\ell_1, \ldots, \ell_k]) = [p_{\pi(1)}, \ldots, p_{\pi(k)}] \quad\text{where}~\pi~\text{is the unique permutation with}~\ell'_{\pi(i)} = \ell_i$$
+
+Uniqueness of $\pi$ is guaranteed by $\text{distinct}(\overline{\ell'})$ (from [T-Record](#T-Record), applied at pattern parse) and by $\lbrace \overline{\ell'} \rbrace = \lbrace \overline{\ell} \rbrace$ (the pattern's label set must match the declared field set; pattern-typing at [P-Record](#pattern-matching) rejects mismatches).
 
 $$\dfrac{
+  \begin{array}{l}
+  \tau_1 \notin \lbrace \texttt{bool} \rbrace \cup \lbrace x\langle \overline{\tau} \rangle \mid \text{variants}(x) \neq \emptyset \rbrace \cup \lbrace \lbrace \overline{\ell : \sigma} \rbrace \rbrace \\[2pt]
+  \quad\text{(}\tau_1~\text{has no finite enumerable surface — not}~\texttt{bool}\text{, not a sum, not a record)} \\[2pt]
   D = \lbrace\, \overline{r} \mid (p :: \overline{r}) \in M,\; \text{wild}(p) \,\rbrace \qquad
   \text{check}(D, \overline{\tau}')
+  \end{array}
 }{
   \text{check}(M, \tau_1 :: \overline{\tau}')
 } \;\textsc{Exh-Default}$$
 
-Exh-Default applies when the first column has no complete constructor coverage — it computes the default matrix $D$ by collecting rows whose first pattern is wildcard-like.
+Exh-Default applies to head types that lack a complete-constructor surface — e.g.\ $\texttt{i64}$, $\texttt{string}$, $\texttt{char}$, $\texttt{f64}$, an array $[\lvert\sigma\rvert]$, or any other type whose value space is not exhaustible by a finite case split. The premise's first clause syntactically forbids the rule from applying when $\tau_1$ would have been handled by [Exh-Bool](#Exh-Bool) ($\tau_1 = \texttt{bool}$), [Exh-Sum](#Exh-Sum) ($\tau_1 = x\langle \overline{\tau} \rangle$ with a non-empty $\text{variants}(x)$, including $\texttt{Exn}$), or [Exh-Record](#Exh-Record) ($\tau_1$ is a record type). Without this restriction Exh-Sum and Exh-Default would share the conclusion $\text{check}(M, \tau_1 :: \overline{\tau}')$ for sum-typed scrutinees, and a derivation that chose Exh-Default first against a matrix $M$ of only constructor patterns (no wildcards) would compute $D = \emptyset$ and falsely conclude inexhaustive via [Exh-Empty](#Exh-Empty). The premise canonicalises rule choice: any finite-enumerable head type must go through its dedicated rule. For an opaque sum visible only outside its defining module, $\text{variants}(x) = \emptyset$ (see [D-Type-Sum-Opaque](#D-Type-Sum-Opaque)) and Exh-Default does apply — matching the impl's behaviour where an opaque sum is treated as wildcard-only outside its module.
 
 $$\text{wild}(p) = (p = \_) \;\vee\; (p~\text{is a variable pattern}~x)$$
 
 A variable pattern $x$ binds the scrutinee under name $x$; from an exhaustiveness standpoint it succeeds against every value, exactly like $\_$. Treating $x$ as wildcard-like in the matrix algorithm restores Maranget's invariant that $\textbf{match}~e~\lbrace x \to \ldots \rbrace$ is exhaustive — which is also required for [T-LetPat](#T-LetPat) to admit single-variable patterns.
 
-$$\text{spec}(M, c) = \lbrace\, \overline{p'} \mathbin{+\!\!+} \overline{r} \mid (c(\overline{p'}) :: \overline{r}) \in M \,\rbrace \;\cup\; \lbrace\, \underbrace{\_,\ldots,\_}_{a(c)} \mathbin{+\!\!+} \overline{r} \mid (p :: \overline{r}) \in M,\; \text{wild}(p) \,\rbrace$$
+$$\text{spec}(M, c) = \lbrace\, \text{canonicalize}_c(c(\overline{\ell' : p'})) \mathbin{+\!\!+} \overline{r} \mid (c(\overline{\ell' : p'}) :: \overline{r}) \in M \,\rbrace \;\cup\; \lbrace\, \underbrace{\_,\ldots,\_}_{a(c)} \mathbin{+\!\!+} \overline{r} \mid (p :: \overline{r}) \in M,\; \text{wild}(p) \,\rbrace$$
 
-where $a(c)$ is the arity of constructor $c$. Rows whose first pattern is $c(\overline{p'})$ contribute $\overline{p'}$ prepended to the rest; wildcard-like rows (including variable patterns) are replicated with $a(c)$ fresh wildcards.
+where $a(c)$ is the arity of constructor $c$. Rows whose first pattern is the labelled constructor application $c(\overline{\ell' : p'})$ contribute the *canonicalized* sub-pattern list prepended to the rest; wildcard-like rows (including variable patterns) are replicated with $a(c)$ fresh wildcards.
+
+Constructor sub-patterns carry labels in Nexus (e.g.\ $\texttt{Some}(\textit{val} : x)$, $\texttt{Pair}(\textit{left} : l,\, \textit{right} : r)$). The label-order in the surface pattern need not match the order declared at [D-Type-Sum](#D-Type-Sum) — the surface allows the same constructor to be written with any permutation of its labels. $\text{canonicalize}_c$ permutes each row's sub-pattern list into the constructor's declared field order so that the matrix algorithm operates over a fixed position-ordered representation:
+
+$$\text{canonicalize}_c(c(\overline{\ell' : p'})) = [p'_{\pi(1)}, \ldots, p'_{\pi(a(c))}] \quad\text{where the declared field order of}~c~\text{is}~[\ell_1, \ldots, \ell_{a(c)}]~\text{and}~\pi~\text{is the unique permutation with}~\ell'_{\pi(i)} = \ell_i$$
+
+Uniqueness of $\pi$ follows from the constructor declaration providing a label-set without duplicates and from [P-Ctor](#P-Ctor)'s pattern-typing requiring $\lbrace \overline{\ell'} \rbrace = \lbrace \overline{\ell} \rbrace$ on every constructor pattern. Without this canonicalization step, two semantically equivalent constructor patterns written in different label orders would produce distinct rows in $\text{spec}(M, c)$ — the per-position recursive [check](#Exh-Sum) calls would then see type-position $i$ unified against sub-pattern $\ell'_i$ in one row but $\ell_i$ in the next, breaking Maranget's positional invariant. The same ideology backs [T-App](#T-App)'s label-permutation premise — labels, not positions, are the user-facing identity, and canonicalization happens at the rule boundary.
 
 $$\textbf{P6}~\text{(Exhaustiveness).}\quad \text{check}(M, [\tau]) = \text{ok} \implies \forall v : \tau.\;\exists i.\; v \in \text{match}(p_i)$$
 
@@ -1076,6 +1090,7 @@ where $\alpha_j$ and $\beta_j$ are the require row and throw row declared for me
 $$\dfrac{
   \begin{array}{l}
   \text{methods}(x) = \lbrace\; \ell_j : (\overline{\pi_j}) \to \kappa_j;\, \alpha_j;\, \beta_j \;\mid\; j \in J \;\rbrace \\[2pt]
+  \lbrace \ell_j \mid j \in J \rbrace = \lbrace \ell \mid (\ell = e) \in \overline{\ell_j = e_j} \rbrace \quad\text{(1-1 arm/method correspondence: no missing arm, no extra arm)} \\[2pt]
   \Gamma_\text{cap} = \lbrace y :^{1} S \in \Gamma \mid y \in \textstyle\bigcup_j \text{fv}(e_j) \rbrace \\[2pt]
   \Gamma_\omega = \lbrace y :^{\omega} S \in \Gamma \mid y \in \textstyle\bigcup_j \text{fv}(e_j) \rbrace \\[2pt]
   \forall y \in \textstyle\bigcup_j \text{fv}(e_j) \cap \text{dom}(\Gamma).\;\Gamma(y) \neq \mathord{\sim}\sigma \\[2pt]
@@ -1093,6 +1108,8 @@ $$\tau_h^\star = \begin{cases} \%\tau_h & \text{if } \Gamma_\text{cap} \neq \emp
 The handler is pure ($\mathbin{!} \lbrace\rbrace$) — its construction has no effect; effects are deferred until the handler is injected and a method is invoked. Each arm $e_j$ must be a lambda whose function type matches the port's declared signature for method $\ell_j$. The handler's require row $\rho_\text{req}$ aggregates each arm's declared require row $\alpha_j$ (carried on the lambda's arrow type and validated against the lambda body in [T-Lambda](#T-Lambda)/[T-App](#T-App)) and the optional surface annotation $\rho_\text{annot}$ (defaulting to $\lbrace\rbrace$ if absent). [T-Inject](#T-Inject) checks that $\rho_\text{req}$ is satisfied by the surrounding ambient row at the inject site. Closure linearization mirrors [T-Lambda](#T-Lambda): if any arm captures a linear binding, the entire handler value becomes $\%\tau_h$ — only one $\textbf{inject}$ may consume it.
 
 As with [T-Lambda](#T-Lambda), the conclusion's ambient $\rho_q'$ is universally quantified — handler construction is ambient-independent (the per-arm $\alpha_j$ are validated against the arms' own bodies, not the surrounding ambient). The connection between $\rho_q'$ and $\rho_\text{req}$ is enforced at the [T-Inject](#T-Inject) site.
+
+**Arm/method 1-1 correspondence.** The premise $\lbrace \ell_j \mid j \in J \rbrace = \lbrace \ell \mid (\ell = e) \in \overline{\ell_j = e_j} \rbrace$ enforces that the handler literal supplies exactly the methods declared on port $x$ — no missing arm (which would leave a port-method invocation through [T-PortCall](#T-PortCall) with no implementation at runtime) and no extra arm (which would silently introduce a name unreachable by any method-dispatch path). Earlier formulations indexed the per-arm typing premise by $j \in J$ alone, which left the case of an extra user arm $\ell_\text{extra} = e_\text{extra}$ never type-checked and the case of a missing arm vacuously satisfied; this premise makes both failure modes a rule-level rejection. The same shape mirrors how [T-Record](#T-Record)'s $\text{distinct}(\overline{\ell})$ + [T-App](#T-App)'s label-permutation premises pin record-construction field sets to declared shapes. The impl in `src/typecheck/check.nx::check_handler` performs the same set-equality.
 
 $$\dfrac{
   x :^{\omega} \forall\overline{\alpha}.\,\tau \in \Gamma \qquad
@@ -1279,7 +1296,9 @@ P-Block is intentionally one-directional: a linear binding from $\Gamma_\text{ou
 $$\dfrac{
   \begin{array}{l}
   \Gamma = \Gamma_h \otimes \Gamma_\text{body} \\[2pt]
-  \forall i.\;\text{strip}(\text{inst}(\Gamma_h(h_i))) = \textbf{handler}\;P_i\;\rho_i \\[2pt]
+  \forall i.\;{?}P_i,\,{?}\rho_i~\text{fresh} \qquad
+  \forall i.\;\text{unify}(\text{strip}(\text{inst}(\Gamma_h(h_i))),\, \textbf{handler}\;{?}P_i\;{?}\rho_i) \\[2pt]
+  \forall i \neq j.\;P_i \neq P_j \quad\text{(injection uniqueness: no two handlers may target the same port)} \\[2pt]
   \forall i.\;\rho_i \subseteq \rho_q \quad\text{(handler requires are satisfied by the ambient row)} \\[2pt]
   \rho_q' = \text{merge}(\rho_q,\, \lbrace \overline{P} \rbrace) \\[2pt]
   \Gamma_\text{body};\, \rho_q';\, \tau_r \vdash_s \overline{s} : \Gamma' \mathbin{!} \rho_0 \\[2pt]
@@ -1290,6 +1309,10 @@ $$\dfrac{
 } \;\textsc{T-Inject}$$
 
 The handler's require row $\rho_i$ is a *precondition* on the inject site, not a grant to the body. The body sees only $\rho_q' = \rho_q \cup \lbrace \overline{P} \rbrace$ — the original ambient plus the ports each handler implements. The earlier formulation merged $\text{ports}(\overline{\rho_i})$ into $\rho_q'$ as well, which would let the body access capabilities the surrounding context never granted, breaking capability containment. With requires moved to a containment premise instead, the inject site fails to type-check unless the surrounding scope already provides every capability each handler needs.
+
+**Injection uniqueness.** The premise $\forall i \neq j.\;P_i \neq P_j$ rejects an $\textbf{inject}$ clause that lists two handlers targeting the same port (e.g. $\textbf{inject}\;h_1, h_2\;\textbf{do}\;\ldots\;\textbf{end}$ with both $h_i : \textbf{handler}\;\texttt{Logger}\;\rho$). Without it, $\text{merge}$ would collapse the row entry to a single $\texttt{Logger}$ but $\Gamma_h$ would still bind both handlers — leaving runtime method dispatch under $x.\ell(\ldots)$ (via [T-PortCall](#T-PortCall)) ambiguous between the two arms. Disallowing the overlap statically removes the ambiguity at the rule level; programs that need to swap handlers should nest two single-handler $\textbf{inject}$s instead, where the inner one shadows the outer for the duration of its body. The impl in `src/typecheck/check.nx::check_inject` performs the same duplicate-port rejection.
+
+**Unification-based handler shape match.** The premise uses $\text{unify}(\cdots, \textbf{handler}\;{?}P_i\;{?}\rho_i)$ with fresh metavariables $({?}P_i, {?}\rho_i)$ rather than a structural pattern $\text{strip}(\cdots) = \textbf{handler}\;P_i\;\rho_i$ on the right-hand side. The two forms agree on already-concrete handler types ($\text{unify}$ pins ${?}P_i, {?}\rho_i$ to the concrete components); they diverge on the unresolved-inference-variable case (e.g.\ a generic-typed handler parameter whose inst yields ${?}\alpha$) — only the unification form makes the derivation tree mechanically constructible. This mirrors [T-Force](#T-Force)'s pattern of $\text{unify}(\tau, @\sigma)$ over a literal structural match, keeping the rule applicable when the inferred handler type is still a meta-variable. Note: $P_i$ ranges over port names — a row-entry symbol — so ${?}P_i$ stands for a port-name unification variable, distinct from the type/row meta-variable categories used elsewhere; the current surface does not allow port-polymorphic functions, so ${?}P_i$ remains resolvable to a concrete port name in every well-typed program (any open ${?}P_i$ remaining after generalisation is a defect rather than a feature). The same shape applies to ${?}\rho_i$, which is a row meta-variable in the existing row-unification machinery.
 
 Two linearity-related details:
 
