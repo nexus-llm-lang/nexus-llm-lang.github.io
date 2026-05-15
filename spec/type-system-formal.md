@@ -460,12 +460,34 @@ $$\kappa ::= \texttt{Type} \mid \texttt{Row}$$
 
 $$\textbf{fn}~\textit{foo}\langle X_1, \ldots, X_n\rangle(\overline{\ell:\tau}) \to \tau_r;\,\rho_q;\,\rho_e \quad\rightsquigarrow\quad \forall X_1{:}\kappa_1 \ldots X_n{:}\kappa_n.\,(\overline{\ell:\tau}) \to \tau_r;\,\rho_q;\,\rho_e$$
 
-The kind $\kappa_i$ of each $X_i$ is **inferred from $X_i$'s occurrence position** in the function signature:
+The kind $\kappa_i$ of each $X_i$ is **inferred from $X_i$'s occurrence position** in the function signature. We formalise the inference as the auxiliary $\text{kindOf}(X, \sigma)$, a partial function from a quantifier name and a signature to $\lbrace \texttt{Type}, \texttt{Row} \rbrace$:
 
-- $\kappa_i = \texttt{Type}$ if every occurrence of $X_i$ is a $\tau$ (type) position.
-- $\kappa_i = \texttt{Row}$ if every occurrence is in the tail position of an open row, $\lbrace \overline{\tau} \mid X_i \rbrace$.
+$$\text{kindOf}(X, \sigma) = \begin{cases}
+\texttt{Type} & \text{if}~\text{occurs}_\tau(X, \sigma)~\text{and not}~\text{occurs}_\rho(X, \sigma) \\
+\texttt{Row} & \text{if}~\text{occurs}_\rho(X, \sigma)~\text{and not}~\text{occurs}_\tau(X, \sigma) \\
+\text{undefined} & \text{otherwise (unused or kind clash)}
+\end{cases}$$
 
-It is a static error for $X_i$ to appear in both kinds of position within one signature, or to be unused; the kind is unique when well-formed. The surface syntax `fn <R>(...)` carries no kind annotation — kind inference recovers $\kappa_i$ from the body. This is faithful to the implementation (`convert_ud_to_var` in `src/typecheck/check.nx`), which represents both kinds with the same $\texttt{TyVar}(n)$ constructor; the unifier then learns the kind from the first row/non-row context the variable meets.
+with the position predicates defined recursively over the signature's structure:
+
+$$\begin{array}{rcl}
+\text{occurs}_\tau(X, X) & = & \text{true} \\
+\text{occurs}_\tau(X, b) = \text{occurs}_\tau(X, \texttt{intlit}) = \text{occurs}_\tau(X, \texttt{floatlit}) & = & \text{false} \\
+\text{occurs}_\tau(X, Y) & = & \text{false} \quad (Y \neq X) \\
+\text{occurs}_\tau(X, (\overline{\ell:\tau}) \to \tau_r;\,\rho_q;\,\rho_e) & = & \exists i.\;\text{occurs}_\tau(X, \tau_i) \;\vee\; \text{occurs}_\tau(X, \tau_r) \;\vee \\
+& & \text{occurs}_\tau^\rho(X, \rho_q) \;\vee\; \text{occurs}_\tau^\rho(X, \rho_e) \\
+\text{occurs}_\tau(X, \%\tau) = \text{occurs}_\tau(X, @\tau) = \text{occurs}_\tau(X, \&\tau) & = & \text{occurs}_\tau(X, \tau) \\
+\text{occurs}_\tau(X, [\tau]) = \text{occurs}_\tau(X, [\lvert\tau\rvert]) & = & \text{occurs}_\tau(X, \tau) \\
+\text{occurs}_\tau(X, \lbrace \overline{\ell:\tau} \rbrace) = \text{occurs}_\tau(X, x\langle \overline{\tau} \rangle) & = & \exists i.\;\text{occurs}_\tau(X, \tau_i) \\[6pt]
+\text{occurs}_\tau^\rho(X, \lbrace \overline{\tau} \rbrace) & = & \exists i.\;\text{occurs}_\tau(X, \tau_i) \\
+\text{occurs}_\tau^\rho(X, \lbrace \overline{\tau} \mid Y \rbrace) & = & \exists i.\;\text{occurs}_\tau(X, \tau_i) \\[6pt]
+\text{occurs}_\rho(X, \lbrace \overline{\tau} \mid X \rbrace) & = & \text{true} \\
+\text{occurs}_\rho(X, \rho)~\text{(other cases)} & = & \text{recurse structurally, surfacing only row-tail occurrences of}~X
+\end{array}$$
+
+In words: $\text{occurs}_\tau$ asks "does $X$ appear at any *type* position (anywhere a $\tau$ is expected, including row entries)?" and $\text{occurs}_\rho$ asks "does $X$ appear specifically as a *row tail*?". Their disjoint truth values pin $\kappa$. The clash case (both true) and the unused case (both false) are static errors at [T-Let-PolyFn](#T-Let-PolyFn) — both surface as a malformed quantifier list at the binding site, not at a use site.
+
+The surface syntax `fn <R>(...)` carries no kind annotation; kind inference recovers $\kappa_i$ from the body. This is faithful to the implementation (`convert_ud_to_var` in `src/typecheck/check.nx`), which represents both kinds with the same $\texttt{TyVar}(n)$ constructor; the unifier then learns the kind from the first row/non-row context the variable meets, achieving the same fixpoint as the metatheoretic $\text{kindOf}$ above.
 
 The $X_i$ are user-named quantifiers (predicative System-F extended with row kind). There is **no implicit generalization**: every let-binding produces a monomorphic scheme via $\text{mono}$. The two carve-outs are [T-Let-PolyFn](#T-Let-PolyFn) (the introduction site — fires when the RHS is a $\textbf{fn}$ literal with an explicit type-parameter list, generalizing the inferred arrow over $\overline{X_i}$) and [T-Let-Alias](#T-Let-Alias) (the forwarding site — copies an existing polymorphic scheme verbatim when the RHS is a bare polymorphic variable).
 
