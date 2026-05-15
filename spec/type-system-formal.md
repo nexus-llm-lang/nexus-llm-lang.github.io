@@ -1579,4 +1579,21 @@ Every declaration above admits an optional `export` prefix in the surface syntax
 
 D-Type-Sum-Opaque is the one place where module identity directly enters a typing rule: the constructor visibility depends on whether the typing-time module is the defining module $M$. All other rules are module-local in the trivial sense (their effects apply inside whichever module is being type-checked).
 
+### Program Entry Point
+
+A complete program is a (possibly multi-file) declaration sequence whose root module declares a top-level binding named $\textit{main}$. The entry point carries four constraints not enforced by the per-declaration rules above:
+
+$$\textbf{P9}~\text{(Main well-formedness)}.\quad \text{wfMain}(\mathcal{T}) \;\Longleftrightarrow\;$$
+
+$$\quad \exists~\textit{main} \in \text{dom}(\Gamma).\;\Gamma(\textit{main}) = (\omega,\, \text{mono}((\,) \to \texttt{unit};\,\rho_q;\,\lbrace\rbrace)) \;\wedge\; \rho_q \subseteq \texttt{SysCaps} \;\wedge\; \textit{main} \notin \text{exports}(\mathcal{T})$$
+
+The four conjuncts encode the constraints stated narratively in [semantics.md](../semantics) §Entrypoint and [effects.md](../effects) §Main Constraints:
+
+- **Signature** — $(\,) \to \texttt{unit}$ with no arguments and a $\texttt{unit}$ return.
+- **Empty throws row** — `main`'s declared $\rho_e$ is $\lbrace\rbrace$. Every exception that the program may raise must be handled by an inner $\textbf{try}$ before propagating out of `main`; the runtime has no exception consumer outside of `main`.
+- **Require subset of SysCaps** — `main` may declare any subset of system capabilities ($\texttt{PermFs}$, $\texttt{PermNet}$, etc.) which the runtime grants from the WASI environment. User-declared port names may **not** appear in `main`'s $\rho_q$ — there is no enclosing $\textbf{inject}$ to provide them.
+- **Non-exported** — `main` is not in $\text{exports}(\mathcal{T})$. Other modules cannot import `main`; it is a runtime-side hook, not part of any module's API.
+
+A program is **well-formed** iff $\text{wfMain}(\mathcal{T})$ holds for the root module's resolved $\mathcal{T}$. If the property fails — `main` is missing, has the wrong signature, declares a non-empty throws row, requires a non-system capability, or is exported — the type-checker rejects the program at the program-entry check after the per-module folds complete. This is the only program-global property in §3; every other rule and property is module-local.
+
 {% endraw %}
