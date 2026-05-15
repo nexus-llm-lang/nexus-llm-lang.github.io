@@ -75,6 +75,8 @@ b & ::= & \texttt{i32} \mid \texttt{i64} \mid \texttt{f32} \mid \texttt{f64} \mi
 
 We write $\overline{X}$ for a finite sequence $X_1, \ldots, X_n$. $\alpha, \beta, \gamma$ range over type variables; ${?}\alpha$ denotes a type unification variable introduced during inference (the distinction matters in generalization). $r, s$ range over **row variables** (the tail position of an open row $\lbrace \overline{\tau} \mid r \rbrace$); ${?}r$ denotes a row unification variable. $\lvert\overline{X}\rvert$ denotes the length of a sequence.
 
+The statement judgment $\Gamma;\,\rho_q;\,\tau_r \vdash_s s : \Gamma' \mathbin{!} \rho_e$ uses an **extended return-context** $\tau_r \in \tau \cup \lbrace \bot \rbrace$. The sentinel $\bot$ marks "no enclosing function": it appears only at top-level statement contexts ([D-Let-Top](#D-Let-Top), [D-LetPat-Top](#D-LetPat-Top)) where there is no function to return to. $\bot$ is *not* a type — it is not a member of $\tau$ in the grammar above and never appears in $\Gamma$, in row entries, or as the result of [inst](#inst). The only rule that inspects $\tau_r$ is [T-Return](#T-Return), which carries the side condition $\tau_r \neq \bot$ to reject $\textbf{return}$ statements at module scope.
+
 $\texttt{intlit}$ and $\texttt{floatlit}$ are **singleton kind-restricted constants** assigned to integer and float literals before their concrete type is known. They are *not* fresh per literal occurrence: every $n$ in source code is typed at the same shared $\texttt{intlit}$ symbol, every $f$ at the same $\texttt{floatlit}$. Resolution proceeds in two stages: (1) any unification of $\texttt{intlit}$ with a concrete type $\tau \in \text{kind}(\texttt{intlit})$ emits a substitution $\lbrace \texttt{intlit} := \tau \rbrace$ via [U-IntLit](#U-IntLit) / [U-FloatLit](#U-FloatLit), which propagates to every literal occurrence simultaneously (matching the implementation in `src/typecheck/infer.nx`); (2) if the substitution chain still leaves an $\texttt{intlit}$/$\texttt{floatlit}$ at a binding site, $\text{default}$ in [T-Let](#T-Let) pins it to $\texttt{i64}$/$\texttt{f64}$. The shared symbol behavior is harmless in practice because every well-typed program's literals either get pinned to the same concrete type by surrounding context or get defaulted at the nearest let — distinct numeric "shapes" (e.g. an $\texttt{i32}$ literal next to an $\texttt{i64}$ one) are forced into separate bindings before they meet at a unification site. The $\text{kind}(\cdot)$ of $\texttt{intlit}$ is $\lbrace \texttt{i32}, \texttt{i64} \rbrace$ and of $\texttt{floatlit}$ is $\lbrace \texttt{f32}, \texttt{f64} \rbrace$ — unification with any other type fails.
 
 ### Modalities
@@ -1152,11 +1154,14 @@ Three restrictions are inherited from the surface notation:
 Together with T-Let-Alias, these two rules exhaust the entry-points for polymorphic schemes in $\Gamma$, justifying P8's "no implicit generalization" property mechanically rather than only by side-remark.
 
 $$\dfrac{
+  \tau_r \neq \bot \qquad
   \Gamma;\, \rho_q \vdash_e e : \tau \mathbin{!} \rho_0 \qquad
   \text{unify}(\tau, \tau_r)
 }{
   \Gamma;\, \rho_q;\, \tau_r \vdash_s \textbf{return}~e : \Gamma \mathbin{!} \rho_0
 } \;\textsc{T-Return}$$
+
+The premise $\tau_r \neq \bot$ rejects $\textbf{return}~e$ outside any enclosing function. $\bot$ is the **return-context sentinel** used to mark the absence of an enclosing function (see §1.2 below); a top-level $\textbf{let}$ via [D-Let-Top](#D-Let-Top) types its body under $\tau_r = \bot$, so a $\textbf{return}$ statement at module scope is statically rejected.
 
 <a id="T-Assign"></a>
 
