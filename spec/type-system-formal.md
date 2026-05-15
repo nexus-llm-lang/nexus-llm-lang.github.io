@@ -1394,6 +1394,34 @@ $$\dfrac{
 
 T-Seq-Cons threads the environment ($\Gamma_1$ from the head feeds into the tail) and unions the effect rows. The premise $\text{tail}(s) \neq \bot \vee \overline{s'} = \cdot$ rejects **dead statements after divergence**: if $s$ is $\textbf{return}~e$, $\textbf{raise}~e$ (as expression statement), or $\textbf{let}~\mu\,x = \textbf{raise}~e'$, then $\text{tail}(s) = \bot$ and the sequence must end there. Programs with statements after a $\textbf{return}$ are rejected at type-checking time rather than silently dropped — the rejection surfaces a likely programmer error (writing past a return) and avoids the question of how to type-check unreachable code. The same $\text{tail}$ predicate used in [T-If](#T-If)/[T-Match](#T-Match) is reused here, so divergence handling stays uniform across the spec.
 
+### Metatheoretic Properties
+
+The type system commits to five soundness properties (P1–P5) plus the three local properties stated inline at their respective sections (P6 Exhaustiveness, [Pattern Matching](#pattern-matching); P7 Unification, §Unification; P8 No implicit generalization, §Polymorphism Introduction). The five global properties are:
+
+$$\textbf{P1}~\text{(Progress)}.\quad \text{If}~\emptyset;\,\lbrace\rbrace;\,\bot \vdash_s s : \Gamma' \mathbin{!} \rho_e,~\text{then either:}$$
+
+$$\quad\text{(a)}~s~\text{reduces to some}~s'~\text{by an operational step, or (b)}~s~\text{is a terminal form (value, terminating}~\textbf{return}, \text{escaping}~\textbf{raise}\text{).}$$
+
+$$\textbf{P2}~\text{(Preservation)}.\quad \text{If}~\Gamma;\,\rho_q;\,\tau_r \vdash_s s : \Gamma' \mathbin{!} \rho_e~\text{and}~s \longrightarrow s',~\text{then}$$
+
+$$\quad \Gamma;\,\rho_q;\,\tau_r \vdash_s s' : \Gamma'' \mathbin{!} \rho_e'~\text{with}~\Gamma''~\text{a refinement of}~\Gamma'~\text{and}~\rho_e' \subseteq \rho_e.$$
+
+$$\textbf{P3}~\text{(Linear consumption)}.\quad \text{For any closing scope discharged by [P-FnEnd](#T-Lambda) (function body), [P-Block](#environment-and-usage)}$$
+
+$$\quad \text{(}\textbf{inject}/\textbf{try}\text{), or [P-Loop](#T-While) (}\textbf{while}\text{), every linear binding introduced inside the scope is consumed exactly once before the scope closes.}$$
+
+$$\textbf{P4}~\text{(Capability containment)}.\quad \text{For any well-typed function body typed under declared}~\rho_q,~\text{every [T-PortCall](#T-PortCall)}$$
+
+$$\quad \text{and [T-App](#T-App) inside the body satisfies its respective}~\alpha \subseteq \rho_q~\text{premise.}$$
+
+$$\textbf{P5}~\text{(Exception containment)}.\quad \text{For any well-typed function body typed under declared}~\rho_e,~\text{every [T-Raise-Ctor](#T-Raise-Ctor)}$$
+
+$$\quad \text{/ [T-Raise-CtorNullary](#T-Raise-CtorNullary) / [T-Raise-Val](#T-Raise-Val) inside the body produces a row entry that is in}~\rho_e~\text{or subsumed by}~\texttt{Exn} \in \rho_e~\text{via [U-Row-Exn](#U-Row-Exn).}$$
+
+P1 and P2 are stated relative to an operational semantics — the spec does not give small-step rules in this document; the reduction relation $\longrightarrow$ is defined narratively in [semantics.md](../semantics) and is the obligation of the runtime/codegen pipeline. The other three properties (P3–P5) are *structural*: every $\text{check}$ pass on a term derives them by induction over the relevant rules' premises, with [P-FnEnd](#T-Lambda)/[P-Block](#environment-and-usage)/[P-Loop](#T-While) discharging P3, the $\subseteq$ premises of T-App / T-PortCall discharging P4, and the row-entry constructions in T-Raise-* discharging P5. In this sense P3–P5 are *intrinsic* to the rules' shape — any conformant implementation that admits a rule's conclusion has already established the corresponding fragment of the property.
+
+The numbering reserves P1–P5 for these global properties so the rule-local P6–P8 (which are convenient where they're stated, but not architectural) can stay in their natural sections without renumbering. A future revision may add P9, P10 etc.\ for new local properties.
+
 ---
 
 ## 3. Top-Level Declarations
