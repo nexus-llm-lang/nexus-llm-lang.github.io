@@ -884,15 +884,30 @@ $$\dfrac{
 
 $\odot$ ranges over comparison operators $\lbrace ==,\, !=,\, <,\, \leq,\, >,\, \geq \rbrace$. Both operands must unify (e.g. both numeric, both strings, both chars); the result is always $\texttt{bool}$. Equality on records and ADTs reduces structurally, requiring the operand types to match. The $\text{comparable}$ predicate excludes types whose runtime equality is undefined:
 
-$$\text{comparable}(\tau) = \begin{cases}
+$$\text{comparable}(\tau) \;=\; \text{comparable}'(\tau, \emptyset)$$
+
+$$\text{comparable}'(\tau, V) = \begin{cases}
 \text{true} & \text{if}~\tau \in \lbrace b,\, \texttt{intlit},\, \texttt{floatlit} \rbrace \\
-\text{true} & \text{if}~\tau = \lbrace \overline{\ell : \sigma} \rbrace \wedge \forall i.\;\text{comparable}(\sigma_i) \\
-\text{true} & \text{if}~\tau = x\langle\overline{\sigma}\rangle \wedge \forall i.\;\text{comparable}(\sigma_i) \\
-\text{true} & \text{if}~\tau = [\sigma] \wedge \text{comparable}(\sigma) \\
-\text{false} & \text{if}~\tau~\text{is an arrow type, handler value, ref, borrow, thunk, or array}
+\text{true} & \text{if}~\tau = \lbrace \overline{\ell : \sigma} \rbrace \wedge \forall i.\;\text{comparable}'(\sigma_i, V) \\
+\text{true} & \text{if}~\tau = [\sigma] \wedge \text{comparable}'(\sigma, V) \\
+\text{false} & \text{if}~\tau = \%\sigma \;\text{(linear)} \\
+\text{false} & \text{if}~\tau~\text{is an arrow type, handler value,}~\mathord{\sim}\sigma,~\&\sigma,~@\sigma,~\text{or}~[\lvert\sigma\rvert] \\
+\text{false} & \text{if}~\tau = x\langle\overline{\sigma}\rangle \wedge x \in V \quad (\text{cycle: minimum fixpoint}) \\
+\text{comparable}'(\text{unfold}(x\langle\overline{\sigma}\rangle), V \cup \lbrace x \rbrace) & \text{if}~\tau = x\langle\overline{\sigma}\rangle \wedge x \notin V \\
+\text{false} & \text{if}~\tau = \alpha~\text{or}~?\alpha \quad (\text{rigid quantifier / unification var})
 \end{cases}$$
 
-Functions, handlers, mutable refs ($\mathord{\sim}\sigma$), borrows ($\&\sigma$), thunks ($@\sigma$), and arrays ($[\lvert\,\sigma\,\rvert]$) have no defined value-equality at runtime; comparing them is a type error. (Identity comparison on these would be an explicit operator, not $==$.)
+where the named-type recursion unfolds the typedef body and substitutes type arguments:
+
+$$\text{unfold}(x\langle\overline{\sigma}\rangle) = \begin{cases}
+\lbrace \overline{\ell : F[\overline{\alpha := \sigma}]} \rbrace & \text{if}~\text{typedef}(x) = \forall \overline{\alpha}.\,\lbrace \overline{\ell : F} \rbrace~\text{(record)} \\
+c_1 \mathbin{\vert} \ldots \mathbin{\vert} c_n~\text{with payload types}~\overline{F_i[\overline{\alpha := \sigma}]} & \text{if}~\text{typedef}(x)~\text{is a sum, and}~x~\text{is not opaque (or we are in its defining module)} \\
+\text{opaque} & \text{if}~x~\text{is opaque and we are outside its defining module}
+\end{cases}$$
+
+A **sum type** is comparable iff every variant's payload-field types are comparable (a sum's value-equality reduces to constructor-tag equality plus payload equality). An **opaque type** outside its defining module unfolds to $\text{opaque}$, which makes $\text{comparable}'$ return $\text{false}$ — value-equality cannot be defined externally because the constructors aren't visible. Inside the defining module, opaque types are treated like ordinary sum types.
+
+Linear types ($\%\sigma$), functions, handlers, mutable refs ($\mathord{\sim}\sigma$), borrows ($\&\sigma$), thunks ($@\sigma$), and arrays ($[\lvert\,\sigma\,\rvert]$) have no defined value-equality at runtime; comparing them is a type error. (Identity comparison on these would be an explicit operator, not $==$.) The cycle-guarded fixpoint mirrors $\text{linear}$ / $\text{autoDrop}$: a self-referential type whose recursion path has no inherently-incomparable field (e.g.\ a $\textbf{type}~\texttt{Tree}\langle T \rangle = \texttt{Leaf} \mathbin{\vert} \texttt{Node}(\ldots, \textit{left}: \texttt{Tree}\langle T \rangle, \ldots)$) is comparable iff $T$ is.
 
 <a id="T-Logic"></a>
 
