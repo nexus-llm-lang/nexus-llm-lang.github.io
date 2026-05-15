@@ -1494,7 +1494,7 @@ The numbering reserves P1–P5 for these global properties so the rule-local P6�
 
 A program is a sequence of top-level declarations followed by zero or more top-level $\textbf{let}$ bindings. Declarations populate the global tables — $\Gamma$ (term bindings), $\text{typedef}$ (named type schemes), $\text{variants}$ (sum-type constructor sets), $\text{methods}$ (port method signatures), and $\text{members}$ (exception-group expansion) — that the per-expression rules in §2 read as preconditions. §1 described these declarations as "not terms; preconditions on $\Gamma$"; the judgments in this section spell out exactly how the preconditions are produced.
 
-We write $\mathcal{T} = \langle \Gamma,\, \text{typedef},\, \text{variants},\, \text{methods},\, \text{members} \rangle$ for the five-tuple of tables. The declaration judgment
+We write $\mathcal{T} = \langle \Gamma,\, \text{typedef},\, \text{variants},\, \text{methods},\, \text{members},\, \text{exports} \rangle$ for the six-tuple of tables. $\text{exports}$ is the set of binder names declared with the `export` prefix in the current module; the field is populated incrementally as the per-rule folds run (each $\textbf{export}~\text{decl}$ adds the bound name(s) to $\text{exports}$ in addition to whatever effect the underlying $\text{decl}$ has on the other tables — see [§Visibility](#visibility-export)). $\text{exports}$ is the only $\mathcal{T}$-component that distinguishes `export` from non-`export` declarations within a single module; the others are populated identically by both forms. The declaration judgment
 
 $$\mathcal{T} \;\vdash_d\; \text{decl} \;\Rightarrow\; \mathcal{T}'$$
 
@@ -1637,7 +1637,15 @@ Self-recursive (`let factorial = fn ... factorial(n: n - 1) ... end`) and mutual
 
 ### Visibility (export)
 
-Every declaration above admits an optional `export` prefix in the surface syntax (`export let foo = ...`, `export type Foo = ...`, etc.). The modifier does *not* alter the rule's effect on $\mathcal{T}$ within the declaring module — `export` and non-`export` declarations populate $\Gamma$ / $\text{typedef}$ / $\text{methods}$ / $\text{variants}$ / $\text{members}$ identically *inside* their module. The modifier governs **inter-module visibility**: only `export`ed entries enter the importing module's $\mathcal{T}$ when an `import` statement is resolved. Import resolution is described in [imports.md](../imports) and runs before the per-module declaration judgments above fire; the spec does not need a separate rule for `export` because it produces no new constraint on a single-module derivation.
+Every declaration above admits an optional `export` prefix in the surface syntax (`export let foo = ...`, `export type Foo = ...`, etc.). The modifier does *not* alter the rule's effect on $\Gamma$ / $\text{typedef}$ / $\text{methods}$ / $\text{variants}$ / $\text{members}$ within the declaring module — `export` and non-`export` declarations populate those five components identically *inside* their module. The modifier governs the sixth component, $\text{exports}$:
+
+$$\dfrac{
+  \mathcal{T} \;\vdash_d\; D \;\Rightarrow\; \mathcal{T}' \qquad \text{declName}(D)~\text{is the name bound by}~D
+}{
+  \mathcal{T} \;\vdash_d\; \textbf{export}~D \;\Rightarrow\; \mathcal{T}'[\text{exports} \mathrel{:=} \text{exports} \cup \lbrace \text{declName}(D) \rbrace]
+} \;\textsc{D-Export}$$
+
+D-Export is a *wrapper* — for any declaration form $D$ admitted by §3's other rules, $\textbf{export}~D$ runs $D$'s rule unchanged and additionally records the bound name in $\text{exports}$. $\text{declName}$ is the surface-level identifier $D$ introduces ($x$ for $\textbf{let}~x = e$, $X$ for $\textbf{type}~X$, etc.); a multi-name form like $\textbf{type}~X = c_1 \mathbin{\vert} \ldots \mathbin{\vert} c_n$ adds $\lbrace X, c_1, \ldots, c_n \rbrace$ to $\text{exports}$ in one step. The $\text{exports}$ set is the **inter-module visibility gate**: when another module imports from this one, only entries whose names are in $\text{exports}$ enter the importing $\mathcal{T}$ (see [imports.md](../imports)).
 
 D-Type-Sum-Opaque is the one place where module identity directly enters a typing rule: the constructor visibility depends on whether the typing-time module is the defining module $M$. All other rules are module-local in the trivial sense (their effects apply inside whichever module is being type-checked).
 
