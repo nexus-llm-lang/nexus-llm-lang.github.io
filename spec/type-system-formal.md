@@ -1373,6 +1373,13 @@ says that processing $\text{decl}$ against the current tables produces the updat
 
 In each rule below, components of $\mathcal{T}$ not mentioned in the conclusion are unchanged. All tables grow monotonically — declarations only extend; existing entries are never removed or rewritten.
 
+**Two-phase processing for type declarations.** A naive left-to-right fold cannot type a self-referential `type Tree<T> = Leaf | Node(left: Tree<T>, …)` (Tree's field references Tree before Tree is in $\text{typedef}$) or a mutually-recursive `type Even = Zero | ESucc(odd: Odd); type Odd = OSucc(even: Even)` (Odd is forward-referenced by Even). To handle both, $\vdash_d$ on a file proceeds in two phases:
+
+1. **Forward registration.** A pre-pass walks every $\textbf{type}~x\langle \overline{\alpha} \rangle = \ldots$ declaration in the file and inserts $\text{typedef}(x) := \forall \overline{\alpha}.\,x\langle \overline{\alpha} \rangle$ — the named-type *placeholder*, with no body resolved yet. $\text{variants}(x)$ stays empty. After this pass, every declared type name is in $\text{typedef}$ as a known identifier so that later body resolution can reference it.
+2. **Body resolution.** The left-to-right fold then runs the D-Type-Record / D-Type-Sum / D-Type-Sum-Opaque rules on each declaration in order. The body's $\tau$-positions may now name any type declared anywhere in the file (forward or recursive); each rule's effect on $\Gamma$ (constructor schemes) and $\text{variants}$ proceeds as written. Conflicts (a name resolving to a placeholder when the body needs the resolved variant set, e.g. for [Exh-Sum](#Exh-Sum)) are deferred to the per-expression typing inside top-level $\textbf{let}$ — the variant set is filled in by the time those rules fire.
+
+D-Port, D-Exception, D-ExceptionGroup, D-External, D-Let-Top, and D-LetPat-Top are unaffected by the two-phase split — they do not introduce forward-referenceable named types. The same two-phase shape covers `cap` declarations whose method signatures reference types declared later in the file.
+
 <a id="D-Type-Record"></a>
 
 $$\dfrac{
