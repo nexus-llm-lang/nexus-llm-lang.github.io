@@ -175,19 +175,28 @@ Two readings follow from these definitions:
 
 #### Linear consumption and the env residual $\Gamma \setminus\!\!\setminus e$
 
-An expression typing $\Gamma;\,\rho_q \vdash_e e : \tau \mathbin{!} \rho_0$ consumes a subset of $\Gamma$'s linear bindings via $\otimes$-split. The judgment shape carries no explicit output environment, but the consumption is real — every leaf use of a linear $x$ via [T-Var](#T-Var) draws $x$ into exactly one $\otimes$-partition along the derivation, removing it from any sibling partition. We write
+The expression judgment $\Gamma;\,\rho_q \vdash_e e : \tau \mathbin{!} \rho_0$ has no explicit output environment, but consumption of linear bindings *is* operational — it is realised by the $\otimes$-split mechanism at every multi-premise rule.
+
+**Operational role of $\otimes$-split.** Every expression rule that has multiple expression premises ([T-App](#T-App), [T-Inject](#T-Inject)'s argument typing, etc.) opens with $\Gamma = \Gamma_1 \otimes \ldots \otimes \Gamma_k$ — a partition of $\Gamma$ into $k$ sub-environments, one per sub-derivation. Each $\Gamma_i$ is then *fully* the responsibility of its sub-derivation: linear bindings in $\Gamma_i$ must be consumed by some leaf inside that sub-derivation, $\omega$ bindings may be referenced any number of times. At an expression *leaf*:
+
+- [T-Var](#T-Var) consumes the binding it references: if $x :^1 S \in \Gamma$, the leaf's $\Gamma$ is exactly the singleton (or the singleton plus $\omega$ entries the unifier may need); the linear $x$ disappears from the rest of the derivation because no other partition received it.
+- [T-Const](#T-Const) and other no-variable leaves carry the side condition $\text{pure}(\Gamma)$ — the leaf's local $\Gamma$ may not contain *any* live linear (every linear must have already been routed away by a $\otimes$-split, otherwise the leaf would consume nothing while a linear sits unconsumed).
+
+We write
 
 $$\Gamma \setminus\!\!\setminus e \;=\; \lbrace x :^q S \in \Gamma \mid q = \omega \;\vee\; x \notin \text{linConsumed}(e\text{'s derivation}) \rbrace$$
 
-for the **residual** of $\Gamma$ after typing $e$: every $\omega$-binding is preserved; every linear binding consumed by $e$'s derivation is removed. The set $\text{linConsumed}$ is determined by the $\otimes$-split choices the derivation made (so $\Gamma \setminus\!\!\setminus e$ is well-defined per derivation, not per syntactic $e$).
+for the **residual** of $\Gamma$ after typing $e$, where $\text{linConsumed}(e\text{'s derivation})$ is the union of linear bindings drawn into [T-Var](#T-Var) leaves anywhere in the derivation tree of $e$. Equivalently: $\text{linConsumed}$ is the set of linear $x \in \text{dom}(\Gamma)$ that the $\otimes$-splits of $e$'s derivation routed into a consuming leaf rather than the residual partition. The residual is well-defined *per derivation* (different $\otimes$-split choices yield different residuals; soundness holds for every choice that lets the derivation type-check).
 
-Statement-judgment outputs are interpreted **modulo this residual**: where a rule's conclusion writes $\Gamma' = \Gamma,\, x :^q S$ for a fresh binder $x$, the operational reading is
+**Statement-judgment outputs read modulo the residual.** Where a rule's conclusion writes $\Gamma' = \Gamma,\, x :^q S$ for a fresh binder $x$, the operational reading is
 
 $$\Gamma' \;=\; (\Gamma \setminus\!\!\setminus e),\, x :^q S$$
 
-with the residual computed against the rule's expression premise(s). Every statement-level conclusion in §2 should be read this way — the residual operator is left implicit in the rules for legibility, made explicit only where its presence matters (e.g.\ P-Block's $\Gamma_\text{inner}$ already reflects body-level consumption; without the residual, a correctly-consumed inner $\%h$ would falsely appear leaked).
+with the residual computed against the rule's expression premise(s). Every statement-level conclusion in §2 should be read this way; T-Let and T-LetPat write the residual explicitly as the anchoring examples, and T-Seq-Cons threads it transitively through `Γ_1` from the head into the tail. The closeBlock narrative's claim — *"a linear outer binding consumed inside the block is removed from $\Gamma_\text{inner}$"* — discharges by induction over the body's statements: each statement's output is its input minus what its expressions consumed, so $\Gamma_\text{inner}$ at the body's end equals $\Gamma_\text{body} \setminus\!\!\setminus \overline{s}$ (treating $\setminus\!\!\setminus$ as iterated over the sequence).
 
-The implementation realises this by carrying a *live-linear set* separately from the $\Gamma$ map (`LinState(vars, frame_stack)` in `src/typecheck/linearity.nx`): the set shrinks on every linear use and grows on every linear-introducing $\textbf{let}$. The spec's $\Gamma \setminus\!\!\setminus e$ is the metatheoretic projection of that live-set onto $\Gamma$'s linear restriction. Soundness of P-Block, P-FnEnd, and P-Loop depends on this projection being threaded through statement rules consistently — without it, the no-leak premises would scan an env that still contains every linear ever introduced, producing false positives on correctly-consumed bindings.
+**P-Block soundness.** With the residual reading, P-Block's $\forall x :^1 S \in \Gamma_\text{inner}.\;x \in \text{dom}(\Gamma_\text{outer}) \wedge x :^1 S \in \Gamma_\text{outer}$ scans only the linears that *survived* every consumption inside the block. A correctly-consumed inner $\%h$ is absent from $\Gamma_\text{inner}$ and therefore vacuously satisfies the premise; only genuinely-leaked or shadowed-divergent linears trigger the rejection. The same reading rescues P-FnEnd and P-Loop from the same false-positive trap.
+
+**Implementation correspondence.** `src/typecheck/linearity.nx` carries a *live-linear set* (`LinState(vars, frame_stack)`) separate from the $\Gamma$ map: the set shrinks on every linear use and grows on every linear-introducing $\textbf{let}$. The spec's $\Gamma \setminus\!\!\setminus e$ is the metatheoretic projection of that live-set onto $\Gamma$'s linear restriction; the impl's bookkeeping is the operational embodiment of the $\otimes$-split's residual.
 
 ### Auxiliary Functions
 
