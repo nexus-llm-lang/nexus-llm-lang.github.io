@@ -215,7 +215,9 @@ $$\begin{array}{rcl}
 \text{linConsumed}(\lbrace \overline{\ell : e} \rbrace, \Gamma) & = & \biguplus_i \text{linConsumed}(e_i, \Gamma) \\[2pt]
 \text{linConsumed}(\textbf{raise}~e, \Gamma) & = & \text{linConsumed}(e, \Gamma) \\[6pt]
 \text{linConsumed}(\textbf{fn}~(\ldots)~\textbf{do}~\overline{s}~\textbf{end}, \Gamma) & = & \lbrace x \in \text{fv}(\overline{s}) \cap \text{dom}(\Gamma) \mid \Gamma(x) = (1, S) \rbrace \\
-& & \text{(captured linears are consumed by the closure)} \\[6pt]
+& & \text{(captured linears are consumed by the closure)} \\[2pt]
+\text{linConsumed}(\textbf{handler}~x~[\textbf{require}~\rho]~\textbf{do}~\overline{\ell_j = e_j}~\textbf{end}, \Gamma) & = & \lbrace y \in \textstyle\bigcup_j \text{fv}(e_j) \cap \text{dom}(\Gamma) \mid \Gamma(y) = (1, S) \rbrace \\
+& & \text{(captured linears across all arms are consumed by the handler value)} \\[6pt]
 \text{linConsumed}(\textbf{if}~e_c~\textbf{then}~\overline{s_1}~\textbf{else}~\overline{s_2}, \Gamma) & = & \text{linConsumed}(e_c, \Gamma) \;\uplus\; \text{linConsumed}(\overline{s_1}, \Gamma') \\
 & & \text{requires}~\text{linConsumed}(\overline{s_1}, \Gamma') = \text{linConsumed}(\overline{s_2}, \Gamma') \\
 & & \text{where}~\Gamma' = \Gamma \setminus\!\!\setminus e_c \\
