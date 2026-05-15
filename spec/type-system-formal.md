@@ -70,7 +70,8 @@ $$\begin{array}{rcll}
     & \mid & \textbf{handler}\;x\;\rho & \text{handler for port } x \\[6pt]
 b & ::= & \texttt{i32} \mid \texttt{i64} \mid \texttt{f32} \mid \texttt{f64} \mid {} & \\
   &     & \texttt{bool} \mid \texttt{char} \mid \texttt{string} \mid \texttt{unit} & \\[6pt]
-\rho & ::= & \lbrace \overline{\tau} \rbrace \mid \lbrace \overline{\tau} \mid {?}r \rbrace & \text{row (closed / open with row variable } {?}r\text{)}
+\eta & ::= & X \mid \texttt{Exn} & \text{row entry (an identifier or the catch-all sentinel)} \\[6pt]
+\rho & ::= & \lbrace \overline{\eta} \rbrace \mid \lbrace \overline{\eta} \mid {?}r \rbrace & \text{row (closed / open with row variable } {?}r\text{)}
 \end{array}$$
 
 We write $\overline{X}$ for a finite sequence $X_1, \ldots, X_n$. $\alpha, \beta, \gamma$ range over type variables; ${?}\alpha$ denotes a type unification variable introduced during inference (the distinction matters in generalization). $r, s$ range over **row variables** (the tail position of an open row $\lbrace \overline{\tau} \mid r \rbrace$); ${?}r$ denotes a row unification variable. $\lvert\overline{X}\rvert$ denotes the length of a sequence.
@@ -104,11 +105,13 @@ These two sources share the row vocabulary because $\rho_q$ unification, weakeni
 
 Let $\texttt{SysCaps} = \lbrace \texttt{PermFs}, \texttt{PermNet}, \texttt{PermConsole}, \texttt{PermRandom}, \texttt{PermClock}, \texttt{PermProc}, \texttt{PermEnv} \rbrace$. The well-formedness predicate
 
-$$\text{wfCap}(\rho_q) \;\Longleftrightarrow\; \forall X \in \overline{\tau}.\;X \in \texttt{SysCaps} \cup \text{dom}(\text{methods}) \quad\text{where}~\rho_q = \lbrace \overline{\tau} \rbrace~\text{or}~\lbrace \overline{\tau} \mid {?}r \rbrace$$
+$$\text{wfCap}(\rho_q) \;\Longleftrightarrow\; \forall X \in \overline{\eta}.\;X \in \texttt{SysCaps} \cup \text{dom}(\text{methods}) \quad\text{where}~\rho_q = \lbrace \overline{\eta} \rbrace~\text{or}~\lbrace \overline{\eta} \mid {?}r \rbrace$$
 
 requires every named entry of a capability row to be either a system capability or a port previously declared by [D-Port](#D-Port) (which populates $\text{methods}$). Row tail variables ${?}r$ are unconstrained — they stand for "any further entries" and are pinned by unification against a closed-row context, where the pinned content is itself well-formed by transitivity.
 
 $\text{wfCap}$ is checked at every **introduction site** of a $\rho_q$ row: the require clause on a $\textbf{fn}$ arrow ([T-Lambda](#T-Lambda)), the optional require annotation on a $\textbf{handler}$ ([T-Handler](#T-Handler)), and the per-method declared require row inside [D-Port](#D-Port). Use sites ([T-App](#T-App), [T-PortCall](#T-PortCall), [T-Inject](#T-Inject)) operate on already-well-formed rows and need not re-check. Without $\text{wfCap}$ at the introduction sites, a typo such as `require { Logr }` (intended `Logger`) would propagate as an uninhabitable row entry and surface only at a use site that happens to look it up — moving the diagnostic far from the source of the typo.
+
+**Notation note.** Earlier sections (and most rules below) write row entries as $\overline{\tau}$ rather than the precise $\overline{\eta}$. The two conventions are interchangeable: $\eta$ is the metavariable for "row entry" (an identifier or the $\texttt{Exn}$ sentinel), and the $\tau$ notation is a legacy from when rows were typed at the outer-syntactic level. Wherever a row appears, the entries are semantically constrained to be identifiers; type-grammar productions like $\%\sigma$ or $(\overline{\ell:\tau}) \to \tau_r$ never appear as row entries and are rejected by the parser. The wf-checks above pin this constraint formally.
 
 $\rho_e$ (throws row) carries an analogous well-formedness condition: every named entry must be a constructor of $\texttt{Exn}$ — i.e.\ in $\text{variants}(\texttt{Exn})$ — or the catch-all sentinel $\texttt{Exn}$ itself. We write this as $\text{wfThrow}(\rho_e)$ and rely on the same introduction-site discipline (every $\textbf{throws}$ annotation passes through one of the introduction rules).
 
