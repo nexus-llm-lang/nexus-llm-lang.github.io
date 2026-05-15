@@ -213,11 +213,15 @@ $$\begin{array}{rcl}
 \text{linConsumed}(\textbf{raise}~e, \Gamma) & = & \text{linConsumed}(e, \Gamma) \\[6pt]
 \text{linConsumed}(\textbf{fn}~(\ldots)~\textbf{do}~\overline{s}~\textbf{end}, \Gamma) & = & \lbrace x \in \text{fv}(\overline{s}) \cap \text{dom}(\Gamma) \mid \Gamma(x) = (1, S) \rbrace \\
 & & \text{(captured linears are consumed by the closure)} \\[6pt]
-\text{linConsumed}(\textbf{if}~e_c~\textbf{then}~\overline{s_1}~\textbf{else}~\overline{s_2}, \Gamma) & = & \text{linConsumed}(e_c, \Gamma) \;\uplus\; (\text{linConsumed}(\overline{s_1}, \Gamma) \cap \text{linConsumed}(\overline{s_2}, \Gamma)) \\
-\text{linConsumed}(\textbf{match}~e~\lbrace \overline{p_i \to s_i} \rbrace, \Gamma) & = & \text{linConsumed}(e, \Gamma) \;\uplus\; \textstyle\bigcap_i \text{linConsumed}(\overline{s_i}, \Gamma)
+\text{linConsumed}(\textbf{if}~e_c~\textbf{then}~\overline{s_1}~\textbf{else}~\overline{s_2}, \Gamma) & = & \text{linConsumed}(e_c, \Gamma) \;\uplus\; \text{linConsumed}(\overline{s_1}, \Gamma') \\
+& & \text{requires}~\text{linConsumed}(\overline{s_1}, \Gamma') = \text{linConsumed}(\overline{s_2}, \Gamma') \\
+& & \text{where}~\Gamma' = \Gamma \setminus\!\!\setminus e_c \\
+\text{linConsumed}(\textbf{match}~e~\lbrace \overline{p_i \to s_i} \rbrace, \Gamma) & = & \text{linConsumed}(e, \Gamma) \;\uplus\; \text{linConsumed}(\overline{s_1}, \Gamma_1) \\
+& & \text{requires}~\forall i, j.\;\text{linConsumed}(\overline{s_i}, \Gamma_i) = \text{linConsumed}(\overline{s_j}, \Gamma_j) \\
+& & \text{(modulo pattern-introduced binders)}
 \end{array}$$
 
-Branch constructs use **intersection** ($\cap$) over arms because only a binding consumed by *every* branch is unconditionally gone — both arms must agree (same binding consumed in each), otherwise the linear obligation is unfulfilled in some path. This mirrors the typing rules' requirement that linear bindings be either consumed in every branch or in none, and matches `src/typecheck/linearity.nx`'s arm-equality check.
+Branch constructs require **arm equality** of the linear-consumption sets: every branch must consume the *same* set of input linears (modulo binders the pattern itself introduced, which are local to the arm). The earlier intersection formulation $\cap$ would have admitted a program where one arm consumes $\lbrace a, b \rbrace$ and the other consumes $\lbrace a \rbrace$, leaving $b$ in the residual — but iteration through the first arm would have already consumed $b$, breaking the use-after-consume invariant on whichever arm runs at runtime. Arm equality is the only choice that keeps the residual sound across both control-flow paths, and it matches the impl's `vars_equal` check in `src/typecheck/linearity.nx`'s if/match handling.
 
 For statement sequences, $\text{linConsumed}(\overline{s}, \Gamma)$ folds left-to-right, threading $\Gamma$ through each statement's residual:
 
