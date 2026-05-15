@@ -1358,16 +1358,20 @@ Variant subtraction enables partial catches: catching only $\texttt{NotFound}$ f
 
 $$\dfrac{
   \begin{array}{l}
-  \Gamma;\, \rho_q \vdash_e e_c : \tau_c \mathbin{!} \rho_c \qquad
+  \text{pure}(\Gamma_c) \quad\text{(cond evaluated each iteration must not consume linears)} \\[2pt]
+  \Gamma_c;\, \rho_q \vdash_e e_c : \tau_c \mathbin{!} \rho_c \qquad
   \text{unify}(\tau_c, \texttt{bool}) \\[2pt]
   \Gamma;\, \rho_q;\, \tau_r \vdash_s \overline{s} : \Gamma' \mathbin{!} \rho_b \\[2pt]
-  \lbrace x :^1 S \in \Gamma' \rbrace = \lbrace x :^1 S \in \Gamma \rbrace \quad\text{(P-Loop: linear set preserved across iterations)}
+  \lbrace x :^1 S \in \Gamma' \rbrace = \lbrace x :^1 S \in \Gamma \rbrace \quad\text{(P-Loop: linear set preserved across iterations)} \\[2pt]
+  \text{where}~\Gamma_c~\text{is the}~\omega\text{-restriction of}~\Gamma~\text{(every}~\omega\text{-bound entry of}~\Gamma\text{; no linear entries)}
   \end{array}
 }{
   \Gamma;\, \rho_q;\, \tau_r \vdash_s \textbf{while}~e_c~\textbf{do}~\overline{s}~\textbf{end} : \Gamma \mathbin{!} \rho_c \cup \rho_b
 } \;\textsc{T-While}$$
 
 T-While types a while loop as a statement of unit-shaped effect: the body may run zero or more times, so the output environment is fixed to the input $\Gamma$ (no new bindings escape — the loop is block-scoped) and the linear set must be **invariant across one iteration**. P-Loop is the loop-specific analogue of P-Block: every linear binding in $\Gamma$ must survive unchanged in $\Gamma'$, and $\Gamma'$ contains no linear binding absent from $\Gamma$. Equivalently — using the env-difference notation from §Environment and Usage — the linear *restriction* of $\Gamma'$ matches that of $\Gamma$ as sets of $(name, q=1, scheme)$ triples.
+
+**Cond must be linear-pure.** The condition expression $e_c$ is typed under $\Gamma_c$, the $\omega$-restriction of $\Gamma$ — every $\omega$-bound entry is in $\Gamma_c$; no linear entries. This is *not* a $\otimes$-split (which would route a linear to one side or the other): the loop body must see *all* of $\Gamma$'s linears intact in order for P-Loop's set equality to hold, and the condition is re-evaluated on every iteration, so consuming a linear in it would be a single-use-resource–used-twice hazard. The $\text{pure}(\Gamma_c)$ premise (defined in §Expressions) enforces that the cond's local env contains no live linear; in practice the cond can read any $\omega$ binding but cannot mention a $\%$-bound variable. Borrows are admissible (`while is_empty(&%queue)` is fine — `&%queue` is $\omega$-bound).
 
 The premise rejects three failure modes:
 
