@@ -969,7 +969,9 @@ $$\dfrac{
   \Gamma_\omega = \lbrace x :^{\omega} S \in \Gamma \mid x \in \text{fv}(\overline{s}) \rbrace \\[2pt]
   \forall x \in \text{fv}(\overline{s}) \cap \text{dom}(\Gamma).\;\Gamma(x) \neq \mathord{\sim}\sigma \quad\text{(no ref capture)} \\[2pt]
   q_i = \begin{cases} 1 & \text{if } \text{linear}(\tau_i) \\ \omega & \text{otherwise} \end{cases} \\[2pt]
-  \Gamma_\omega,\, \Gamma_\text{cap},\, \overline{x_i :^{q_i} \tau_i};\, \rho_q;\, \tau_r \vdash_s \overline{s} : \Gamma' \mathbin{!} \rho_e \\[2pt]
+  \overline{s}^\dagger = \begin{cases} \overline{s};\,\textbf{return}~() & \text{if}~\tau_r = \texttt{unit}~\wedge~\text{tail}(\overline{s}) \neq \bot \\ \overline{s} & \text{otherwise} \end{cases} \\[2pt]
+  \Gamma_\omega,\, \Gamma_\text{cap},\, \overline{x_i :^{q_i} \tau_i};\, \rho_q;\, \tau_r \vdash_s \overline{s}^\dagger : \Gamma' \mathbin{!} \rho_e \\[2pt]
+  \tau_r \neq \texttt{unit} \implies \text{tail}(\overline{s}^\dagger) = \bot \quad\text{(non-unit returns require explicit termination)} \\[2pt]
   \forall y :^1 S \in \Gamma'.\;y \in \lbrace\overline{x_i}\rbrace \wedge \text{autoDrop}(S) \quad\text{(P-FnEnd: no leaked linear at body end)} \\[2pt]
   \text{wfCap}(\rho_q) \quad \text{wfThrow}(\rho_e) \quad\text{(declared rows reference known caps / variants)} \\[2pt]
   \tau_\to = (\overline{\ell : \tau}) \to \tau_r;\, \rho_q;\, \rho_e \\[2pt]
@@ -990,6 +992,8 @@ The conclusion's ambient row $\rho_q'$ is **not bound by any premise** — it is
 - **Linear parameters** ($q_i = 1$) must either be consumed by the body (transferred via a return / raise / argument-passing channel, per [drop.md](../drop) §Linear Consumption) or have $\text{autoDrop}(\tau_i)$ — the carve-out admits e.g. an array-typed parameter whose linear wrapper is structural rather than semantically resource-bearing.
 
 P-FnEnd is the analogue at function-body scope of P-Block at block scope: both reject linear-leak at a scope boundary. T-Lambda is the only construct that crosses a function-body boundary, so the function-end check lives uniquely here; [T-Inject](#T-Inject) and [T-TryCatch](#T-TryCatch) discharge P-Block instead. The two together cover every closing scope in the language.
+
+**Implicit-return desugaring.** The auxiliary $\overline{s}^\dagger$ in T-Lambda's premise formalises the surface convention from [semantics.md](../semantics) §Implicit Unit Return: a $\textbf{unit}$-returning lambda whose body does not already end in a divergent statement (i.e.\ $\text{tail}(\overline{s}) \neq \bot$) is desugared to $\overline{s};\,\textbf{return}~()$ before body typing. Non-unit returns get no desugaring — the rule's $\tau_r \neq \texttt{unit} \implies \text{tail}(\overline{s}^\dagger) = \bot$ premise then statically rejects an `i64`-returning lambda whose body is a let-statement or a bare expression statement that produces a value but never $\textbf{return}$s it. Together, the desugar and the premise pin the surface convention at rule level: unit returners may omit `return ()`; non-unit returners must explicitly `return` (or $\textbf{raise}$ / loop forever) on every control-flow path.
 
 <a id="T-Raise-Ctor"></a>
 
