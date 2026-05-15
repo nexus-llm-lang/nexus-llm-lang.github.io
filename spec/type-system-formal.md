@@ -978,7 +978,8 @@ $$\dfrac{
   \begin{array}{l}
   \Gamma = \Gamma_e \otimes \Gamma_b \\[2pt]
   \Gamma_e;\, \rho_q \vdash_e e : \tau \mathbin{!} \rho_0 \qquad
-  \text{exhaustive}(\text{strip}(\tau), \overline{p}) \\[4pt]
+  \text{exhaustive}(\text{strip}(\tau), \overline{p}) \\[2pt]
+  \text{strip}(\tau) = \texttt{Exn} \implies \text{hasCatchAll}(\overline{p}) \quad\text{(cross-module-extensible: syntactic catch-all required)} \\[4pt]
   \forall i.\;\Gamma_b \vdash p_i : \text{strip}(\tau) \Rightarrow \Gamma_i \\[2pt]
   \forall i.\;\Gamma_i;\, \rho_q;\, \tau_r \vdash_s \overline{s_i} : \Gamma_i' \mathbin{!} \rho_i \\[4pt]
   \forall i, j.\;\text{tail}(\overline{s_i}) \neq \bot \wedge \text{tail}(\overline{s_j}) \neq \bot \implies \\[2pt]
