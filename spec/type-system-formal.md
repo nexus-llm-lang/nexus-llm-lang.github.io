@@ -100,6 +100,16 @@ The capability row $\rho_q$ admits two disjoint sources of entries:
 
 These two sources share the row vocabulary because $\rho_q$ unification, weakening, and `require` checking treat both kinds of entries uniformly. The disjointness is by declaration site: system-capability names are reserved (parser rejects redeclaration); port/cap names are user-defined and live in the same namespace as type/term identifiers.
 
+Let $\texttt{SysCaps} = \lbrace \texttt{PermFs}, \texttt{PermNet}, \texttt{PermConsole}, \texttt{PermRandom}, \texttt{PermClock}, \texttt{PermProc}, \texttt{PermEnv} \rbrace$. The well-formedness predicate
+
+$$\text{wfCap}(\rho_q) \;\Longleftrightarrow\; \forall X \in \overline{\tau}.\;X \in \texttt{SysCaps} \cup \text{dom}(\text{methods}) \quad\text{where}~\rho_q = \lbrace \overline{\tau} \rbrace~\text{or}~\lbrace \overline{\tau} \mid {?}r \rbrace$$
+
+requires every named entry of a capability row to be either a system capability or a port previously declared by [D-Port](#D-Port) (which populates $\text{methods}$). Row tail variables ${?}r$ are unconstrained — they stand for "any further entries" and are pinned by unification against a closed-row context, where the pinned content is itself well-formed by transitivity.
+
+$\text{wfCap}$ is checked at every **introduction site** of a $\rho_q$ row: the require clause on a $\textbf{fn}$ arrow ([T-Lambda](#T-Lambda)), the optional require annotation on a $\textbf{handler}$ ([T-Handler](#T-Handler)), and the per-method declared require row inside [D-Port](#D-Port). Use sites ([T-App](#T-App), [T-PortCall](#T-PortCall), [T-Inject](#T-Inject)) operate on already-well-formed rows and need not re-check. Without $\text{wfCap}$ at the introduction sites, a typo such as `require { Logr }` (intended `Logger`) would propagate as an uninhabitable row entry and surface only at a use site that happens to look it up — moving the diagnostic far from the source of the typo.
+
+$\rho_e$ (throws row) carries an analogous well-formedness condition: every named entry must be a constructor of $\texttt{Exn}$ — i.e.\ in $\text{variants}(\texttt{Exn})$ — or the catch-all sentinel $\texttt{Exn}$ itself. We write this as $\text{wfThrow}(\rho_e)$ and rely on the same introduction-site discipline (every $\textbf{throws}$ annotation passes through one of the introduction rules).
+
 ### Row Set Operations
 
 The typing rules use three set-like operations on rows: subset ($\subseteq$), entry-name set difference ($\setminus$), and membership ($\in$). Each is defined uniformly over closed and open rows. Where a row tail variable ${?}r$ appears, the operation is interpreted *up to row unification*: it holds iff there is a substitution of the unification tails that makes the closed-row equation hold, and that substitution is committed as a side-effect (the same convention as elsewhere in §Unification).
@@ -902,6 +912,7 @@ $$\dfrac{
   q_i = \begin{cases} 1 & \text{if } \text{linear}(\tau_i) \\ \omega & \text{otherwise} \end{cases} \\[2pt]
   \Gamma_\omega,\, \Gamma_\text{cap},\, \overline{x_i :^{q_i} \tau_i};\, \rho_q;\, \tau_r \vdash_s \overline{s} : \Gamma' \mathbin{!} \rho_e \\[2pt]
   \forall y :^1 S \in \Gamma'.\;y \in \lbrace\overline{x_i}\rbrace \wedge \text{autoDrop}(S) \quad\text{(P-FnEnd: no leaked linear at body end)} \\[2pt]
+  \text{wfCap}(\rho_q) \quad \text{wfThrow}(\rho_e) \quad\text{(declared rows reference known caps / variants)} \\[2pt]
   \tau_\to = (\overline{\ell : \tau}) \to \tau_r;\, \rho_q;\, \rho_e \\[2pt]
   \tau_\to^\star = \begin{cases} \%\tau_\to & \text{if } \Gamma_\text{cap} \neq \emptyset \\ \tau_\to & \text{otherwise} \end{cases}
   \end{array}
@@ -960,6 +971,7 @@ $$\dfrac{
   \Gamma_\omega = \lbrace y :^{\omega} S \in \Gamma \mid y \in \textstyle\bigcup_j \text{fv}(e_j) \rbrace \\[2pt]
   \forall y \in \textstyle\bigcup_j \text{fv}(e_j) \cap \text{dom}(\Gamma).\;\Gamma(y) \neq \mathord{\sim}\sigma \\[2pt]
   \forall j \in J.\;\Gamma_\omega,\, \Gamma_\text{cap};\, \rho_q \vdash_e e_j : (\overline{\pi_j}) \to \kappa_j;\, \alpha_j;\, \beta_j \mathbin{!} \lbrace\rbrace \\[2pt]
+  \text{wfCap}(\rho_\text{annot}) \quad\text{(handler's optional require annotation references known caps)} \\[2pt]
   \rho_\text{req} = \textstyle\bigcup_j \alpha_j \cup \rho_\text{annot} \\[2pt]
   \tau_h = \textbf{handler}\;x\;\rho_\text{req}
   \end{array}
@@ -1371,7 +1383,10 @@ External declarations bind a name $x$ to a fixed Wasm export $w$ at a stated arr
 <a id="D-Port"></a>
 
 $$\dfrac{
-  D = \textbf{port}~X~\textbf{do}~\overline{\textbf{fn}~\ell_j(\overline{\pi_j}) \to \kappa_j;\,\alpha_j;\,\beta_j}~\textbf{end}
+  \begin{array}{l}
+  D = \textbf{port}~X~\textbf{do}~\overline{\textbf{fn}~\ell_j(\overline{\pi_j}) \to \kappa_j;\,\alpha_j;\,\beta_j}~\textbf{end} \\[2pt]
+  \forall j \in J.\;\text{wfCap}(\alpha_j) \wedge \text{wfThrow}(\beta_j) \quad\text{(per-method declared rows reference known caps / variants)}
+  \end{array}
 }{
   \mathcal{T} \;\vdash_d\; D \;\Rightarrow\; \mathcal{T}[\text{methods}(X) \mathrel{:=} \lbrace \ell_j : (\overline{\pi_j}) \to \kappa_j;\,\alpha_j;\,\beta_j \mid j \in J \rbrace]
 } \;\textsc{D-Port}$$
