@@ -819,7 +819,7 @@ $$\dfrac{
   \Gamma_f;\, \rho_q \vdash_e f : (\overline{\ell' : P}) \to \tau_r;\, \rho_q';\, \rho_e' \mathbin{!} \rho_f \\[2pt]
   \lbrace \overline{\ell} \rbrace = \lbrace \overline{\ell'} \rbrace \quad\text{(label sets match; no duplicates; full coverage)} \\[2pt]
   \pi: \lbrace 1,\ldots,k \rbrace \to \lbrace 1,\ldots,k \rbrace,\; \ell_i = \ell'_{\pi(i)} \quad\text{(unique permutation by label name)} \\[2pt]
-  \forall i.\;\Gamma_i;\, \rho_q \vdash_e e_i : \tau_i \mathbin{!} \rho_i \\[2pt]
+  \forall i.\;\Gamma_i;\, \rho_q \vdash_e^{\text{arg}} e_i \mathrel{\Updownarrow} P_{\pi(i)} : \tau_i \mathbin{!} \rho_i \\[2pt]
   \forall i.\;\begin{cases} \text{unify}(\tau_i, \text{strip}(P_{\pi(i)})) & \text{if } P_{\pi(i)} = \%\sigma \wedge \neg\text{linear}(\tau_i) \\ \text{unify}(\tau_i, P_{\pi(i)}) & \text{otherwise} \end{cases} \\[2pt]
   \text{unify}(\rho_q, \text{open}(\rho_q'))
   \end{array}
@@ -830,6 +830,22 @@ $$\dfrac{
 The caller's argument labels $\overline{\ell}$ are matched against the callee's parameter labels $\overline{\ell'}$ **by name**, not by position. The permutation $\pi$ aligns the caller's $i$-th argument to the callee's $\pi(i)$-th parameter so that $\ell_i = \ell'_{\pi(i)}$; both directions of the label-set equality must hold (every callee parameter is supplied, no extra caller labels). The permutation is unique because labels are required to be distinct on each side (the surface parser rejects duplicate-label calls and parameter lists). This formalises the *order-independent labeled arguments* guarantee from [semantics.md](../semantics) §Label Order Independence — `f(b: 2, a: 1)` and `f(a: 1, b: 2)` produce the same derivation up to $\pi$.
 
 The weakening condition is explicit: when $P_{\pi(i)} = \%\sigma$ and $\tau_i$ is not linear, unification targets the inner type $\sigma$ (stripping the $\%$ wrapper). This does not apply to other linear forms like $@\sigma$.
+
+**Argument-position typing $\vdash_e^{\text{arg}}\,e \mathrel{\Updownarrow} P$.** Most arguments are typed by ordinary expression typing $\vdash_e$, which then unifies $\tau_i$ against $P_{\pi(i)}$. The carve-out exists for **linear borrows**: when the argument is syntactically $\&x$ and the parameter is shaped $\&\sigma$, the argument is admitted even if $x$ is a linear binding ($x :^1 \in \Gamma_i$). The expression $\&x$ alone is rejected by [T-Borrow](#T-Borrow)'s $x :^{\omega}$ premise — outside an argument position, a borrow of a linear binding would create a long-lived $\&\sigma$ value whose target persists past the use-once obligation. In argument position, the borrow is *discharged on call return*: the callee uses $\&\sigma$ during its body, the call's result is the callee's return type (no borrow leakage), and the linear target $x$ survives the call unconsumed. Formally:
+
+$$\dfrac{
+  e = \&x \quad x :^1 \forall\overline{\alpha}.\,\tau \in \Gamma \quad \tau' = \text{inst}(\forall\overline{\alpha}.\,\tau) \quad P = \&\sigma \quad \text{unify}(\text{stripBorrow}(\tau'), \sigma)
+}{
+  \Gamma;\, \rho_q \vdash_e^{\text{arg}} \&x \mathrel{\Updownarrow} \&\sigma : \&\sigma \mathbin{!} \lbrace\rbrace
+} \;\textsc{T-App-BorrowLin}$$
+
+$$\dfrac{
+  e~\text{not in T-App-BorrowLin shape, or}~P~\text{not}~\&\sigma \quad \Gamma;\,\rho_q \vdash_e e : \tau \mathbin{!} \rho
+}{
+  \Gamma;\, \rho_q \vdash_e^{\text{arg}} e \mathrel{\Updownarrow} P : \tau \mathbin{!} \rho
+} \;\textsc{T-App-ArgDefault}$$
+
+T-App-BorrowLin does not consume the linear target ($x$ remains in $\Gamma_i$ after the borrow); T-App-ArgDefault falls through to the ordinary expression-typing path. The carve-out is **call-site syntactic**: only when the argument literally has the form $\&x$ does it apply — `f(p: g(x: &y))` does *not* benefit because the inner $g(\ldots)$ would type the borrow through ordinary T-Borrow first. This mirrors the impl in `src/typecheck/infer.nx::infer_call`'s argument-shape special-case.
 
 **Capability-row enforcement is deferred** (nexus-mqin.14): the T-App premise $\text{unify}(\rho_q, \text{open}(\rho_q'))$ and the corresponding $\rho_q$ slot on T-Lambda's arrow type are part of the formal rule, but the self-host typechecker constructs lambda arrows with empty $\rho_q'$ and discards the callee's $\rho_q'$ at call sites. Capability admission is currently enforced by a downstream pass on MIR rather than by typecheck. The spec rule remains the reference target; closing the gap is tracked by mqin.14 (impl) — symmetric to how throws-row enforcement was tightened in mqin.1.1.
 
