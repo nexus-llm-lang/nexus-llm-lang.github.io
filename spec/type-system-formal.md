@@ -911,6 +911,8 @@ $$\dfrac{
 
 The lambda is pure ($\mathbin{!} \lbrace\rbrace$). It consumes $\Gamma_\text{cap}$ (captured linear bindings). The body environment includes $\Gamma_\omega$ (captured unrestricted bindings), $\Gamma_\text{cap}$, and the parameters $\overline{x_i :^{q_i} \tau_i}$ — each parameter's usage $q_i$ matches its type's linearity (mirroring [T-Let](#T-Let)). The closure-linearization premise $\tau_\to^\star$ promotes the lambda's type to $\%\tau_\to$ whenever any linear binding is captured: a closure that owns a linear resource is itself one-shot, so two uses of the same closure value would imply two consumptions of the resource. The same shape is reused in [T-Handler](#T-Handler) to linearize handler values that capture linears.
 
+The conclusion's ambient row $\rho_q'$ is **not bound by any premise** — it is the caller's ambient at the lambda's construction site. The rule reads as "for any $\rho_q'$, …": the caller may construct a lambda under any ambient because lambda construction itself produces no effect ($\mathbin{!} \lbrace\rbrace$) and reads no capabilities. The lambda's own body is typed under the **declared** $\rho_q$ (the require row written into the arrow type), not under $\rho_q'$; the connection between $\rho_q'$ and $\rho_q$ is enforced later, at the call site, by [T-App](#T-App)'s $\text{unify}(\rho_q, \text{open}(\rho_q'))$ premise. Treating $\rho_q'$ as universally quantified is the intentional formalisation of "lambda construction is ambient-independent".
+
 **P-FnEnd (function-end no-leak).** The body's output environment $\Gamma'$ must contain no linear binding except parameters whose declared type is auto-droppable. This formalises [drop.md](../drop)'s function-end check (`require_empty_or_droppable` in `src/typecheck/linearity.nx`) as a premise of T-Lambda rather than leaving it as an out-of-band obligation. Concretely:
 
 - **Captured linears** ($\Gamma_\text{cap}$) flow into the body and must be consumed before body end; otherwise they would be silently dropped when the closure value returns, but the caller still believes the resource is alive via the closure's captured-state contract.
@@ -968,6 +970,8 @@ $$\dfrac{
 $$\tau_h^\star = \begin{cases} \%\tau_h & \text{if } \Gamma_\text{cap} \neq \emptyset \\ \tau_h & \text{otherwise} \end{cases}$$
 
 The handler is pure ($\mathbin{!} \lbrace\rbrace$) — its construction has no effect; effects are deferred until the handler is injected and a method is invoked. Each arm $e_j$ must be a lambda whose function type matches the port's declared signature for method $\ell_j$. The handler's require row $\rho_\text{req}$ aggregates each arm's declared require row $\alpha_j$ (carried on the lambda's arrow type and validated against the lambda body in [T-Lambda](#T-Lambda)/[T-App](#T-App)) and the optional surface annotation $\rho_\text{annot}$ (defaulting to $\lbrace\rbrace$ if absent). [T-Inject](#T-Inject) checks that $\rho_\text{req}$ is satisfied by the surrounding ambient row at the inject site. Closure linearization mirrors [T-Lambda](#T-Lambda): if any arm captures a linear binding, the entire handler value becomes $\%\tau_h$ — only one $\textbf{inject}$ may consume it.
+
+As with [T-Lambda](#T-Lambda), the conclusion's ambient $\rho_q'$ is universally quantified — handler construction is ambient-independent (the per-arm $\alpha_j$ are validated against the arms' own bodies, not the surrounding ambient). The connection between $\rho_q'$ and $\rho_\text{req}$ is enforced at the [T-Inject](#T-Inject) site.
 
 $$\dfrac{
   x :^{\omega} \forall\overline{\alpha}.\,\tau \in \Gamma \qquad
@@ -1090,7 +1094,7 @@ $$\dfrac{
   e = \textbf{fn}~\langle X_1, \ldots, X_n\rangle\,(\overline{\ell : \tau}) \to \tau_r;\, \rho_q;\, \rho_e~\textbf{do}~\overline{s}~\textbf{end} \qquad n \geq 1 \\[2pt]
   \forall i.\;\kappa_i~\text{is the inferred kind of}~X_i~\text{(see §Polymorphism Introduction)} \\[2pt]
   \Gamma,\, \overline{X_i{:}\kappa_i};\, \rho_q' \vdash_e \textbf{fn}~(\overline{\ell : \tau}) \to \tau_r;\, \rho_q;\, \rho_e~\textbf{do}~\overline{s}~\textbf{end} : \tau_\to \mathbin{!} \lbrace\rbrace \\[2pt]
-  \quad\text{(typed as in [T-Lambda](#T-Lambda) with}~\overline{X_i}~\text{treated as rigid type/row symbols in}~\Gamma\text{)} \\[2pt]
+  \quad\text{(typed as in [T-Lambda](#T-Lambda) with}~\overline{X_i}~\text{treated as rigid type/row symbols in}~\Gamma; \rho_q'~\text{universally quantified per T-Lambda)} \\[2pt]
   \tau_\to~\text{is not}~\%\sigma \qquad
   S = \forall X_1{:}\kappa_1 \ldots X_n{:}\kappa_n.\,\tau_\to
   \end{array}
