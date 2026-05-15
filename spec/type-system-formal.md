@@ -344,7 +344,7 @@ The last clause is load-bearing for unification termination: when [U-Var](#U-Var
 
 ### Linearity
 
-$\text{linear}(\tau)$ is a structural (recursive) predicate: holds if $\tau$ is $\%\sigma$, $@\sigma$, or $[\lvert\,\sigma\,\rvert]$ at the outermost level, or if any transitive component of $\tau$ is linear (fields of records, type arguments of named types, element types of lists, elements of rows). Example: $\text{linear}(\text{Pair}\langle\%\texttt{i64}, \texttt{i64}\rangle)$ holds.
+$\text{linear}(\tau)$ is a structural (recursive) predicate: holds if $\tau$ is $\%\sigma$, $@\sigma$, or $[\lvert\,\sigma\,\rvert]$ at the outermost level, or if any transitive component of $\tau$ is linear. Components inspected by the recursion: fields of records, type arguments of named types, element types of lists, elements of rows, and **the payload of $\mathord{\sim}\sigma$** ($\text{linear}(\mathord{\sim}\sigma) \Longleftrightarrow \text{linear}(\sigma)$). Borrows $\&\sigma$ are *not* recursed into: a borrow is always reusable ($q = \omega$), so the borrow itself is non-linear regardless of $\sigma$; the underlying owner's linearity is tracked at the owner's binding, not at the borrow. Function arrows $(\overline{\ell:\tau}) \to \tau_r$ and handlers $\textbf{handler}\;x\;\rho$ are values whose own linearity is governed by capture-linearisation in [T-Lambda](#T-Lambda) / [T-Handler](#T-Handler) rather than by transitive recursion; $\text{linear}$ does not look inside them. Example: $\text{linear}(\text{Pair}\langle\%\texttt{i64}, \texttt{i64}\rangle)$ holds; $\text{linear}(\mathord{\sim}\%\texttt{i64})$ holds (caught by the new $\mathord{\sim}$-recursion clause — but see [§Mutable Reference Well-Formedness](#mutable-reference-well-formedness) below, which makes the type itself unrepresentable).
 
 $\text{autoDrop}(\tau)$ holds if the innermost non-modality type of $\tau$ (recursively stripping $\%$, $@$, $\&$, $\mathord{\sim}$) is in $\lbrace b, \texttt{intlit}, \texttt{floatlit}, [\lvert\,\sigma\,\rvert] \rbrace$. Types whose linear wrapper can be silently discarded.
 
@@ -378,6 +378,14 @@ and analogously for $\text{autoDrop}'$. All other clauses (the $\%\sigma$, $@\si
 The implementation memoises by $x \mapsto (\text{linear}, \text{autoDrop})$ to avoid re-walking the body; the spec's $V$ parameter is the metatheoretic counterpart of that memo table.
 
 Linearity is entirely structural: the split $\otimes$ ensures each linear binding ($q = 1$) goes to exactly one sub-derivation, and branching constructs give both arms the same portion of $\Gamma$.
+
+<a id="mutable-reference-well-formedness"></a>
+
+**Mutable-reference well-formedness ($\text{wfRef}$).** A mutable reference cell $\mathord{\sim}\sigma$ permits unrestricted reads (each $\mathord{\sim}x$ via [T-Deref](#T-Deref) yields a fresh $\sigma$) and assignments (via [T-Assign](#T-Assign)). If $\sigma$ were linear, each read would produce a fresh copy of the linear payload, duplicating the resource — incompatible with linearity's single-use discipline. The type system therefore rejects $\mathord{\sim}\sigma$ as malformed when $\sigma$ is linear:
+
+$$\text{wfRef}(\mathord{\sim}\sigma) \;\Longleftrightarrow\; \neg\text{linear}(\sigma)$$
+
+$\text{wfRef}$ is checked at every **type-formation site** that can introduce a $\mathord{\sim}\sigma$: parameter and return slots of $\textbf{fn}$ literals ([T-Lambda](#T-Lambda) / [T-Let-PolyFn](#T-Let-PolyFn)), the signature of a method declared by [D-Port](#D-Port), the type annotation of [D-External](#D-External), the field types of [D-Type-Record](#D-Type-Record) / [D-Type-Sum](#D-Type-Sum), and any explicit type annotation on [T-Let](#T-Let). The check fails fast at declaration time rather than letting a $\mathord{\sim}\%T$-shaped value smuggle in through e.g.\ an externally-declared signature, then duplicate the inner linear via successive $\mathord{\sim}x$ reads. T-Let itself also carries the rule-local guard $\mu = \mathord{\sim} \implies \neg\text{linear}(\tau')$ (see [T-Let](#T-Let)); $\text{wfRef}$ is the global counterpart that catches the same hazard when the type sneaks in through a non-sigil channel.
 
 Two additional behaviors are embedded in specific rules rather than stated as standalone inference rules:
 
