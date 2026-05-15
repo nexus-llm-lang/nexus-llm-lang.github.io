@@ -1470,7 +1470,18 @@ $$\quad\text{(a)}~s~\text{reduces to some}~s'~\text{by an operational step, or (
 
 $$\textbf{P2}~\text{(Preservation)}.\quad \text{If}~\Gamma;\,\rho_q;\,\tau_r \vdash_s s : \Gamma' \mathbin{!} \rho_e~\text{and}~s \longrightarrow s',~\text{then}$$
 
-$$\quad \Gamma;\,\rho_q;\,\tau_r \vdash_s s' : \Gamma'' \mathbin{!} \rho_e'~\text{with}~\Gamma''~\text{a refinement of}~\Gamma'~\text{and}~\rho_e' \subseteq \rho_e.$$
+$$\quad \Gamma;\,\rho_q;\,\tau_r \vdash_s s' : \Gamma'' \mathbin{!} \rho_e'~\text{with}~\Gamma'' \sqsubseteq \Gamma'~\text{and}~\rho_e' \subseteq \rho_e.$$
+
+The environment **refinement relation** $\Gamma'' \sqsubseteq \Gamma'$ ("$\Gamma''$ refines $\Gamma'$") is defined as:
+
+$$\Gamma'' \sqsubseteq \Gamma' \;\Longleftrightarrow\; \text{dom}(\Gamma'') \subseteq \text{dom}(\Gamma') \;\wedge\; \exists\,\theta.\;\forall x \in \text{dom}(\Gamma'').\;\Gamma''(x) = \theta(\Gamma'(x))$$
+
+where $\theta$ is a substitution of unification variables in $\Gamma'$ accumulated during the reduction $s \longrightarrow s'$ (the same shape of substitution produced by [Unification](#unification)). Two readings are implied:
+
+- $\text{dom}(\Gamma'') \subseteq \text{dom}(\Gamma')$ — reduction may *remove* bindings (a linear $\%x$ consumed by the step disappears), but may not *introduce* names absent from the typed source. The names in $\Gamma''$ are a subset of $\Gamma'$'s.
+- $\Gamma''(x) = \theta(\Gamma'(x))$ for surviving $x$ — usage annotations $q$ and schemes $S$ may be specialised by $\theta$, but not loosened (an $\omega$ entry stays $\omega$; a $\forall \overline{\alpha}.\tau$ may have $\overline{\alpha}$ pinned to concrete types).
+
+The condition $\rho_e' \subseteq \rho_e$ is plain row subset (no row-tail refinement; the reduction never *introduces* new effect variants beyond those the typed source declared).
 
 $$\textbf{P3}~\text{(Linear consumption)}.\quad \text{For any closing scope discharged by [P-FnEnd](#T-Lambda) (function body), [P-Block](#environment-and-usage)}$$
 
