@@ -1436,12 +1436,34 @@ says that processing $\text{decl}$ against the current tables produces the updat
 
 In each rule below, components of $\mathcal{T}$ not mentioned in the conclusion are unchanged. All tables grow monotonically — declarations only extend; existing entries are never removed or rewritten.
 
-**Two-phase processing for type declarations.** A naive left-to-right fold cannot type a self-referential `type Tree<T> = Leaf | Node(left: Tree<T>, …)` (Tree's field references Tree before Tree is in $\text{typedef}$) or a mutually-recursive `type Even = Zero | ESucc(odd: Odd); type Odd = OSucc(even: Even)` (Odd is forward-referenced by Even). To handle both, $\vdash_d$ on a file proceeds in two phases:
+**Two-phase processing for type declarations.** A naive left-to-right fold cannot type a self-referential `type Tree<T> = Leaf | Node(left: Tree<T>, …)` (Tree's field references Tree before Tree is in $\text{typedef}$) or a mutually-recursive `type Even = Zero | ESucc(odd: Odd); type Odd = OSucc(even: Even)` (Odd is forward-referenced by Even). The same hazard applies to recursive top-level $\textbf{let}$ functions (`let factorial = fn ... factorial(...) ... end`). To handle all of these uniformly, file processing runs a **forward-registration judgment** $\vdash_d^{\text{pre}}$ before the body-resolution judgment $\vdash_d$:
 
-1. **Forward registration.** A pre-pass walks every $\textbf{type}~x\langle \overline{\alpha} \rangle = \ldots$ declaration in the file and inserts $\text{typedef}(x) := \forall \overline{\alpha}.\,x\langle \overline{\alpha} \rangle$ — the named-type *placeholder*, with no body resolved yet. $\text{variants}(x)$ stays empty. After this pass, every declared type name is in $\text{typedef}$ as a known identifier so that later body resolution can reference it.
-2. **Body resolution.** The left-to-right fold then runs the D-Type-Record / D-Type-Sum / D-Type-Sum-Opaque rules on each declaration in order. The body's $\tau$-positions may now name any type declared anywhere in the file (forward or recursive); each rule's effect on $\Gamma$ (constructor schemes) and $\text{variants}$ proceeds as written. Conflicts (a name resolving to a placeholder when the body needs the resolved variant set, e.g. for [Exh-Sum](#Exh-Sum)) are deferred to the per-expression typing inside top-level $\textbf{let}$ — the variant set is filled in by the time those rules fire.
+<a id="D-Type-Forward"></a>
 
-D-Port, D-Exception, D-ExceptionGroup, D-External, D-Let-Top, and D-LetPat-Top are unaffected by the two-phase split — they do not introduce forward-referenceable named types. The same two-phase shape covers `cap` declarations whose method signatures reference types declared later in the file.
+$$\dfrac{
+  D = \textbf{type}~x\langle \overline{\alpha} \rangle = \ldots~\text{(body unresolved)}
+}{
+  \mathcal{T} \;\vdash_d^{\text{pre}}\; D \;\Rightarrow\; \mathcal{T}[\text{typedef}(x) \mathrel{:=} \forall \overline{\alpha}.\,x\langle \overline{\alpha} \rangle]
+} \;\textsc{D-Type-Forward}$$
+
+<a id="D-Let-Forward"></a>
+
+$$\dfrac{
+  \begin{array}{l}
+  D = \textbf{let}~x = \textbf{fn}~[\langle \overline{X} \rangle]\,(\overline{\ell:\tau}) \to \tau_r;\,\rho_q;\,\rho_e~\textbf{do}~\overline{s}~\textbf{end} \\[2pt]
+  S_{\text{pre}} = \begin{cases} \forall \overline{X{:}\kappa}.\,(\overline{\ell:\tau}) \to \tau_r;\,\rho_q;\,\rho_e & \text{if}~\overline{X}~\text{non-empty} \\ \text{mono}((\overline{\ell:\tau}) \to \tau_r;\,\rho_q;\,\rho_e) & \text{otherwise} \end{cases}
+  \end{array}
+}{
+  \mathcal{T} \;\vdash_d^{\text{pre}}\; D \;\Rightarrow\; \mathcal{T}[\Gamma \mathrel{:=} \Gamma,\, x :^{\omega} S_{\text{pre}}]
+} \;\textsc{D-Let-Forward}$$
+
+D-Type-Forward and D-Let-Forward are the only $\vdash_d^{\text{pre}}$ rules; every other declaration form ($\textbf{port}$, $\textbf{exception}$, $\textbf{exception group}$, $\textbf{external}$, top-level $\textbf{let}$ whose RHS is *not* a $\textbf{fn}$ literal, destructuring $\textbf{let}~p = e$) is a no-op under $\vdash_d^{\text{pre}}$ — they introduce no forward-referenceable name. File-level processing is then the composition
+
+$$\text{processFile}(\overline{D}) \;=\; (\text{fold}_{\vdash_d}\; \overline{D}) \;\circ\; (\text{fold}_{\vdash_d^{\text{pre}}}\; \overline{D})$$
+
+with both folds running left-to-right over the same declaration sequence. After the pre-pass, every type name is in $\text{typedef}$ as a placeholder and every recursive $\textbf{fn}$ is in $\Gamma$ at its declared signature; the body-pass D-Type-Record / D-Type-Sum / D-Type-Sum-Opaque / D-Let-Top / D-LetPat-Top rules then run with the recursive references already resolvable through the pre-pass tables. Conflicts where the body-pass needs a resolved variant set against a still-placeholder name (e.g.\ [Exh-Sum](#Exh-Sum) inside a top-level $\textbf{let}$ whose body matches against a sum that is declared later) are well-typed because the body-pass runs to completion *before* per-expression typing inside top-level $\textbf{let}$ bodies fires the [Exh-Sum](#Exh-Sum) lookups.
+
+The implementation realises this in `src/typecheck/check.nx`'s declaration-walk + `infer.nx::infer_let`'s "Pre-register for recursive lambdas" path; the spec's two-pass shape is the metatheoretic counterpart.
 
 <a id="D-Type-Record"></a>
 
@@ -1545,12 +1567,7 @@ $$\dfrac{
 
 A top-level $\textbf{let}$ is type-checked as an ordinary statement under an empty ambient capability row, an empty effect row, and a $\bot$ return-type (no enclosing function): D-Let-Top reuses [T-Let](#T-Let), [T-Let-PolyFn](#T-Let-PolyFn), or [T-Let-Alias](#T-Let-Alias) according to the RHS shape; D-LetPat-Top covers destructuring binders by reusing [T-LetPat](#T-LetPat) (or [T-LetPat-Diverge](#T-LetPat-Diverge) when the RHS is a $\textbf{raise}$). The pure-row premise rejects top-level expressions that require capabilities the program root cannot grant; an $\textbf{inject}$ at the top level is the recommended way to introduce capabilities for an evaluating block.
 
-**Two-phase processing for top-level `let`s, mirroring D-Type-* recursion.** A `let factorial = fn (n: i64) -> i64 do … factorial(n: n - 1) … end` references `factorial` inside its own body before the D-Let-Top rule's premise has finished and added it to $\Gamma$. The same hazard applies to mutually recursive top-level functions (`let f = fn …; let g = fn …; f calls g; g calls f`). The two-phase shape introduced for [D-Type-Record](#D-Type-Record) / [D-Type-Sum](#D-Type-Sum) extends to top-level $\textbf{let}$s whose RHS is a $\textbf{fn}$ literal:
-
-1. **Forward registration of arrows.** A pre-pass walks every $\textbf{let}~x = \textbf{fn}~[\langle \overline{X} \rangle](\overline{\ell:\tau}) \to \tau_r;\,\rho_q;\,\rho_e~\textbf{do}~\overline{s}~\textbf{end}$ in the file (and its imports). For each, the *signature* of the arrow — fully constructible from the parameter, return, require, and throws annotations alone — is inserted into $\Gamma$ as $x :^{\omega} S_{\text{pre}}$, where $S_{\text{pre}} = \text{mono}((\overline{\ell:\tau}) \to \tau_r;\,\rho_q;\,\rho_e)$ for the monomorphic case, or the kind-aware $\forall \overline{X{:}\kappa}$ scheme for the polymorphic one. Bodies are not touched in this pass.
-2. **Body resolution.** The left-to-right fold then runs D-Let-Top / D-LetPat-Top. At each $\textbf{let}~x = e$, the body's typing premise sees an environment that already contains $x$ (and every other top-level `let`) at its declared signature, so a self-call $x(\ldots)$ resolves via [T-Var](#T-Var) and a mutual call $g(\ldots)$ inside $f$'s body resolves to $g$'s pre-registered scheme. The rule's conclusion still updates $\mathcal{T}[\Gamma := \Gamma']$ with the body-derived $\Gamma'$ — by construction, $\Gamma'(x)$ matches $S_{\text{pre}}$ on the signature parts that were declared, with body-inferred refinements (e.g.\ effect row narrowing) folded in.
-
-`let x = e` whose RHS is *not* a $\textbf{fn}$ literal (data binding, computed value, etc.) does not participate in the pre-pass and cannot be self-referential in the same direct sense — recursive data constructors go through [D-Type-Sum](#D-Type-Sum)'s pre-registration, not through the top-level `let` channel. The implementation realises Phase 1 in `src/typecheck/infer.nx::infer_let`'s "Pre-register for recursive lambdas" path.
+Self-recursive (`let factorial = fn ... factorial(n: n - 1) ... end`) and mutually-recursive top-level functions are handled by the unified two-phase scheme stated at the top of this section: [D-Let-Forward](#D-Let-Forward) seeds $\Gamma$ with each `let x = fn ...`'s declared signature scheme during the $\vdash_d^{\text{pre}}$ pre-pass; D-Let-Top / D-LetPat-Top then run with that environment, so a self-call $x(\ldots)$ or mutual call $g(\ldots)$ inside $f$'s body resolves through [T-Var](#T-Var). `let x = e` whose RHS is *not* a $\textbf{fn}$ literal (data binding, computed value) does not participate in $\vdash_d^{\text{pre}}$ and cannot be self-referential through the top-level `let` channel — recursive data constructors go through [D-Type-Sum](#D-Type-Sum)'s forward registration instead.
 
 ### Visibility (export)
 
