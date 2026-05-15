@@ -1027,10 +1027,10 @@ $$\dfrac{
   \tau_\to^\star = \begin{cases} \%\tau_\to & \text{if } \Gamma_\text{cap} \neq \emptyset \\ \tau_\to & \text{otherwise} \end{cases}
   \end{array}
 }{
-  \Gamma_\text{cap};\, \rho_q' \vdash_e \textbf{fn}~(\overline{\ell : \tau}) \to \tau_r;\, \rho_q;\, \rho_e~\textbf{do}~\overline{s}~\textbf{end} : \tau_\to^\star \mathbin{!} \lbrace\rbrace
+  \Gamma;\, \rho_q' \vdash_e \textbf{fn}~(\overline{\ell : \tau}) \to \tau_r;\, \rho_q;\, \rho_e~\textbf{do}~\overline{s}~\textbf{end} : \tau_\to^\star \mathbin{!} \lbrace\rbrace
 } \;\textsc{T-Lambda}$$
 
-The lambda is pure ($\mathbin{!} \lbrace\rbrace$). It consumes $\Gamma_\text{cap}$ (captured linear bindings). The body environment includes $\Gamma_\omega$ (captured unrestricted bindings), $\Gamma_\text{cap}$, and the parameters $\overline{x_i :^{q_i} \tau_i}$ — each parameter's usage $q_i$ matches its type's linearity (mirroring [T-Let](#T-Let)). The closure-linearization premise $\tau_\to^\star$ promotes the lambda's type to $\%\tau_\to$ whenever any linear binding is captured: a closure that owns a linear resource is itself one-shot, so two uses of the same closure value would imply two consumptions of the resource. The same shape is reused in [T-Handler](#T-Handler) to linearize handler values that capture linears.
+The lambda is pure ($\mathbin{!} \lbrace\rbrace$). The conclusion's input environment $\Gamma$ is the caller's $\otimes$-split partition that flows into the lambda's construction site — it contains every $\omega$ binding the caller shares (per $\otimes$-split's $\omega$ rule) plus exactly the linear bindings the caller has routed to the lambda partition. The premise then derives the captures $\Gamma_\text{cap}$ (the linear restriction of $\Gamma$ on $\text{fv}(\overline{s})$) and the body's $\omega$ context $\Gamma_\omega$ (the $\omega$ restriction on $\text{fv}(\overline{s})$) from the input. The lambda **consumes** $\Gamma_\text{cap}$ (captured linears flow into the body and must be discharged by [P-FnEnd](#T-Lambda) before the body returns). The body environment includes $\Gamma_\omega$, $\Gamma_\text{cap}$, and the parameters $\overline{x_i :^{q_i} \tau_i}$ — each parameter's usage $q_i$ matches its type's linearity (mirroring [T-Let](#T-Let)). The closure-linearization premise $\tau_\to^\star$ promotes the lambda's type to $\%\tau_\to$ whenever any linear binding is captured: a closure that owns a linear resource is itself one-shot, so two uses of the same closure value would imply two consumptions of the resource. The same shape is reused in [T-Handler](#T-Handler) to linearize handler values that capture linears.
 
 The conclusion's ambient row $\rho_q'$ is **not bound by any premise** — it is the caller's ambient at the lambda's construction site. The rule reads as "for any $\rho_q'$, …": the caller may construct a lambda under any ambient because lambda construction itself produces no effect ($\mathbin{!} \lbrace\rbrace$) and reads no capabilities. The lambda's own body is typed under the **declared** $\rho_q$ (the require row written into the arrow type), not under $\rho_q'$; the connection between $\rho_q'$ and $\rho_q$ is enforced later, at the call site, by [T-App](#T-App)'s $\text{unify}(\rho_q, \text{open}(\rho_q'))$ premise. Treating $\rho_q'$ as universally quantified is the intentional formalisation of "lambda construction is ambient-independent".
 
@@ -1103,7 +1103,7 @@ $$\dfrac{
   \tau_h = \textbf{handler}\;x\;\rho_\text{req}
   \end{array}
 }{
-  \Gamma_\text{cap};\, \rho_q' \vdash_e \textbf{handler}~x~[\textbf{require}~\rho_\text{annot}]~\textbf{do}~\overline{\ell_j = e_j}~\textbf{end} : \tau_h^\star \mathbin{!} \lbrace\rbrace
+  \Gamma;\, \rho_q' \vdash_e \textbf{handler}~x~[\textbf{require}~\rho_\text{annot}]~\textbf{do}~\overline{\ell_j = e_j}~\textbf{end} : \tau_h^\star \mathbin{!} \lbrace\rbrace
 } \;\textsc{T-Handler}$$
 
 $$\tau_h^\star = \begin{cases} \%\tau_h & \text{if } \Gamma_\text{cap} \neq \emptyset \\ \tau_h & \text{otherwise} \end{cases}$$
