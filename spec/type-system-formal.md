@@ -687,7 +687,7 @@ $$\dfrac{\text{pure}(\Gamma)}{\Gamma;\, \rho_q \vdash_e s : \texttt{string} \mat
 $$\dfrac{
   x :^{q} \forall\overline{\alpha}.\,\tau \in \Gamma \qquad
   \tau' = \text{inst}(\forall\overline{\alpha}.\,\tau) \qquad
-  \Gamma \setminus \lbrace x \rbrace ~\text{has no linear bindings}
+  \text{pure}(\Gamma \setminus \lbrace x \rbrace)
 }{
   \Gamma;\, \rho_q \vdash_e x : \tau' \mathbin{!} \lbrace\rbrace
 } \;\textsc{T-Var}$$
@@ -700,7 +700,7 @@ $$\dfrac{
   x :^{\omega} \forall\overline{\alpha}.\,\tau \in \Gamma \qquad
   \tau' = \text{inst}(\forall\overline{\alpha}.\,\tau) \qquad
   \tau' = \mathord{\sim}\sigma \qquad
-  \Gamma \setminus \lbrace x \rbrace ~\text{has no linear bindings}
+  \text{pure}(\Gamma \setminus \lbrace x \rbrace)
 }{
   \Gamma;\, \rho_q \vdash_e \mathord{\sim}x : \sigma \mathbin{!} \lbrace\rbrace
 } \;\textsc{T-Deref}$$
@@ -1078,7 +1078,7 @@ T-Let always produces a monomorphic scheme (see P8). The single exception is the
 $$\dfrac{
   y :^{\omega} \forall\overline{\alpha}.\,\sigma \in \Gamma \qquad
   \overline{\alpha} \neq \emptyset \qquad
-  \Gamma \setminus \lbrace y \rbrace~\text{has no linear bindings}
+  \text{pure}(\Gamma \setminus \lbrace y \rbrace)
 }{
   \Gamma;\, \rho_q;\, \tau_r \vdash_s \textbf{let}~x = y : \Gamma,\, x :^{\omega} (\forall\overline{\alpha}.\,\sigma) \mathbin{!} \lbrace\rbrace
 } \;\textsc{T-Let-Alias}$$
