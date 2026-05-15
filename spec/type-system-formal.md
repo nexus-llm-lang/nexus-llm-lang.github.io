@@ -1673,12 +1673,26 @@ Self-recursive (`let factorial = fn ... factorial(n: n - 1) ... end`) and mutual
 Every declaration above admits an optional `export` prefix in the surface syntax (`export let foo = ...`, `export type Foo = ...`, etc.). The modifier does *not* alter the rule's effect on $\Gamma$ / $\text{typedef}$ / $\text{methods}$ / $\text{variants}$ / $\text{members}$ within the declaring module — `export` and non-`export` declarations populate those five components identically *inside* their module. The modifier governs the sixth component, $\text{exports}$:
 
 $$\dfrac{
-  \mathcal{T} \;\vdash_d\; D \;\Rightarrow\; \mathcal{T}' \qquad \text{declName}(D)~\text{is the name bound by}~D
+  \mathcal{T} \;\vdash_d\; D \;\Rightarrow\; \mathcal{T}'
 }{
-  \mathcal{T} \;\vdash_d\; \textbf{export}~D \;\Rightarrow\; \mathcal{T}'[\text{exports} \mathrel{:=} \text{exports} \cup \lbrace \text{declName}(D) \rbrace]
+  \mathcal{T} \;\vdash_d\; \textbf{export}~D \;\Rightarrow\; \mathcal{T}'[\text{exports} \mathrel{:=} \text{exports} \cup \text{declNames}(D)]
 } \;\textsc{D-Export}$$
 
-D-Export is a *wrapper* — for any declaration form $D$ admitted by §3's other rules, $\textbf{export}~D$ runs $D$'s rule unchanged and additionally records the bound name in $\text{exports}$. $\text{declName}$ is the surface-level identifier $D$ introduces ($x$ for $\textbf{let}~x = e$, $X$ for $\textbf{type}~X$, etc.); a multi-name form like $\textbf{type}~X = c_1 \mathbin{\vert} \ldots \mathbin{\vert} c_n$ adds $\lbrace X, c_1, \ldots, c_n \rbrace$ to $\text{exports}$ in one step. The $\text{exports}$ set is the **inter-module visibility gate**: when another module imports from this one, only entries whose names are in $\text{exports}$ enter the importing $\mathcal{T}$ (see [imports.md](../imports)).
+$\text{declNames}(D)$ is the **set** of names a declaration introduces:
+
+$$\begin{array}{rcl}
+\text{declNames}(\textbf{let}~\mu\,x = e) & = & \lbrace x \rbrace \\
+\text{declNames}(\textbf{let}~p = e) & = & \text{bv}(p) \\
+\text{declNames}(\textbf{type}~X\langle \overline{\alpha} \rangle = \lbrace \overline{\ell : \tau} \rbrace) & = & \lbrace X \rbrace \quad (\text{record}) \\
+\text{declNames}(\textbf{type}~X\langle \overline{\alpha} \rangle = c_1\,\overline{F_1} \mathbin{\vert} \ldots \mathbin{\vert} c_n\,\overline{F_n}) & = & \lbrace X, c_1, \ldots, c_n \rbrace \quad (\text{sum}) \\
+\text{declNames}(\textbf{opaque type}~X\langle \overline{\alpha} \rangle = c_1\,\overline{F_1} \mathbin{\vert} \ldots) & = & \lbrace X \rbrace \quad (\text{opaque sum: constructors withheld}) \\
+\text{declNames}(\textbf{exception}~C\,\overline{F}) & = & \lbrace C \rbrace \\
+\text{declNames}(\textbf{exception group}~G = \ldots) & = & \lbrace G \rbrace \\
+\text{declNames}(\textbf{port}~X~\textbf{do}~\ldots~\textbf{end}) & = & \lbrace X \rbrace \quad (\text{port methods are accessed via}~X.\ell\text{, not as standalone names}) \\
+\text{declNames}(\textbf{external}~x = w : \ldots) & = & \lbrace x \rbrace
+\end{array}$$
+
+D-Export is a *wrapper* — for any declaration form $D$ admitted by §3's other rules, $\textbf{export}~D$ runs $D$'s rule unchanged and additionally records the bound name(s) in $\text{exports}$. The set-valued $\text{declNames}$ captures the multi-name forms cleanly: $\textbf{export type Option<T> = None | Some(val: T)}$ exports $\lbrace \texttt{Option}, \texttt{None}, \texttt{Some} \rbrace$; $\textbf{export opaque type Set = Set(id: i64)}$ exports only $\lbrace \texttt{Set} \rbrace$ (the constructor is hidden by [D-Type-Sum-Opaque](#D-Type-Sum-Opaque) and therefore must also be excluded from $\text{exports}$). The $\text{exports}$ set is the **inter-module visibility gate**: when another module imports from this one, only entries whose names are in $\text{exports}$ enter the importing $\mathcal{T}$ (see [imports.md](../imports)).
 
 D-Type-Sum-Opaque is the one place where module identity directly enters a typing rule: the constructor visibility depends on whether the typing-time module is the defining module $M$. All other rules are module-local in the trivial sense (their effects apply inside whichever module is being type-checked).
 
