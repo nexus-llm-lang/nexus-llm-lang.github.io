@@ -198,6 +198,33 @@ $$\Gamma \setminus\!\!\setminus e \;=\; \lbrace x :^q S \in \Gamma \mid q = \ome
 
 for the **residual** of $\Gamma$ after typing $e$, where $\text{linConsumed}(e\text{'s derivation})$ is the union of linear bindings drawn into [T-Var](#T-Var) leaves anywhere in the derivation tree of $e$. Equivalently: $\text{linConsumed}$ is the set of linear $x \in \text{dom}(\Gamma)$ that the $\otimes$-splits of $e$'s derivation routed into a consuming leaf rather than the residual partition. The residual is well-defined *per derivation* (different $\otimes$-split choices yield different residuals; soundness holds for every choice that lets the derivation type-check).
 
+**Syntactic computation of $\text{linConsumed}$.** Given $\Gamma$, we can also compute $\text{linConsumed}(e, \Gamma)$ structurally on the syntax of $e$ — this is the algorithm the implementation runs and is equivalent to the metatheoretic "T-Var leaves of the derivation" reading whenever a derivation exists. Sub-expression results combine by **disjoint union** $\uplus$, which is undefined when two sub-expressions consume the same linear binding (matching the $\otimes$-split's "$1 + 1 = -$" forbid clause):
+
+$$\begin{array}{rcl}
+\text{linConsumed}(\mu\,x, \Gamma) & = & \begin{cases} \lbrace x \rbrace & \text{if}~\Gamma(x) = (1, S)~\text{and}~\mu \in \lbrace \varepsilon, \%, \mathord{\sim} \rbrace \\ \emptyset & \text{otherwise} \end{cases} \\[8pt]
+\text{linConsumed}(\&x, \Gamma) & = & \emptyset \quad\text{(borrow does not consume)} \\[2pt]
+\text{linConsumed}(c, \Gamma) = \text{linConsumed}(n, \Gamma) = \text{linConsumed}((), \Gamma) & = & \emptyset \\[2pt]
+\text{linConsumed}(@e, \Gamma) = \text{linConsumed}(e.\ell, \Gamma) & = & \text{linConsumed}(e, \Gamma) \\[2pt]
+\text{linConsumed}(e_1 \oplus e_2, \Gamma) & = & \text{linConsumed}(e_1, \Gamma) \uplus \text{linConsumed}(e_2, \Gamma) \\[2pt]
+\text{linConsumed}(f(\overline{\ell : e}), \Gamma) & = & \text{linConsumed}(f, \Gamma) \;\uplus\; \biguplus_i \text{linConsumed}(e_i, \Gamma) \\[2pt]
+\text{linConsumed}(\lbrace \overline{\ell : e} \rbrace, \Gamma) & = & \biguplus_i \text{linConsumed}(e_i, \Gamma) \\[2pt]
+\text{linConsumed}(\textbf{raise}~e, \Gamma) & = & \text{linConsumed}(e, \Gamma) \\[6pt]
+\text{linConsumed}(\textbf{fn}~(\ldots)~\textbf{do}~\overline{s}~\textbf{end}, \Gamma) & = & \lbrace x \in \text{fv}(\overline{s}) \cap \text{dom}(\Gamma) \mid \Gamma(x) = (1, S) \rbrace \\
+& & \text{(captured linears are consumed by the closure)} \\[6pt]
+\text{linConsumed}(\textbf{if}~e_c~\textbf{then}~\overline{s_1}~\textbf{else}~\overline{s_2}, \Gamma) & = & \text{linConsumed}(e_c, \Gamma) \;\uplus\; (\text{linConsumed}(\overline{s_1}, \Gamma) \cap \text{linConsumed}(\overline{s_2}, \Gamma)) \\
+\text{linConsumed}(\textbf{match}~e~\lbrace \overline{p_i \to s_i} \rbrace, \Gamma) & = & \text{linConsumed}(e, \Gamma) \;\uplus\; \textstyle\bigcap_i \text{linConsumed}(\overline{s_i}, \Gamma)
+\end{array}$$
+
+Branch constructs use **intersection** ($\cap$) over arms because only a binding consumed by *every* branch is unconditionally gone — both arms must agree (same binding consumed in each), otherwise the linear obligation is unfulfilled in some path. This mirrors the typing rules' requirement that linear bindings be either consumed in every branch or in none, and matches `src/typecheck/linearity.nx`'s arm-equality check.
+
+For statement sequences, $\text{linConsumed}(\overline{s}, \Gamma)$ folds left-to-right, threading $\Gamma$ through each statement's residual:
+
+$$\text{linConsumed}(\cdot, \Gamma) = \emptyset \qquad \text{linConsumed}(s; \overline{s'}, \Gamma) = \text{linConsumed}(s, \Gamma) \cup \text{linConsumed}(\overline{s'}, \Gamma \setminus\!\!\setminus s)$$
+
+where $\Gamma \setminus\!\!\setminus s$ removes the linears consumed by $s$ before typing the tail. The base cases for individual statements ($\textbf{let}$, $\textbf{return}$, $\mathord{\sim}x \leftarrow e$, etc.) reduce to $\text{linConsumed}$ of their sub-expressions plus any new linear bindings introduced (e.g. $\textbf{let}~\%y = e$ adds $y$ to the env for the tail, but does not itself consume anything from the input $\Gamma$ beyond what $e$ consumed).
+
+The two readings — "T-Var leaves of any derivation" and the syntactic recursion above — coincide on every well-typed program: the recursion eagerly commits to the unique consumption set the $\otimes$-splits would have produced, and undefined-$\uplus$ at any node signals exactly the "$1 + 1 = -$" reject case.
+
 **Statement-judgment outputs read modulo the residual.** Where a rule's conclusion writes $\Gamma' = \Gamma,\, x :^q S$ for a fresh binder $x$, the operational reading is
 
 $$\Gamma' \;=\; (\Gamma \setminus\!\!\setminus e),\, x :^q S$$
