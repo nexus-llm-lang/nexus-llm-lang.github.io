@@ -926,7 +926,7 @@ $$\dfrac{
 
 To unify the result types of multi-branch expressions ([T-If](#T-If), [T-Match](#T-Match)), we introduce $\text{tail}$, which extracts the type produced by the last statement in a sequence, and $\text{branchType}$, which folds the per-branch tails into the conclusion type $\sigma$.
 
-$$\text{tail}(\overline{s}) = \begin{cases} \bot & \text{if last statement is } \textbf{return},\; \textbf{raise}~e\;(\text{as expression statement}),\; \text{or}\; \textbf{let}~\mu\,x = \textbf{raise}~e' \\ \tau & \text{if last statement is an expression of type } \tau \\ \texttt{unit} & \text{otherwise (} \textbf{let},\; \mathord{\sim}x \leftarrow e,\; \textbf{inject},\; \textbf{try}\text{-}\textbf{catch}) \end{cases}$$
+$$\text{tail}(\overline{s}) = \begin{cases} \bot & \text{if last statement is } \textbf{return},\; \textbf{raise}~e\;(\text{as expression statement}),\; \textbf{let}~\mu\,x = \textbf{raise}~e',\; \text{or}\; \textbf{let}~p = e~\text{with}~\text{diverges}(e) \\ \tau & \text{if last statement is an expression of type } \tau \\ \texttt{unit} & \text{otherwise (} \textbf{let},\; \mathord{\sim}x \leftarrow e,\; \textbf{inject},\; \textbf{try}\text{-}\textbf{catch}) \end{cases}$$
 
 $$\text{branchType}(\overline{s_1}, \ldots, \overline{s_n}) = \begin{cases}
 {?}\alpha~(\text{fresh}) & \text{if } \forall i.\;\text{tail}(\overline{s_i}) = \bot \\
@@ -1404,7 +1404,7 @@ $$\dfrac{
   \Gamma;\, \rho_q;\, \tau_r \vdash_s s; \overline{s'} : \Gamma_2 \mathbin{!} \rho_1 \cup \rho_2
 } \;\textsc{T-Seq-Cons}$$
 
-T-Seq-Cons threads the environment ($\Gamma_1$ from the head feeds into the tail) and unions the effect rows. The premise $\text{tail}(s) \neq \bot \vee \overline{s'} = \cdot$ rejects **dead statements after divergence**: if $s$ is $\textbf{return}~e$, $\textbf{raise}~e$ (as expression statement), or $\textbf{let}~\mu\,x = \textbf{raise}~e'$, then $\text{tail}(s) = \bot$ and the sequence must end there. Programs with statements after a $\textbf{return}$ are rejected at type-checking time rather than silently dropped — the rejection surfaces a likely programmer error (writing past a return) and avoids the question of how to type-check unreachable code. The same $\text{tail}$ predicate used in [T-If](#T-If)/[T-Match](#T-Match) is reused here, so divergence handling stays uniform across the spec.
+T-Seq-Cons threads the environment ($\Gamma_1$ from the head feeds into the tail) and unions the effect rows. The premise $\text{tail}(s) \neq \bot \vee \overline{s'} = \cdot$ rejects **dead statements after divergence**: if $s$ is $\textbf{return}~e$, $\textbf{raise}~e$ (as expression statement), $\textbf{let}~\mu\,x = \textbf{raise}~e'$, or $\textbf{let}~p = e$ with $\text{diverges}(e)$, then $\text{tail}(s) = \bot$ and the sequence must end there. Programs with statements after a $\textbf{return}$ are rejected at type-checking time rather than silently dropped — the rejection surfaces a likely programmer error (writing past a return) and avoids the question of how to type-check unreachable code. The destructuring form $\textbf{let}~p = e$ with a divergent RHS is the [T-LetPat-Diverge](#T-LetPat-Diverge) carve-out — both single-binder and pattern-destructuring lets diverge symmetrically when their RHS does. The same $\text{tail}$ predicate used in [T-If](#T-If)/[T-Match](#T-Match) is reused here, so divergence handling stays uniform across the spec.
 
 ### Metatheoretic Properties
 
