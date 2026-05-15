@@ -359,6 +359,24 @@ A $\%$- or $@$-wrapper around a variable, e.g.\ $\%{?}\alpha$ or $\%\alpha$, is 
 
 The two conventions together preserve soundness: any program that type-checks under the variable cases also type-checks at every later refinement of those variables (provided the refinement is consistent with the rest of the derivation). Mechanically, `src/typecheck/linearity.nx`'s `is_linear_binding_type` and `is_auto_droppable` implement these defaults — both fall through to $\text{false}$ on $\texttt{TyVar}$.
 
+**Recursive named types: cycle-guarded fixpoint.** When $\text{linear}(\tau)$ recurses into a named type $x\langle \overline{\tau} \rangle$, it must unfold $x$'s declaration to inspect field/variant types — but a self-referential or mutually-recursive declaration (e.g.\ $\textbf{type}~\texttt{Tree}\langle T \rangle = \texttt{Leaf} \mathbin{\vert} \texttt{Node}(\textit{left}: \texttt{Tree}\langle T \rangle, \ldots)$) makes naive structural recursion non-terminating. The evaluation is therefore parameterised by a **visited set** $V$ and computed as a least fixpoint:
+
+$$\text{linear}(\tau) \;=\; \text{linear}'(\tau, \emptyset) \qquad \text{autoDrop}(\tau) \;=\; \text{autoDrop}'(\tau, \emptyset)$$
+
+with the cycle guard
+
+$$\text{linear}'(x\langle \overline{\tau} \rangle, V) = \begin{cases}
+\text{false} & \text{if}~x \in V \quad (\text{cycle: minimum fixpoint}) \\
+\bigvee_{F~\text{a field-or-variant-arg type of}~\text{unfold}(x\langle \overline{\tau} \rangle)} \text{linear}'(F, V \cup \lbrace x \rbrace) & \text{otherwise}
+\end{cases}$$
+
+and analogously for $\text{autoDrop}'$. All other clauses (the $\%\sigma$, $@\sigma$, $[\lvert\sigma\rvert]$ outermost wrappers, base types, records, lists, type-arg recursion) thread $V$ unchanged. The cycle case returns *false* — the conservative answer that makes the predicate the minimum fixpoint and keeps a recursive type non-linear unless one of its non-recursive components forces linearity. Concretely:
+
+- $\text{linear}(\texttt{Tree}\langle T \rangle)$ where $\texttt{Tree}\langle T \rangle = \texttt{Leaf} \mathbin{\vert} \texttt{Node}(\textit{left}: \texttt{Tree}\langle T \rangle, \textit{val}: T, \textit{right}: \texttt{Tree}\langle T \rangle)$ unfolds to fields $\lbrace \texttt{Tree}\langle T \rangle, T, \texttt{Tree}\langle T \rangle \rbrace$. The two recursive references hit the cycle guard and return $\text{false}$; $T$ is a rigid quantifier (also $\text{false}$). Result: $\text{false}$ — Tree is non-linear unless $T$ is later instantiated to a linear type.
+- $\text{linear}(\texttt{LList}\langle T \rangle)$ where $\texttt{LList}\langle T \rangle = \texttt{Empty} \mathbin{\vert} \texttt{Cons}(\textit{head}: T, \textit{tail}: \%\texttt{LList}\langle T \rangle)$ unfolds to fields $\lbrace T, \%\texttt{LList}\langle T \rangle \rbrace$. The second field's outermost $\%$ wrapper trips the linear clause *before* the cycle guard fires, returning $\text{true}$. Result: $\text{true}$ — the explicit $\%$ on the recursive tail makes the list itself linear.
+
+The implementation memoises by $x \mapsto (\text{linear}, \text{autoDrop})$ to avoid re-walking the body; the spec's $V$ parameter is the metatheoretic counterpart of that memo table.
+
 Linearity is entirely structural: the split $\otimes$ ensures each linear binding ($q = 1$) goes to exactly one sub-derivation, and branching constructs give both arms the same portion of $\Gamma$.
 
 Two additional behaviors are embedded in specific rules rather than stated as standalone inference rules:
