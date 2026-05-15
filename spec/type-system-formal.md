@@ -982,17 +982,31 @@ $$\dfrac{
   \Gamma;\, \rho_q \vdash_e \textbf{raise}~e : {?}\alpha \mathbin{!} \lbrace c \rbrace \cup \rho_0
 } \;\textsc{T-Raise-Ctor}$$
 
+<a id="T-Raise-CtorNullary"></a>
+
+$$\dfrac{
+  \begin{array}{l}
+  e = c \qquad c \in \text{variants}(\texttt{Exn}) \qquad
+  \Gamma(c) = (\omega,\,\forall \overline{\alpha}.\,\texttt{Exn}) \\[2pt]
+  \Gamma;\, \rho_q \vdash_e c : \texttt{Exn} \mathbin{!} \rho_0
+  \end{array}
+}{
+  \Gamma;\, \rho_q \vdash_e \textbf{raise}~e : {?}\alpha \mathbin{!} \lbrace c \rbrace \cup \rho_0
+} \;\textsc{T-Raise-CtorNullary}$$
+
 <a id="T-Raise-Val"></a>
 
 $$\dfrac{
-  e~\text{is not a constructor application} \qquad
+  e~\text{is neither a constructor application nor a bare exception-constructor identifier} \qquad
   \Gamma;\, \rho_q \vdash_e e : \tau \mathbin{!} \rho_0 \qquad
   \text{unify}(\tau, \texttt{Exn})
 }{
   \Gamma;\, \rho_q \vdash_e \textbf{raise}~e : {?}\alpha \mathbin{!} \lbrace \texttt{Exn} \rbrace \cup \rho_0
 } \;\textsc{T-Raise-Val}$$
 
-The split records variant identity in the effect row. T-Raise-Ctor fires when the raise expression is syntactically a constructor application (e.g. $\textbf{raise}~\texttt{NotFound}(\textit{path}: p)$) — the row gets the precise constructor name $\lbrace \texttt{NotFound} \rbrace$. T-Raise-Val fires when the raise expression is a variable, projection, or other non-constructor form yielding $\texttt{Exn}$ (typically a catch-bound binding being re-raised: $\textbf{catch}~e \to \textbf{raise}~e$); the row gets the catch-all sentinel $\lbrace \texttt{Exn} \rbrace$, which subsumes any variant via [U-Row-Exn](#U-Row-Exn). Both rules produce the universal type $?\alpha$ since $\textbf{raise}$ never returns to its caller. The companion [T-TryCatch](#T-TryCatch) consumes these row entries — specific-variant arms subtract specific entries, catch-all arms subtract $\texttt{Exn}$ and any constructors covered by U-Row-Exn.
+The split records variant identity in the effect row. **T-Raise-Ctor** fires when the raise expression is syntactically a constructor application (e.g.\ $\textbf{raise}~\texttt{NotFound}(\textit{path}: p)$) — the row gets the precise constructor name $\lbrace \texttt{NotFound} \rbrace$. **T-Raise-CtorNullary** fires for the bare-identifier form of a zero-field exception (e.g.\ $\textbf{raise}~\texttt{MissingMain}$, where $\texttt{MissingMain}$ is bound at value scheme $\forall \overline{\alpha}.\,\texttt{Exn}$ by the nullary clause of [D-Exception](#D-Exception)) — the row again gets the precise variant name $\lbrace \texttt{MissingMain} \rbrace$, not the catch-all sentinel. **T-Raise-Val** fires for the residual case — a variable, projection, or other expression yielding $\texttt{Exn}$ (typically a catch-bound binding being re-raised: $\textbf{catch}~e \to \textbf{raise}~e$); the row gets the catch-all sentinel $\lbrace \texttt{Exn} \rbrace$, which subsumes any variant via [U-Row-Exn](#U-Row-Exn). All three rules produce the universal type $?\alpha$ since $\textbf{raise}$ never returns to its caller. The companion [T-TryCatch](#T-TryCatch) consumes these row entries — specific-variant arms subtract specific entries, catch-all arms subtract $\texttt{Exn}$ and any constructors covered by U-Row-Exn.
+
+The disambiguation between T-Raise-CtorNullary and T-Raise-Val on a bare identifier follows [P-CtorNullary](#P-CtorNullary)'s convention: $\Gamma$-lookup decides. If $\Gamma(c)$ is a value scheme rooted at $\texttt{Exn}$ (i.e.\ $c$ was declared by the nullary clause of D-Exception), T-Raise-CtorNullary fires and preserves variant precision; otherwise (a catch-bound $e : \texttt{Exn}$, a record-field projection, etc.), T-Raise-Val fires and assigns the catch-all sentinel.
 
 [T-Handler](#T-Handler) types $\textbf{handler}~x~[\textbf{require}~\rho]~\textbf{do}~\overline{\ell = e}~\textbf{end}$ — a record-of-lambdas implementing the methods of port $x$. We assume a global lookup $\text{methods}(x)$ returning the method signatures declared for port $x$ (populated by port declarations, see §1):
 
