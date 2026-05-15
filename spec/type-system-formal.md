@@ -221,12 +221,15 @@ $$\begin{array}{rcl}
 \text{linConsumed}(\textbf{if}~e_c~\textbf{then}~\overline{s_1}~\textbf{else}~\overline{s_2}, \Gamma) & = & \text{linConsumed}(e_c, \Gamma) \;\uplus\; \text{linConsumed}(\overline{s_1}, \Gamma') \\
 & & \text{requires}~\text{linConsumed}(\overline{s_1}, \Gamma') = \text{linConsumed}(\overline{s_2}, \Gamma') \\
 & & \text{where}~\Gamma' = \Gamma \setminus\!\!\setminus e_c \\
-\text{linConsumed}(\textbf{match}~e~\lbrace \overline{p_i \to s_i} \rbrace, \Gamma) & = & \text{linConsumed}(e, \Gamma) \;\uplus\; \text{linConsumed}(\overline{s_1}, \Gamma_1) \\
-& & \text{requires}~\forall i, j.\;\text{linConsumed}(\overline{s_i}, \Gamma_i) = \text{linConsumed}(\overline{s_j}, \Gamma_j) \\
-& & \text{(modulo pattern-introduced binders)}
+\text{linConsumed}(\textbf{match}~e~\lbrace \overline{p_i \to s_i} \rbrace, \Gamma) & = & \text{linConsumed}(e, \Gamma) \;\uplus\; (\text{linConsumed}(\overline{s_1}, \Gamma_1) \setminus \text{bv}(p_1)) \\
+& & \text{requires}~\forall i, j.\;(\text{linConsumed}(\overline{s_i}, \Gamma_i) \setminus \text{bv}(p_i)) = (\text{linConsumed}(\overline{s_j}, \Gamma_j) \setminus \text{bv}(p_j)) \\
+& & \text{requires}~\forall i.\;\forall y :^1 S \in \Gamma_i \setminus \Gamma.\;y \in \text{linConsumed}(\overline{s_i}, \Gamma_i) \\
+& & \text{(pattern-introduced linear binders consumed within their arm)}
 \end{array}$$
 
-Branch constructs require **arm equality** of the linear-consumption sets: every branch must consume the *same* set of input linears (modulo binders the pattern itself introduced, which are local to the arm). The earlier intersection formulation $\cap$ would have admitted a program where one arm consumes $\lbrace a, b \rbrace$ and the other consumes $\lbrace a \rbrace$, leaving $b$ in the residual — but iteration through the first arm would have already consumed $b$, breaking the use-after-consume invariant on whichever arm runs at runtime. Arm equality is the only choice that keeps the residual sound across both control-flow paths, and it matches the impl's `vars_equal` check in `src/typecheck/linearity.nx`'s if/match handling.
+Branch constructs require **arm equality** of the linear-consumption sets, **projected onto the outer environment**: every branch must consume the same subset of input linears, ignoring the binders the pattern itself introduced (which are arm-local). The intersection formulation $\cap$ would have admitted a program where one arm consumes $\lbrace a, b \rbrace$ and the other consumes $\lbrace a \rbrace$, leaving $b$ in the residual — but iteration through the first arm would have already consumed $b$, breaking the use-after-consume invariant on whichever arm runs at runtime. Arm equality is the only choice that keeps the residual sound across both control-flow paths, and it matches the impl's `vars_equal` check in `src/typecheck/linearity.nx`'s if/match handling.
+
+For $\textbf{match}$, the projection step is explicit: each arm's $\Gamma_i$ extends $\Gamma$ with pattern binders (e.g.\ the $x$ in `Some(%x) ->`), and a linear pattern binder is required to be consumed *within its arm* rather than crossing into the outer-Γ equality check. Equivalently, $\text{linConsumed}(\overline{s_i}, \Gamma_i) \setminus \text{bv}(p_i)$ is the arm's consumption restricted to outer-Γ linears, and the second `requires` clause discharges the per-arm obligation on $\Gamma_i \setminus \Gamma$ (the new bindings introduced by $p_i$). $\textbf{if}$ has no pattern binders, so the projection collapses to the plain set equality already shown above.
 
 For statement sequences, $\text{linConsumed}(\overline{s}, \Gamma)$ folds left-to-right, threading $\Gamma$ through each statement's residual:
 
