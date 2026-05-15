@@ -815,11 +815,13 @@ $$\text{open}(\rho) = \begin{cases}
 
 $$\dfrac{
   \begin{array}{c}
-  \Gamma = \Gamma_f \otimes \Gamma_1 \otimes \ldots \otimes \Gamma_k \\[2pt]
+  B = \lbrace x \in \text{dom}(\Gamma) \mid \Gamma(x) = (1, \_) \wedge \exists i.\; e_i = \&x \wedge \forall j.\; x \in \text{fv}(e_j) \implies e_j = \&x \rbrace \\[2pt]
+  \Gamma \mid_B~\text{is shared as}~\omega~\text{across}~\Gamma_f, \Gamma_1, \ldots, \Gamma_k \quad\text{(borrow-only linears coexist; see below)} \\[2pt]
+  (\Gamma \setminus B) = \Gamma_f \otimes \Gamma_1 \otimes \ldots \otimes \Gamma_k \\[2pt]
   \Gamma_f;\, \rho_q \vdash_e f : (\overline{\ell' : P}) \to \tau_r;\, \rho_q';\, \rho_e' \mathbin{!} \rho_f \\[2pt]
   \lbrace \overline{\ell} \rbrace = \lbrace \overline{\ell'} \rbrace \quad\text{(label sets match; no duplicates; full coverage)} \\[2pt]
   \pi: \lbrace 1,\ldots,k \rbrace \to \lbrace 1,\ldots,k \rbrace,\; \ell_i = \ell'_{\pi(i)} \quad\text{(unique permutation by label name)} \\[2pt]
-  \forall i.\;\Gamma_i;\, \rho_q \vdash_e^{\text{arg}} e_i \mathrel{\Updownarrow} P_{\pi(i)} : \tau_i \mathbin{!} \rho_i \\[2pt]
+  \forall i.\;(\Gamma_i \cup \Gamma\mid_B);\, \rho_q \vdash_e^{\text{arg}} e_i \mathrel{\Updownarrow} P_{\pi(i)} : \tau_i \mathbin{!} \rho_i \\[2pt]
   \forall i.\;\begin{cases} \text{unify}(\tau_i, \text{strip}(P_{\pi(i)})) & \text{if } P_{\pi(i)} = \%\sigma \wedge \neg\text{linear}(\tau_i) \\ \text{unify}(\tau_i, P_{\pi(i)}) & \text{otherwise} \end{cases} \\[2pt]
   \text{unify}(\rho_q, \text{open}(\rho_q'))
   \end{array}
@@ -846,6 +848,8 @@ $$\dfrac{
 } \;\textsc{T-App-ArgDefault}$$
 
 T-App-BorrowLin does not consume the linear target ($x$ remains in $\Gamma_i$ after the borrow); T-App-ArgDefault falls through to the ordinary expression-typing path. The carve-out is **call-site syntactic**: only when the argument literally has the form $\&x$ does it apply — `f(p: g(x: &y))` does *not* benefit because the inner $g(\ldots)$ would type the borrow through ordinary T-Borrow first. This mirrors the impl in `src/typecheck/infer.nx::infer_call`'s argument-shape special-case.
+
+**Borrow-set $B$ and same-linear multi-borrow.** The T-App premise pre-extracts the set $B$ of linear bindings $x$ that appear in at least one argument as $\&x$ **and** appear in **no** argument under any other shape (no consuming use of $x$ anywhere in $\overline{e}$), and shares those bindings across **all** sub-environments as if they were $\omega$ (rather than fragmenting them via $\otimes$). This is what makes `f(p: &x, q: &x)` type-check when $x$ is linear: a naive $\otimes$-split would assign $x$ to exactly one $\Gamma_i$ (say $\Gamma_1$), and the second $\&x$ argument's T-App-BorrowLin premise $x :^1 {\ldots} \in \Gamma_2$ would fail. Sharing $\Gamma\mid_B$ as $\omega$ is sound because **borrows do not consume**: every leaf reference to $x$ in argument position routes through T-App-BorrowLin (or its `&x.\ell` projection variants), each of which leaves $x$ in its sub-environment unconsumed. The linearity invariant for $x$ is preserved overall — $x$ still has exactly one ultimate consumer (after the call), namely whatever later statement consumes it; the call itself contributes zero consumptions for any $x \in B$. The element-of premise of T-App-BorrowLin then succeeds in every $\Gamma_i$ that holds an argument $\&x$, since $\Gamma\mid_B$ is unioned into each. Outside argument position, $x$ remains linear and the ordinary $\otimes$-split still applies (e.g. `let y = x in f(&x)` is still rejected if $x$ has been consumed by the `let`). The impl correlate is `src/typecheck/linearity.nx`'s `Borrow` case returning the input state unchanged: borrows leave the live set intact, so repeated borrows of the same linear inside one call do not interfere.
 
 **Capability-row enforcement is deferred** (nexus-mqin.14): the T-App premise $\text{unify}(\rho_q, \text{open}(\rho_q'))$ and the corresponding $\rho_q$ slot on T-Lambda's arrow type are part of the formal rule, but the self-host typechecker constructs lambda arrows with empty $\rho_q'$ and discards the callee's $\rho_q'$ at call sites. Capability admission is currently enforced by a downstream pass on MIR rather than by typecheck. The spec rule remains the reference target; closing the gap is tracked by mqin.14 (impl) — symmetric to how throws-row enforcement was tightened in mqin.1.1.
 
