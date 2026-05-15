@@ -942,7 +942,8 @@ $$\dfrac{
   \text{unify}(\tau_c, \texttt{bool}) \\[2pt]
   \Gamma_b;\, \rho_q;\, \tau_r \vdash_s \overline{s_1} : \Gamma_1' \mathbin{!} \rho_1 \\[2pt]
   \Gamma_b;\, \rho_q;\, \tau_r \vdash_s \overline{s_2} : \Gamma_2' \mathbin{!} \rho_2 \\[2pt]
-  \text{tail}(\overline{s_1}) \neq \bot \wedge \text{tail}(\overline{s_2}) \neq \bot \implies \text{unify}(\text{tail}(\overline{s_1}), \text{tail}(\overline{s_2})) \\[2pt]
+  \text{tail}(\overline{s_1}) \neq \bot \wedge \text{tail}(\overline{s_2}) \neq \bot \implies \\[2pt]
+  \quad \text{unify}(\text{tail}(\overline{s_1}), \text{tail}(\overline{s_2})) \;\wedge\; \text{linConsumed}(\overline{s_1}, \Gamma_b) = \text{linConsumed}(\overline{s_2}, \Gamma_b) \\[2pt]
   \sigma = \text{branchType}(\overline{s_1}, \overline{s_2})
   \end{array}
 }{
@@ -960,7 +961,9 @@ $$\dfrac{
   \text{exhaustive}(\text{strip}(\tau), \overline{p}) \\[4pt]
   \forall i.\;\Gamma_b \vdash p_i : \text{strip}(\tau) \Rightarrow \Gamma_i \\[2pt]
   \forall i.\;\Gamma_i;\, \rho_q;\, \tau_r \vdash_s \overline{s_i} : \Gamma_i' \mathbin{!} \rho_i \\[4pt]
-  \forall i, j.\;\text{tail}(\overline{s_i}) \neq \bot \wedge \text{tail}(\overline{s_j}) \neq \bot \implies \text{unify}(\text{tail}(\overline{s_i}), \text{tail}(\overline{s_j})) \\[2pt]
+  \forall i, j.\;\text{tail}(\overline{s_i}) \neq \bot \wedge \text{tail}(\overline{s_j}) \neq \bot \implies \\[2pt]
+  \quad \text{unify}(\text{tail}(\overline{s_i}), \text{tail}(\overline{s_j})) \;\wedge\; (\text{linConsumed}(\overline{s_i}, \Gamma_i) \setminus \text{bv}(p_i)) = (\text{linConsumed}(\overline{s_j}, \Gamma_j) \setminus \text{bv}(p_j)) \\[2pt]
+  \forall i.\;\forall y :^1 S \in (\Gamma_i \setminus \Gamma_b).\;y \in \text{linConsumed}(\overline{s_i}, \Gamma_i) \quad\text{(pattern-introduced linears consumed within arm)} \\[2pt]
   \sigma = \text{branchType}(\overline{s_1}, \ldots, \overline{s_n})
   \end{array}
 }{
