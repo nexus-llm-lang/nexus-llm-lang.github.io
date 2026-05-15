@@ -1217,7 +1217,7 @@ Idempotency makes $\textbf{let}~\%x = \textit{make\_linear}()$ produce $\%T$ reg
 $$\dfrac{
   \begin{array}{l}
   \Gamma;\, \rho_q \vdash_e e : \tau \mathbin{!} \rho_0 \\[2pt]
-  \tau' = \text{default}(\tau) \\[2pt]
+  \tau' = \begin{cases} \sigma & \text{if annotation } \sigma \text{ present and } \text{unify}(\tau, \sigma) \\ \text{default}(\tau) & \text{otherwise} \end{cases} \\[2pt]
   \mu = \mathord{\sim} \implies \neg\text{linear}(\tau') \\[2pt]
   \tau_f = \text{wrapSigil}(\mu, \tau') \qquad
   S = \text{mono}(\tau_f) \\[2pt]
@@ -1227,7 +1227,7 @@ $$\dfrac{
   \Gamma;\, \rho_q;\, \tau_r \vdash_s \textbf{let}~\mu\,x = e : (\Gamma \setminus\!\!\setminus e),\, x :^{q} S \mathbin{!} \rho_0
 } \;\textsc{T-Let}$$
 
-When the surface syntax includes a type annotation ($\textbf{let}~\mu\,x : \sigma = e$), an additional premise $\text{unify}(\tau', \sigma)$ is required and $\tau'$ is replaced by $\sigma$. When the annotation is absent, $\tau'$ remains as inferred (possibly containing unification variables that are resolved later or defaulted).
+The annotation case **pins** $\tau'$ to $\sigma$ before any defaulting could fire: $\text{unify}(\tau, \sigma)$ resolves the inferred type (which may be $\texttt{intlit}$/$\texttt{floatlit}$) against the user-written annotation, and $\tau'$ takes $\sigma$ verbatim. This matters because — per [U-IntLit / U-FloatLit](#U-IntLit) (nexus-q52x.1) — those unifications return the **empty substitution** and do *not* mutate $\tau$ in place; running $\text{default}(\tau)$ first would commit to $\texttt{i64}$/$\texttt{f64}$ and then mis-unify against any narrower annotation like $\texttt{i32}$. The reproducer is $\textbf{let}~x : \texttt{i32} = 1$: $\tau = \texttt{intlit}$, $\text{unify}(\texttt{intlit}, \texttt{i32})$ succeeds, $\tau' = \texttt{i32}$, accept. Without the case-split — i.e. if $\text{default}$ fired unconditionally — $\tau' = \texttt{i64}$ and the subsequent unify against $\texttt{i32}$ would fail spuriously. This mirrors `src/typecheck/infer.nx::infer_let`: annotation-present skips the literal-defaulter, annotation-absent runs it.
 
 The side-condition $\mu = \mathord{\sim} \implies \neg\text{linear}(\tau')$ enforces the [types.md](../types#mutable-references-) invariant that mutable-ref cells cannot hold linear values. Without it, $\textbf{let}~\mathord{\sim}r = \textit{make\_linear}()$ would produce a $\mathord{\sim}\%T$ binding; subsequent $\mathord{\sim}r$ deref-reads would each yield a fresh $\%T$ value, duplicating the linear resource. The check applies uniformly to inferred types and to explicit annotations ($\textbf{let}~\mathord{\sim}x : \%T = e$). Linearity is structural, so the check also rejects $\mathord{\sim}$ cells holding records or ADTs with any linear component.
 
