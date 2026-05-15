@@ -941,7 +941,12 @@ $$\dfrac{
 
 To unify the result types of multi-branch expressions ([T-If](#T-If), [T-Match](#T-Match)), we introduce $\text{tail}$, which extracts the type produced by the last statement in a sequence, and $\text{branchType}$, which folds the per-branch tails into the conclusion type $\sigma$.
 
-$$\text{tail}(\overline{s}) = \begin{cases} \bot & \text{if last statement is } \textbf{return},\; \textbf{raise}~e\;(\text{as expression statement}),\; \textbf{let}~\mu\,x = \textbf{raise}~e',\; \text{or}\; \textbf{let}~p = e~\text{with}~\text{diverges}(e) \\ \tau & \text{if last statement is an expression of type } \tau \\ \texttt{unit} & \text{otherwise (} \textbf{let},\; \mathord{\sim}x \leftarrow e,\; \textbf{inject},\; \textbf{try}\text{-}\textbf{catch}) \end{cases}$$
+$$\text{tail}(\overline{s}) = \begin{cases} \bot & \text{if last statement is one of:} \\
+& \quad \textbf{return},\; \textbf{raise}~e\;(\text{as expression statement}),\; \textbf{let}~\mu\,x = \textbf{raise}~e',\; \textbf{let}~p = e~\text{with}~\text{diverges}(e), \\
+& \quad \textbf{if}~e_c~\textbf{then}~\overline{s_1}~\textbf{else}~\overline{s_2}~\text{(as expression statement) with}~\text{tail}(\overline{s_1}) = \bot \wedge \text{tail}(\overline{s_2}) = \bot, \\
+& \quad \textbf{match}~e~\lbrace \overline{p_i \to s_i} \rbrace~\text{(as expression statement) with}~\forall i.\;\text{tail}(\overline{s_i}) = \bot \\
+\tau & \text{if last statement is an expression of type } \tau~\text{(non-divergent)} \\
+\texttt{unit} & \text{otherwise (} \textbf{let},\; \mathord{\sim}x \leftarrow e,\; \textbf{inject},\; \textbf{try}\text{-}\textbf{catch},\; \textbf{while}\text{)} \end{cases}$$
 
 $$\text{branchType}(\overline{s_1}, \ldots, \overline{s_n}) = \begin{cases}
 {?}\alpha~(\text{fresh}) & \text{if } \forall i.\;\text{tail}(\overline{s_i}) = \bot \\
