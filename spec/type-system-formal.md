@@ -1554,17 +1554,20 @@ D-Type-Sum simultaneously installs each constructor $c_i$ as an $\omega$-bound p
 
 <a id="D-Type-Sum-Opaque"></a>
 
+D-Type-Sum-Opaque, alone among §3 rules, depends on the **current module being typed**. We thread the current module identity $M_\text{now}$ as an annotation on the declaration judgment, writing $M_\text{now} \vdash \mathcal{T} \;\vdash_d\; D \;\Rightarrow\; \mathcal{T}'$ when the rule reads $M_\text{now}$. For every other rule in §3 the annotation is universally quantified ($M_\text{now}$ is unused), so we elide it from those rules' presentations.
+
 $$\dfrac{
   \begin{array}{l}
   D = \textbf{opaque type}~x\langle \overline{\alpha} \rangle = c_1(\overline{\ell_1 : \tau_1}) \mathbin{\vert} \ldots \mathbin{\vert} c_n(\overline{\ell_n : \tau_n}) \\[2pt]
   S_i = \forall \overline{\alpha}.\,(\overline{\ell_i : \tau_i}) \to x\langle \overline{\alpha} \rangle;\,\lbrace\rbrace;\,\lbrace\rbrace \quad (i = 1, \ldots, n) \\[2pt]
-  M~\text{is the defining module}
+  M_\text{defining}~\text{is the module in whose source}~D~\text{appears} \\[2pt]
+  \mathcal{T}_\text{update} = \begin{cases} \mathcal{T}\!\begin{bmatrix} \Gamma & \mathrel{:=} & \Gamma,\, \overline{c_i :^{\omega} S_i} \\ \text{typedef}(x) & \mathrel{:=} & \forall \overline{\alpha}.\, x\langle \overline{\alpha} \rangle \\ \text{variants}(x) & \mathrel{:=} & \lbrace c_1, \ldots, c_n \rbrace \end{bmatrix} & \text{if}~M_\text{now} = M_\text{defining} \\[12pt] \mathcal{T}[\text{typedef}(x) \mathrel{:=} \forall \overline{\alpha}.\, x\langle \overline{\alpha} \rangle] & \text{otherwise} \end{cases}
   \end{array}
 }{
-  \mathcal{T} \;\vdash_d\; D \;\Rightarrow\; \mathcal{T}\!\begin{bmatrix} \Gamma & \mathrel{:=} & \Gamma,\, \overline{c_i :^{\omega} S_i}~\text{(only when typing inside}~M\text{)} \\ \text{typedef}(x) & \mathrel{:=} & \forall \overline{\alpha}.\, x\langle \overline{\alpha} \rangle \\ \text{variants}(x) & \mathrel{:=} & \lbrace c_1, \ldots, c_n \rbrace~\text{(only when typing inside}~M\text{)} \end{bmatrix}
+  M_\text{now} \vdash \mathcal{T} \;\vdash_d\; D \;\Rightarrow\; \mathcal{T}_\text{update}
 } \;\textsc{D-Type-Sum-Opaque}$$
 
-D-Type-Sum-Opaque restricts the visibility of the constructor entries and the $\text{variants}$ set to the *defining module* $M$: outside $M$, $x$ is in $\text{typedef}$ as an abstract named type (which can be referenced in signatures) but $\overline{c_i}$ are absent from $\Gamma$ and $\text{variants}(x)$ reports the empty set. Importing code therefore cannot apply $c_i$ as a constructor ([T-App](#T-App) looks $c_i$ up in $\Gamma$ and fails) or write a $c_i(\overline{\ell : p})$ pattern ([P-Ctor](#P-Ctor) also fails the lookup); construction and destructuring are only possible through the module's exported functions. The opaque modifier is accepted only on sum-type definitions in the surface grammar; record types and aliases have no opaque variant (`src/frontend/parse_topdef.nx::parse_type_def` reads `is_opaque` only for the enum branch).
+D-Type-Sum-Opaque restricts the visibility of the constructor entries and the $\text{variants}$ set to the *defining module* $M_\text{defining}$: when $M_\text{now} = M_\text{defining}$, the rule fires the full sum-type effects (constructors in $\Gamma$, variant set populated, typedef registered); when $M_\text{now} \neq M_\text{defining}$ (the rule is processed during another module's typing, e.g.\ via an `import` that brought the projected $\mathcal{T}^{\text{export}}_{M_\text{defining}}$ in), only $\text{typedef}(x)$ enters — the constructor schemes and variant set are withheld. Importing code therefore cannot apply $c_i$ as a constructor ([T-App](#T-App) looks $c_i$ up in $\Gamma$ and fails) or write a $c_i(\overline{\ell : p})$ pattern ([P-Ctor](#P-Ctor) also fails the lookup); construction and destructuring are only possible through the module's exported functions. The opaque modifier is accepted only on sum-type definitions in the surface grammar; record types and aliases have no opaque variant (`src/frontend/parse_topdef.nx::parse_type_def` reads `is_opaque` only for the enum branch).
 
 <a id="D-External"></a>
 
