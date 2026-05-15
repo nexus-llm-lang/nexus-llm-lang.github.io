@@ -1424,7 +1424,15 @@ $$\dfrac{
   \mathcal{T} \;\vdash_d\; \textbf{let}~\mu\,x = e \;\Rightarrow\; \mathcal{T}[\Gamma \mathrel{:=} \Gamma']
 } \;\textsc{D-Let-Top}$$
 
-A top-level $\textbf{let}$ is type-checked as an ordinary statement under an empty ambient capability row, an empty effect row, and a $\bot$ return-type (no enclosing function), and reuses [T-Let](#T-Let), [T-Let-PolyFn](#T-Let-PolyFn), or [T-Let-Alias](#T-Let-Alias) according to the RHS shape. The pure-row premise rejects top-level expressions that require capabilities the program root cannot grant; an $\textbf{inject}$ at the top level is the recommended way to introduce capabilities for an evaluating block.
+<a id="D-LetPat-Top"></a>
+
+$$\dfrac{
+  \Gamma;\,\lbrace\rbrace;\,\bot \;\vdash_s\; \textbf{let}~p = e \;:\; \Gamma' \mathbin{!} \lbrace\rbrace
+}{
+  \mathcal{T} \;\vdash_d\; \textbf{let}~p = e \;\Rightarrow\; \mathcal{T}[\Gamma \mathrel{:=} \Gamma']
+} \;\textsc{D-LetPat-Top}$$
+
+A top-level $\textbf{let}$ is type-checked as an ordinary statement under an empty ambient capability row, an empty effect row, and a $\bot$ return-type (no enclosing function): D-Let-Top reuses [T-Let](#T-Let), [T-Let-PolyFn](#T-Let-PolyFn), or [T-Let-Alias](#T-Let-Alias) according to the RHS shape; D-LetPat-Top covers destructuring binders by reusing [T-LetPat](#T-LetPat) (or [T-LetPat-Diverge](#T-LetPat-Diverge) when the RHS is a $\textbf{raise}$). The pure-row premise rejects top-level expressions that require capabilities the program root cannot grant; an $\textbf{inject}$ at the top level is the recommended way to introduce capabilities for an evaluating block.
 
 ### Visibility (export)
 
