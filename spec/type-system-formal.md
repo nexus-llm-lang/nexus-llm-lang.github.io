@@ -1609,7 +1609,8 @@ The implementation realises this in `src/typecheck/check.nx`'s declaration-walk 
 <a id="D-Type-Record"></a>
 
 $$\dfrac{
-  D = \textbf{type}~x\langle \overline{\alpha} \rangle = \lbrace \overline{\ell : \tau} \rbrace
+  D = \textbf{type}~x\langle \overline{\alpha} \rangle = \lbrace \overline{\ell : \tau} \rbrace \qquad
+  \text{distinct}(\overline{\ell})
 }{
   \mathcal{T} \;\vdash_d\; D \;\Rightarrow\; \mathcal{T}[\text{typedef}(x) \mathrel{:=} \forall \overline{\alpha}.\, \lbrace \overline{\ell : \tau} \rbrace]
 } \;\textsc{D-Type-Record}$$
@@ -1619,6 +1620,8 @@ $$\dfrac{
 $$\dfrac{
   \begin{array}{l}
   D = \textbf{type}~x\langle \overline{\alpha} \rangle = c_1\,\overline{F_1} \mathbin{\vert} \ldots \mathbin{\vert} c_n\,\overline{F_n} \quad\text{where each}~\overline{F_i}~\text{is either}~(\overline{\ell_i : \tau_i})~\text{or empty} \\[2pt]
+  \text{distinct}(c_1, \ldots, c_n) \qquad
+  \forall i \in \lbrace 1,\ldots,n \rbrace.\;\overline{F_i} \neq \emptyset \implies \text{distinct}(\overline{\ell_i}) \\[2pt]
   S_i = \begin{cases} \forall \overline{\alpha}.\,(\overline{\ell_i : \tau_i}) \to x\langle \overline{\alpha} \rangle;\,\lbrace\rbrace;\,\lbrace\rbrace & \text{if}~\overline{F_i}~\text{is non-empty (arity} \geq 1\text{)} \\ \forall \overline{\alpha}.\, x\langle \overline{\alpha} \rangle & \text{if}~\overline{F_i}~\text{is empty (nullary)} \end{cases}
   \end{array}
 }{
@@ -1662,6 +1665,8 @@ External declarations bind a name $x$ to a fixed Wasm export $w$ at a stated arr
 $$\dfrac{
   \begin{array}{l}
   D = \textbf{port}~X~\textbf{do}~\overline{\textbf{fn}~\ell_j(\overline{\pi_j}) \to \kappa_j;\,\alpha_j;\,\beta_j}~\textbf{end} \\[2pt]
+  \text{distinct}(\overline{\ell_j \mid j \in J}) \quad\text{(method names are distinct across the port)} \\[2pt]
+  \forall j \in J.\;\text{distinct}(\text{labels}(\overline{\pi_j})) \quad\text{(each method's parameter labels are distinct)} \\[2pt]
   \forall j \in J.\;\text{wfCap}(\alpha_j) \wedge \text{wfThrow}(\beta_j) \quad\text{(per-method declared rows reference known caps / variants)}
   \end{array}
 }{
