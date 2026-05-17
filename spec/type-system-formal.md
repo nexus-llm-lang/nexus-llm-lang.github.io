@@ -460,6 +460,8 @@ $$\dfrac{
   \text{unify}(x\langle\overline{\tau}\rangle, x\langle\overline{\sigma}\rangle)
 } \;\textsc{U-Named}$$
 
+U-Named handles the *symmetric* case where both operands are named types and the names match. The two *asymmetric* cross-shape cases — a named record-typedef appearing opposite a structural record, and the prelude $\texttt{List}\langle\tau\rangle$ enum appearing opposite the surface syntax $[\tau]$ — are covered by [U-Expand](#U-Expand) and [U-ListSugar](#U-ListSugar) below respectively. There is **no** mixed-name case ($\text{unify}(x\langle\overline{\tau}\rangle, y\langle\overline{\sigma}\rangle)$ with $x \neq y$): the symmetry convention plus the absence of such a rule means name mismatch is a unification error, with one exception — when one side is a record-typedef and the other is a structural record, U-Expand unfolds the typedef before comparing.
+
 $$\dfrac{
   \begin{array}{l}
   \overline{c} = \overline{\tau_1} \cap \overline{\tau_2} \qquad
@@ -516,6 +518,8 @@ $$\dfrac{
 
 The $\neg\text{linear}(\tau_2)$ premise blocks borrow-to-ownership smuggling: a value of type $\&\sigma$ supplied where the context demands a linear $\tau_2$ would let the callee consume the underlying resource while the caller (still holding the borrow's source) believes the resource is alive. With the premise, $\textit{consume}(\&\%r)$ is rejected at unification — the borrow must be explicitly cloned or the caller must move ownership.
 
+<a id="U-Expand"></a>
+
 $$\dfrac{
   \text{fields}(x\langle\overline{\tau}\rangle) = \lbrace \overline{\ell : \sigma} \rbrace \qquad
   \text{unify}(\lbrace \overline{\ell : \sigma} \rbrace, R)
@@ -523,13 +527,17 @@ $$\dfrac{
   \text{unify}(x\langle\overline{\tau}\rangle, R)
 } \;\textsc{U-Expand}$$
 
+U-Expand is what makes a value constructed via a record literal (whose inferred type is the structural $\lbrace \overline{\ell : \tau} \rbrace$) unify with a slot annotated using the named-record alias $x\langle\overline{\sigma}\rangle$ — e.g.\ `let p = Pair(fst: 1, snd: 2)` (structural) flowing into `let q: Pair<i64, i64> = p` (named). The premise $\text{fields}(x\langle\overline{\tau}\rangle) = \lbrace \overline{\ell : \sigma} \rbrace$ looks up the record-typedef body $\forall\overline{\alpha}.\,\lbrace \overline{\ell : F} \rbrace$ and substitutes the type arguments to obtain $\sigma_i = F_i[\overline{\alpha := \tau}]$. U-Expand applies **only** to record typedefs; sum typedefs ($\text{type}~x\langle\overline{\alpha}\rangle = c_1 \mid \ldots \mid c_n$) have no structural counterpart and therefore no analogous rule — sum values reach unification already wearing their $x\langle\overline{\tau}\rangle$ skin via the constructor's typing rule [T-Ctor](#T-Ctor). This is also the only place in unification where typedef-unfolding occurs; the related $\text{comparable}$ predicate (§T-Cmp) has its own $\text{unfold}$ helper that does the same job for equality-checking but extends to sums.
+
+<a id="U-ListSugar"></a>
+
 $$\dfrac{
   \text{unify}(\tau_1, \tau_2)
 }{
   \text{unify}([\tau_1],\, \texttt{List}\langle\tau_2\rangle)
 } \;\textsc{U-ListSugar}$$
 
-U-ListSugar bridges the type-level alias: $[\tau]$ in source is identical to the prelude $\texttt{List}\langle\tau\rangle$ enum (see §1, "List literals and the :: cons operator"). Both directions are reachable by the symmetry convention.
+U-ListSugar bridges the type-level alias: $[\tau]$ in source is identical to the prelude $\texttt{List}\langle\tau\rangle$ enum (see §1, "List literals and the :: cons operator"). Both directions are reachable by the symmetry convention. Note that U-ListSugar is a *separate* rule from U-Expand because $\texttt{List}$ is a sum typedef (not a record), so the structural-record machinery of U-Expand does not apply; the bridge is hard-coded to the list pair specifically.
 
 U-Borrow auto-derefs $\&\sigma$ only when it appears on the left (the *actual* position — see the argument-order convention at the start of this section). U-Expand applies in both argument orders via the symmetry convention — the implementation handles both $\text{unify}(x\langle\overline{\tau}\rangle, R)$ and $\text{unify}(R, x\langle\overline{\tau}\rangle)$.
 
@@ -1135,7 +1143,7 @@ The handler is pure ($\mathbin{!} \lbrace\rbrace$) — its construction has no e
 
 As with [T-Lambda](#T-Lambda), the conclusion's ambient $\rho_q'$ is universally quantified — handler construction is ambient-independent (the per-arm $\alpha_j$ are validated against the arms' own bodies, not the surrounding ambient). The connection between $\rho_q'$ and $\rho_\text{req}$ is enforced at the [T-Inject](#T-Inject) site.
 
-**Arm/method 1-1 correspondence.** The premise $\lbrace \ell_j \mid j \in J \rbrace = \lbrace \ell \mid (\ell = e) \in \overline{\ell_j = e_j} \rbrace$ enforces that the handler literal supplies exactly the methods declared on port $x$ — no missing arm (which would leave a port-method invocation through [T-PortCall](#T-PortCall) with no implementation at runtime) and no extra arm (which would silently introduce a name unreachable by any method-dispatch path). Earlier formulations indexed the per-arm typing premise by $j \in J$ alone, which left the case of an extra user arm $\ell_\text{extra} = e_\text{extra}$ never type-checked and the case of a missing arm vacuously satisfied; this premise makes both failure modes a rule-level rejection. The same shape mirrors how [T-Record](#T-Record)'s $\text{distinct}(\overline{\ell})$ + [T-App](#T-App)'s label-permutation premises pin record-construction field sets to declared shapes. The impl in `src/typecheck/check.nx::check_handler` performs the same set-equality.
+**Arm/method 1-1 correspondence.** The premise $\lbrace \ell_j \mid j \in J \rbrace = \lbrace \ell \mid (\ell = e) \in \overline{\ell_j = e_j} \rbrace$ enforces that the handler literal supplies exactly the methods declared on port $x$ — no missing arm (which would leave a port-method invocation through [T-PortCall](#T-PortCall) with no implementation at runtime) and no extra arm (which would silently introduce a name unreachable by any method-dispatch path). Earlier formulations indexed the per-arm typing premise by $j \in J$ alone, which left the case of an extra user arm $\ell_\text{extra} = e_\text{extra}$ never type-checked and the case of a missing arm vacuously satisfied; this premise makes both failure modes a rule-level rejection. The same shape mirrors how [T-Record](#T-Record)'s $\text{distinct}(\overline{\ell})$ + [T-App](#T-App)'s label-permutation premises pin record-construction field sets to declared shapes. The impl in `src/typecheck/check.nx::validate_handler_arm_sets` performs the same set-equality, invoked from `check_program` before any arm signature/body work — a structurally incomplete handler is rejected before `register_handler_bindings` would have admitted it.
 
 $$\dfrac{
   x :^{\omega} \forall\overline{\alpha}.\,\tau \in \Gamma \qquad
@@ -1221,7 +1229,7 @@ Idempotency makes $\textbf{let}~\%x = \textit{make\_linear}()$ produce $\%T$ reg
 $$\dfrac{
   \begin{array}{l}
   \Gamma;\, \rho_q \vdash_e e : \tau \mathbin{!} \rho_0 \\[2pt]
-  \tau' = \begin{cases} \sigma & \text{if annotation } \sigma \text{ present and } \text{unify}(\tau, \sigma) \\ \text{default}(\tau) & \text{otherwise} \end{cases} \\[2pt]
+  \tau' = \begin{cases} \sigma~\text{and}~\text{unify}(\tau, \sigma) & \text{if annotation } \sigma \text{ present (unification must succeed; rule fails otherwise)} \\ \text{default}(\tau) & \text{if annotation absent} \end{cases} \\[2pt]
   \mu = \mathord{\sim} \implies \neg\text{linear}(\tau') \\[2pt]
   \tau_f = \text{wrapSigil}(\mu, \tau') \qquad
   S = \text{mono}(\tau_f) \\[2pt]
@@ -1231,7 +1239,9 @@ $$\dfrac{
   \Gamma;\, \rho_q;\, \tau_r \vdash_s \textbf{let}~\mu\,x = e : (\Gamma \setminus\!\!\setminus e),\, x :^{q} S \mathbin{!} \rho_0
 } \;\textsc{T-Let}$$
 
-The annotation case **pins** $\tau'$ to $\sigma$ before any defaulting could fire: $\text{unify}(\tau, \sigma)$ resolves the inferred type (which may be $\texttt{intlit}$/$\texttt{floatlit}$) against the user-written annotation, and $\tau'$ takes $\sigma$ verbatim. This matters because — per [U-IntLit / U-FloatLit](#U-IntLit) (nexus-q52x.1) — those unifications return the **empty substitution** and do *not* mutate $\tau$ in place; running $\text{default}(\tau)$ first would commit to $\texttt{i64}$/$\texttt{f64}$ and then mis-unify against any narrower annotation like $\texttt{i32}$. The reproducer is $\textbf{let}~x : \texttt{i32} = 1$: $\tau = \texttt{intlit}$, $\text{unify}(\texttt{intlit}, \texttt{i32})$ succeeds, $\tau' = \texttt{i32}$, accept. Without the case-split — i.e. if $\text{default}$ fired unconditionally — $\tau' = \texttt{i64}$ and the subsequent unify against $\texttt{i32}$ would fail spuriously. This mirrors `src/typecheck/infer.nx::infer_let`: annotation-present skips the literal-defaulter, annotation-absent runs it.
+The annotation case **pins** $\tau'$ to $\sigma$ before any defaulting could fire: $\text{unify}(\tau, \sigma)$ resolves the inferred type (which may be $\texttt{intlit}$/$\texttt{floatlit}$) against the user-written annotation, and $\tau'$ takes $\sigma$ verbatim. The two cases are **mutually exclusive on annotation presence alone** — when an annotation $\sigma$ is present and $\text{unify}(\tau, \sigma)$ fails, the rule itself fails (no fallback to $\text{default}$). Reading the case-split as "if annotation-present-AND-unify-succeeds, else default" would silently accept $\textbf{let}~x : \texttt{i32} = \texttt{"hello"}$ by running $\text{default}(\texttt{string}) = \texttt{string}$ in the "otherwise" branch, ignoring the annotation. The correct reading: annotation-present always selects the annotation case; the unification is a *side condition* of that case, not a discriminator between cases.
+
+The annotation case matters because — per [U-IntLit / U-FloatLit](#U-IntLit) (nexus-q52x.1) — those unifications return the **empty substitution** and do *not* mutate $\tau$ in place; running $\text{default}(\tau)$ first would commit to $\texttt{i64}$/$\texttt{f64}$ and then mis-unify against any narrower annotation like $\texttt{i32}$. The reproducer is $\textbf{let}~x : \texttt{i32} = 1$: $\tau = \texttt{intlit}$, $\text{unify}(\texttt{intlit}, \texttt{i32})$ succeeds, $\tau' = \texttt{i32}$, accept. Without the case-split — i.e. if $\text{default}$ fired unconditionally — $\tau' = \texttt{i64}$ and the subsequent unify against $\texttt{i32}$ would fail spuriously. This mirrors `src/typecheck/infer.nx::infer_let`: annotation-present skips the literal-defaulter and surfaces unification failure as an error; annotation-absent runs the defaulter.
 
 The side-condition $\mu = \mathord{\sim} \implies \neg\text{linear}(\tau')$ enforces the [types.md](../types#mutable-references-) invariant that mutable-ref cells cannot hold linear values. Without it, $\textbf{let}~\mathord{\sim}r = \textit{make\_linear}()$ would produce a $\mathord{\sim}\%T$ binding; subsequent $\mathord{\sim}r$ deref-reads would each yield a fresh $\%T$ value, duplicating the linear resource. The check applies uniformly to inferred types and to explicit annotations ($\textbf{let}~\mathord{\sim}x : \%T = e$). Linearity is structural, so the check also rejects $\mathord{\sim}$ cells holding records or ADTs with any linear component.
 
