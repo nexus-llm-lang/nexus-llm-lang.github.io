@@ -79,7 +79,7 @@ cap Fs do
   fn exists(path: string) -> bool
   fn read_to_string(path: string) -> string throws { Exn }
 
-  // Mutating (raise on failure)
+  // Mutating (throw on failure)
   fn write_string(path: string, content: string) -> unit throws { Exn }
   fn append_string(path: string, content: string) -> unit throws { Exn }
   fn remove_file(path: string) -> unit throws { Exn }
@@ -124,7 +124,7 @@ type Request = Request(method: string, path: string, headers: string, body: stri
 **Direct-call API** (no `inject` required):
 
 ```nexus
-// HTTP client (all raise on failure)
+// HTTP client (all throw on failure)
 fn get(url: string) -> string require { PermNet } throws { Exn }
 fn post(url: string, body: string) -> string require { PermNet } throws { Exn }
 fn request_raw(method: string, url: string, headers: string, body: string) -> Response require { PermNet } throws { Exn }
@@ -142,7 +142,7 @@ fn stop(server: %Server) -> unit require { PermNet }
 
 ```nexus
 cap Net do
-  // HTTP client (all raise on failure)
+  // HTTP client (all throw on failure)
   fn get(url: string) -> string throws { Exn }
   fn request(method: string, url: string, headers: [ Header ], body: string) -> Response throws { Exn }
 
@@ -466,7 +466,7 @@ fn to_string(exn: Exn) -> string
 fn backtrace(exn: Exn) -> [string]
 ```
 
-`backtrace` returns call-stack frames (with source file and line info) captured at the raise point.
+`backtrace` returns call-stack frames (with source file and line info) captured at the throw point.
 
 ### Char (`std:char`)
 

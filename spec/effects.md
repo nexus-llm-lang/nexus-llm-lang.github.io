@@ -26,7 +26,7 @@ let greet = fn (msg: string) -> unit require { Console } do
 end
 
 let risky = fn () -> unit throws { Exn } do
-  raise RuntimeError(val: "oops")
+  throw RuntimeError(val: "oops")
 end
 ```
 
@@ -38,7 +38,7 @@ The only builtin throws type is `Exn`. `try/catch` discharges `Exn` from the pro
 exception NotFound(msg: string)
 
 let search = fn (key: string) -> string throws { Exn } do
-  raise NotFound(msg: key)
+  throw NotFound(msg: key)
 end
 
 let main = fn () -> unit do
@@ -60,7 +60,7 @@ Exception declarations extend the builtin `Exn` type:
 export exception PermissionDenied(msg: string, code: i64)
 ```
 
-`raise` is an expression that immediately unwinds to the nearest `catch`. All I/O capabilities use the capability system, not throws.
+`throw` is an expression that immediately unwinds to the nearest `catch`. All I/O capabilities use the capability system, not throws.
 
 ## Capabilities
 

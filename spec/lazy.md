@@ -14,7 +14,7 @@ A lazy binding `let @x = expr` suspends `expr` as an unevaluated thunk. Forcing 
 - **No async/await keywords**: `@` integrates into the existing sigil system (`%` linear, `&` borrow, `@` lazy) rather than adding new syntax
 - **Lazy, not eager**: Unlike JS Promises (eager evaluation, implicit error swallowing), `@` thunks are unevaluated until forced
 - **One-shot continuation**: Internally based on one-shot delimited continuations (cf. OCaml 5). Linear types guarantee single-use — no copying, no multi-shot
-- **Exception propagation**: No separate rejection channel. `raise` inside a thunk propagates via standard `try/catch` at the force site
+- **Exception propagation**: No separate rejection channel. `throw` inside a thunk propagates via standard `try/catch` at the force site
 
 ## Sigil Table
 
@@ -131,7 +131,7 @@ Exceptions raised inside a thunk propagate at the force site via standard `try/c
 
 ```nexus
 let @result = do
-  raise NotFound(path: "/missing")
+  throw NotFound(path: "/missing")
 end
 
 try

@@ -215,10 +215,10 @@ let val = (&%arr)[0]  // array index
 let name = user.name  // record field access
 ```
 
-### Raise Expression
+### Throw Expression
 
 ```nexus
-raise NotFound(msg: "key")
+throw NotFound(msg: "key")
 ```
 
 ## Statements
@@ -571,7 +571,7 @@ match_expr       ::= "match" expr "do" match_case_expr* "end"
 match_case_expr  ::= "|" or_pattern "->" expr
 
 atom_expr        ::= "(" expr ")"
-                   | raise_expr
+                   | throw_expr
                    | borrow_expr
                    | lambda_expr
                    | handler_expr
@@ -584,7 +584,7 @@ atom_expr        ::= "(" expr ")"
                    | literal
                    | variable
 
-raise_expr       ::= ( "raise" | "throw" ) expr   (* "throw" is a lexer-level synonym *)
+throw_expr       ::= "throw" expr
 borrow_expr      ::= "&" [ sigil ] IDENT
 lambda_expr      ::= "fn" [ type_params ] "(" [ param ( "," param )* ] ")"
                      "->" type [ "require" throws_type ] [ "throws" throws_type ]

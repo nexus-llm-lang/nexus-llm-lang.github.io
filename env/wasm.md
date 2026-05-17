@@ -220,7 +220,7 @@ Return values use the same types as internal functions (strings return as packed
 |---|---|---|
 | `<module>.wasm` | `<wasm_name>` | Each `external` binding |
 | stdlib module | `allocate` | If objects + stdlib present |
-| `nexus:runtime/backtrace` | `__nx_capture_backtrace` | If `raise`/`try` with backtrace |
+| `nexus:runtime/backtrace` | `__nx_capture_backtrace` | If `throw`/`try` with backtrace |
 | `nexus:runtime/lazy` | `__nx_lazy_spawn`, `__nx_lazy_join` | If DAG-parallel `@` forces present |
 
 #### Custom Sections

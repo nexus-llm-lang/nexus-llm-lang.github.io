@@ -47,7 +47,7 @@ A value of structurally-linear type must reach exactly one of the following chan
 | Pattern match | `match %v do \| C(...) -> ... end` | The scrutinee is consumed; bindings in the pattern carry the obligation forward (see [types.md](types)) |
 | Return | `return %v` | Transfers obligation to the caller |
 | Assignment | `~r <- %v` | Transfers obligation into the mutable cell (subject to `~` rules) |
-| Raise | `raise SomeExn(payload: %v)` | The payload is consumed; control leaves the scope |
+| Throw | `throw SomeExn(payload: %v)` | The payload is consumed; control leaves the scope |
 
 `let _ = e` is **not** a consumption channel. It is allowed only when the right-hand side is auto-droppable. See [Wildcard Discard](#wildcard-discard) below.
 
@@ -59,7 +59,7 @@ A value of structurally-linear type must reach exactly one of the following chan
 
 A call whose `throws` row is non-empty is treated as a potential exit. Any linear binding live at such a call site that is not also re-consumed inside every catch arm is rejected with `LinearLeakAcrossThrowableCall`. The rule is documented in [semantics.md](semantics) §Exception Propagation and implemented at `src/typecheck/linearity.nx:1032-1043`.
 
-> **Note**: there is no runtime cleanup on unwind. The leak guard relies on the fact that, by the time `raise` actually executes, no linear obligation can be live in the abandoned scope — the type checker has proven it.
+> **Note**: there is no runtime cleanup on unwind. The leak guard relies on the fact that, by the time `throw` actually executes, no linear obligation can be live in the abandoned scope — the type checker has proven it.
 
 ## Wildcard Discard
 
@@ -129,7 +129,7 @@ When a linear closure is consumed, the heap object is **not** freed by codegen; 
 
 ## Exceptions and Drop
 
-`raise` in Nexus emits WASM `op_throw` (with a `try_table` for catch); it does not run any cleanup landingpads. The static guarantee that "no linear is live across a throwable boundary unless re-consumed in every catch arm" is what keeps the program leak-free; the runtime never gets a chance to "drop" anything on unwind because, by construction, there is nothing to drop.
+`throw` in Nexus emits WASM `op_throw` (with a `try_table` for catch); it does not run any cleanup landingpads. The static guarantee that "no linear is live across a throwable boundary unless re-consumed in every catch arm" is what keeps the program leak-free; the runtime never gets a chance to "drop" anything on unwind because, by construction, there is nothing to drop.
 
 This shape is structural, not aspirational: adding a destructor type later would require landing-pad codegen that does not currently exist.
 

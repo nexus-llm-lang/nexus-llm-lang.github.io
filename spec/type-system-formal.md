@@ -27,7 +27,7 @@ e & ::= & \mu\,x \mid c & \text{variable with modality / constructor} \\
   & \mid & \textbf{match}~e~\lbrace \overline{p \to s} \rbrace & \text{pattern match} \\
   & \mid & \lbrace \overline{\ell : e} \rbrace & \text{record} \\
   & \mid & e.\ell & \text{projection} \\
-  & \mid & \textbf{raise}~e & \text{raise exception} \\
+  & \mid & \textbf{throw}~e & \text{throw exception} \\
   & \mid & \textbf{handler}~x~[\textbf{require}~\rho]~\textbf{do}~\overline{\ell = e}~\textbf{end} & \text{handler (each } e \text{ is a lambda)} \\[6pt]
 s & ::= & \textbf{let}~\mu\,x = e & \text{binding} \\
   & \mid & \textbf{let}~p = e & \text{destructuring} \\
@@ -88,11 +88,11 @@ In expression position, $\mu\,x$ with $\mu \in \{\varepsilon, \%, \mathord{\sim}
 
 ### Row Types
 
-The row type $\rho$ is used for both the effect position ($\rho_e$, in $\textbf{throws}$) and the capability position ($\rho_q$, in $\textbf{require}$) of function types. Both positions share the same structure — row extension, unification, row variable instantiation — so no separate syntactic category is needed. The distinction is semantic: $\rho_e$ ranges over exception types, $\rho_q$ ranges over a **mixed alphabet** of system capabilities and user-declared port names (defined immediately below). No kind system enforces the row-position invariant; it is maintained by the introduction rules (T-Raise adds to $\rho_e$; [T-Inject](#T-Inject) and port/cap declarations add to $\rho_q$).
+The row type $\rho$ is used for both the effect position ($\rho_e$, in $\textbf{throws}$) and the capability position ($\rho_q$, in $\textbf{require}$) of function types. Both positions share the same structure — row extension, unification, row variable instantiation — so no separate syntactic category is needed. The distinction is semantic: $\rho_e$ ranges over exception types, $\rho_q$ ranges over a **mixed alphabet** of system capabilities and user-declared port names (defined immediately below). No kind system enforces the row-position invariant; it is maintained by the introduction rules (T-Throw adds to $\rho_e$; [T-Inject](#T-Inject) and port/cap declarations add to $\rho_q$).
 
 In the current language, the only effect is checked exceptions. $\rho_e$ is a row of **exception-constructor names**: each user `exception C(...)` declaration extends the global $\texttt{Exn}$ sum with constructor $C$ and simultaneously introduces $C$ as a row-entry symbol usable in $\textbf{throws}$ rows. So $\rho_e$ may be $\lbrace\rbrace$ (pure), a closed set of specific variants $\lbrace C_1, \ldots, C_n \rbrace$, an open variant row $\lbrace C_1, \ldots, C_n \mid {?}r \rbrace$, or contain the catch-all sentinel $\texttt{Exn}$ (see below).
 
-$\texttt{Exn}$ itself is the **top of the exception lattice** — the type assigned to a binding that captures *any* exception (e.g. $\textbf{catch}~e \to \ldots$ binds $e : \texttt{Exn}$). $\texttt{Exn}$ surfaces as a row entry only when re-raising such a catch-all binding: $\textbf{raise}~e$ for $e : \texttt{Exn}$ emits $\lbrace \texttt{Exn} \rbrace$, indicating "may raise any variant". Specific-variant rows $\lbrace C_i \rbrace$ are subsumed by $\lbrace \texttt{Exn} \rbrace$ via [U-Row-Exn](#U-Row-Exn) below; otherwise rows unify by entry equality (no implicit subtyping).
+$\texttt{Exn}$ itself is the **top of the exception lattice** — the type assigned to a binding that captures *any* exception (e.g. $\textbf{catch}~e \to \ldots$ binds $e : \texttt{Exn}$). $\texttt{Exn}$ surfaces as a row entry only when re-raising such a catch-all binding: $\textbf{throw}~e$ for $e : \texttt{Exn}$ emits $\lbrace \texttt{Exn} \rbrace$, indicating "may throw any variant". Specific-variant rows $\lbrace C_i \rbrace$ are subsumed by $\lbrace \texttt{Exn} \rbrace$ via [U-Row-Exn](#U-Row-Exn) below; otherwise rows unify by entry equality (no implicit subtyping).
 
 Exception groups (`exception group G = C_1 | C_2 | \ldots`, see [Exception Groups](../exception-groups)) are syntactic shortcuts: anywhere $G$ appears in a row position or a catch-arm pattern, it expands to its declared member set $\lbrace C_1, C_2, \ldots \rbrace$ at parse time. The formal rules never observe groups directly — only their expansions.
 
@@ -137,7 +137,7 @@ $$\rho \setminus S = \begin{cases}
 \lbrace (\overline{\tau} \setminus S) \mid {?}r \rbrace & \text{if}~\rho = \lbrace \overline{\tau} \mid {?}r \rbrace
 \end{cases}$$
 
-Reading: a catch arm subtracts caught-variant names from the *known* part of the try-body's throws row; whatever the tail ${?}r$ stands for (variants the body could raise that the typer hasn't pinned yet) is forwarded unchanged into the residual. [T-TryCatch](#T-TryCatch)'s $\rho_\text{residual}$ uses exactly this operation; the catch-all carve-out additionally subtracts $\texttt{Exn}$.
+Reading: a catch arm subtracts caught-variant names from the *known* part of the try-body's throws row; whatever the tail ${?}r$ stands for (variants the body could throw that the typer hasn't pinned yet) is forwarded unchanged into the residual. [T-TryCatch](#T-TryCatch)'s $\rho_\text{residual}$ uses exactly this operation; the catch-all carve-out additionally subtracts $\texttt{Exn}$.
 
 **Membership** ($x \in \rho$).
 
@@ -213,7 +213,7 @@ $$\begin{array}{rcl}
 \text{linConsumed}(e_1 \oplus e_2, \Gamma) & = & \text{linConsumed}(e_1, \Gamma) \uplus \text{linConsumed}(e_2, \Gamma) \\[2pt]
 \text{linConsumed}(f(\overline{\ell : e}), \Gamma) & = & \text{linConsumed}(f, \Gamma) \;\uplus\; \biguplus_i \text{linConsumed}(e_i, \Gamma) \\[2pt]
 \text{linConsumed}(\lbrace \overline{\ell : e} \rbrace, \Gamma) & = & \biguplus_i \text{linConsumed}(e_i, \Gamma) \\[2pt]
-\text{linConsumed}(\textbf{raise}~e, \Gamma) & = & \text{linConsumed}(e, \Gamma) \\[6pt]
+\text{linConsumed}(\textbf{throw}~e, \Gamma) & = & \text{linConsumed}(e, \Gamma) \\[6pt]
 \text{linConsumed}(\textbf{fn}~(\ldots)~\textbf{do}~\overline{s}~\textbf{end}, \Gamma) & = & \lbrace x \in \text{fv}(\overline{s}) \cap \text{dom}(\Gamma) \mid \Gamma(x) = (1, S) \rbrace \\
 & & \text{(captured linears are consumed by the closure)} \\[2pt]
 \text{linConsumed}(\textbf{handler}~x~[\textbf{require}~\rho]~\textbf{do}~\overline{\ell_j = e_j}~\textbf{end}, \Gamma) & = & \lbrace y \in \textstyle\bigcup_j \text{fv}(e_j) \cap \text{dom}(\Gamma) \mid \Gamma(y) = (1, S) \rbrace \\
@@ -230,7 +230,7 @@ $$\begin{array}{rcl}
 & & \text{(pattern-introduced linear binders consumed within their arm — every arm, divergent or not)}
 \end{array}$$
 
-Branch constructs require **arm equality** of the linear-consumption sets *among non-divergent arms only*, projected onto the outer environment. Divergent arms (those with $\text{tail} = \bot$) are excluded from the equality requirement because their control flow never reaches the branch's joinpoint — whichever consumption they made is observably irrelevant to the residual computation. Concretely, an `if cond then consume(%a); return () else raise X end` is well-typed under this rule: the `else` arm diverges, so the equality `linConsumed(then) = linConsumed(else)` does not have to hold; $L_\text{if}$ takes the surviving non-divergent arm's consumption (`{a}` from the `then` arm). This carve-out mirrors the corresponding divergent-arm exclusion already present in T-If's / T-Match's $\text{tail}(\overline{s_i}) \neq \bot \implies \ldots$ premise, and matches `src/typecheck/linearity.nx`'s `if then_diverges then return st_else end` fall-through. Pattern-introduced linear binders are required to be consumed within their arm regardless of divergence — a divergent arm's pattern still binds names that must be observably consumed before the arm's control-flow exit (the same way a divergent arm's body still type-checks its statements).
+Branch constructs require **arm equality** of the linear-consumption sets *among non-divergent arms only*, projected onto the outer environment. Divergent arms (those with $\text{tail} = \bot$) are excluded from the equality requirement because their control flow never reaches the branch's joinpoint — whichever consumption they made is observably irrelevant to the residual computation. Concretely, an `if cond then consume(%a); return () else throw X end` is well-typed under this rule: the `else` arm diverges, so the equality `linConsumed(then) = linConsumed(else)` does not have to hold; $L_\text{if}$ takes the surviving non-divergent arm's consumption (`{a}` from the `then` arm). This carve-out mirrors the corresponding divergent-arm exclusion already present in T-If's / T-Match's $\text{tail}(\overline{s_i}) \neq \bot \implies \ldots$ premise, and matches `src/typecheck/linearity.nx`'s `if then_diverges then return st_else end` fall-through. Pattern-introduced linear binders are required to be consumed within their arm regardless of divergence — a divergent arm's pattern still binds names that must be observably consumed before the arm's control-flow exit (the same way a divergent arm's body still type-checks its statements).
 
 For $\textbf{match}$, the projection step is explicit: each arm's $\Gamma_i$ extends $\Gamma$ with pattern binders (e.g.\ the $x$ in `Some(%x) ->`), and a linear pattern binder is required to be consumed *within its arm* rather than crossing into the outer-Γ equality check. Equivalently, $\text{linConsumed}(\overline{s_i}, \Gamma_i) \setminus \text{bv}(p_i)$ is the arm's consumption restricted to outer-Γ linears, and the second `requires` clause discharges the per-arm obligation on $\Gamma_i \setminus \Gamma$ (the new bindings introduced by $p_i$). $\textbf{if}$ has no pattern binders, so the projection collapses to the plain set equality already shown above.
 
@@ -297,7 +297,7 @@ $$\begin{array}{rcl}
 \text{fv}(\lbrace \overline{\ell : e} \rbrace) & = & \textstyle\bigcup_i \text{fv}(e_i) \\
 \text{fv}(e.\ell) & = & \text{fv}(e) \\
 \text{fv}(@e) = \text{fv}(\&x) & = & \text{fv}(e),\;\lbrace x \rbrace~\text{respectively} \\
-\text{fv}(\textbf{raise}~e) & = & \text{fv}(e) \\
+\text{fv}(\textbf{throw}~e) & = & \text{fv}(e) \\
 \text{fv}(\textbf{handler}~x~[\textbf{require}~\rho]~\textbf{do}~\overline{\ell = e}~\textbf{end}) & = & \textstyle\bigcup_j \text{fv}(e_j)
 \end{array}$$
 
@@ -357,7 +357,7 @@ $$\text{linear}({?}\alpha) = \text{linear}(\alpha) = \text{false}\qquad \text{au
 
 A $\%$- or $@$-wrapper around a variable, e.g.\ $\%{?}\alpha$ or $\%\alpha$, is still linear by the outermost-wrapper clause — only a bare variable defaults to non-linear. The convention is conservative in two opposite ways:
 
-- $\text{linear} = \text{false}$ on a bare variable means [P-Var](#P-Var) assigns $q = \omega$ to a pattern bound at type $?\alpha$ (e.g.\ the divergent-RHS case where $\textbf{raise}~e$ returns $?\alpha$). The binding never carries a linear obligation; the unifier may later refine $?\alpha$ to a non-linear concrete type without re-evaluation. If a later occurrence demands linear ($\%\sigma$), unification refines $?\alpha$ at the wrapped position and the $\%$-clause makes linearity locally visible.
+- $\text{linear} = \text{false}$ on a bare variable means [P-Var](#P-Var) assigns $q = \omega$ to a pattern bound at type $?\alpha$ (e.g.\ the divergent-RHS case where $\textbf{throw}~e$ returns $?\alpha$). The binding never carries a linear obligation; the unifier may later refine $?\alpha$ to a non-linear concrete type without re-evaluation. If a later occurrence demands linear ($\%\sigma$), unification refines $?\alpha$ at the wrapped position and the $\%$-clause makes linearity locally visible.
 - $\text{autoDrop} = \text{false}$ on a bare variable means [P-Wild](#P-Wild) rejects discarding any binding whose type is still $?\alpha$ until it's resolved — the lambda body's $\textbf{let}~\_ = e$ for $e : ?\alpha$ is statically rejected as a possible silent leak. This is conservative *the other direction*: we prefer false-positive errors over silent linear discard.
 
 The two conventions together preserve soundness: any program that type-checks under the variable cases also type-checks at every later refinement of those variables (provided the refinement is consistent with the rest of the derivation). Mechanically, `src/typecheck/linearity.nx`'s `is_linear_binding_type` and `is_auto_droppable` implement these defaults — both fall through to $\text{false}$ on $\texttt{TyVar}$.
@@ -1022,7 +1022,7 @@ $$\dfrac{
 To unify the result types of multi-branch expressions ([T-If](#T-If), [T-Match](#T-Match)), we introduce $\text{tail}$, which extracts the type produced by the last statement in a sequence, and $\text{branchType}$, which folds the per-branch tails into the conclusion type $\sigma$.
 
 $$\text{tail}(\overline{s}) = \begin{cases} \bot & \text{if last statement is one of:} \\
-& \quad \textbf{return},\; \textbf{raise}~e\;(\text{as expression statement}),\; \textbf{let}~\mu\,x = \textbf{raise}~e',\; \textbf{let}~p = e~\text{with}~\text{diverges}(e), \\
+& \quad \textbf{return},\; \textbf{throw}~e\;(\text{as expression statement}),\; \textbf{let}~\mu\,x = \textbf{throw}~e',\; \textbf{let}~p = e~\text{with}~\text{diverges}(e), \\
 & \quad \textbf{if}~e_c~\textbf{then}~\overline{s_1}~\textbf{else}~\overline{s_2}~\text{(as expression statement) with}~\text{tail}(\overline{s_1}) = \bot \wedge \text{tail}(\overline{s_2}) = \bot, \\
 & \quad \textbf{match}~e~\lbrace \overline{p_i \to s_i} \rbrace~\text{(as expression statement) with}~\forall i.\;\text{tail}(\overline{s_i}) = \bot \\
 \tau & \text{if last statement is an expression of type } \tau~\text{(non-divergent)} \\
@@ -1033,7 +1033,7 @@ $$\text{branchType}(\overline{s_1}, \ldots, \overline{s_n}) = \begin{cases}
 \tau & \text{otherwise, where } \tau~\text{is any non-}\bot~\text{tail and } \forall i.\;\text{tail}(\overline{s_i}) \in \lbrace \bot, \tau \rbrace
 \end{cases}$$
 
-The "otherwise" case is well-defined because the per-branch unification premises in [T-If](#T-If) and [T-Match](#T-Match) require all non-$\bot$ tails to be pairwise-unified before $\text{branchType}$ is applied: every non-$\bot$ tail collapses to the same $\tau$, so picking "any" is canonical. Divergence propagates through a binding whose RHS is a $\textbf{raise}$: the binding never produces a value, so the arm should not be forced to unify against a concrete type. Without this case, $\textbf{match}~e~\lbrace A \to \textbf{raise}~X;\; B \to \textbf{let}~\_ = \textbf{raise}~Y \rbrace$ would have $\sigma = \texttt{unit}$ (only the B arm survives the $\bot$ filter), pinning the whole match's type spuriously.
+The "otherwise" case is well-defined because the per-branch unification premises in [T-If](#T-If) and [T-Match](#T-Match) require all non-$\bot$ tails to be pairwise-unified before $\text{branchType}$ is applied: every non-$\bot$ tail collapses to the same $\tau$, so picking "any" is canonical. Divergence propagates through a binding whose RHS is a $\textbf{throw}$: the binding never produces a value, so the arm should not be forced to unify against a concrete type. Without this case, $\textbf{match}~e~\lbrace A \to \textbf{throw}~X;\; B \to \textbf{let}~\_ = \textbf{throw}~Y \rbrace$ would have $\sigma = \texttt{unit}$ (only the B arm survives the $\bot$ filter), pinning the whole match's type spuriously.
 
 $$\dfrac{
   \begin{array}{l}
@@ -1101,13 +1101,13 @@ The conclusion's ambient row $\rho_q'$ is **not bound by any premise** — it is
 
 - **Captured linears** ($\Gamma_\text{cap}$) flow into the body and must be consumed before body end; otherwise they would be silently dropped when the closure value returns, but the caller still believes the resource is alive via the closure's captured-state contract.
 - **Locally introduced linears** (let-bindings inside $\overline{s}$ with linear RHS) likewise must be consumed; they have no consumer in any caller.
-- **Linear parameters** ($q_i = 1$) must either be consumed by the body (transferred via a return / raise / argument-passing channel, per [drop.md](../drop) §Linear Consumption) or have $\text{autoDrop}(\tau_i)$ — the carve-out admits e.g. an array-typed parameter whose linear wrapper is structural rather than semantically resource-bearing.
+- **Linear parameters** ($q_i = 1$) must either be consumed by the body (transferred via a return / throw / argument-passing channel, per [drop.md](../drop) §Linear Consumption) or have $\text{autoDrop}(\tau_i)$ — the carve-out admits e.g. an array-typed parameter whose linear wrapper is structural rather than semantically resource-bearing.
 
 P-FnEnd is the analogue at function-body scope of P-Block at block scope: both reject linear-leak at a scope boundary. T-Lambda is the only construct that crosses a function-body boundary, so the function-end check lives uniquely here; [T-Inject](#T-Inject) and [T-TryCatch](#T-TryCatch) discharge P-Block instead. The two together cover every closing scope in the language.
 
-**Implicit-return desugaring.** The auxiliary $\overline{s}^\dagger$ in T-Lambda's premise formalises the surface convention from [semantics.md](../semantics) §Implicit Unit Return: a $\textbf{unit}$-returning lambda whose body does not already end in a divergent statement (i.e.\ $\text{tail}(\overline{s}) \neq \bot$) is desugared to $\overline{s};\,\textbf{return}~()$ before body typing. Non-unit returns get no desugaring — the rule's $\tau_r \neq \texttt{unit} \implies \text{tail}(\overline{s}^\dagger) = \bot$ premise then statically rejects an `i64`-returning lambda whose body is a let-statement or a bare expression statement that produces a value but never $\textbf{return}$s it. Together, the desugar and the premise pin the surface convention at rule level: unit returners may omit `return ()`; non-unit returners must explicitly `return` (or $\textbf{raise}$ / loop forever) on every control-flow path.
+**Implicit-return desugaring.** The auxiliary $\overline{s}^\dagger$ in T-Lambda's premise formalises the surface convention from [semantics.md](../semantics) §Implicit Unit Return: a $\textbf{unit}$-returning lambda whose body does not already end in a divergent statement (i.e.\ $\text{tail}(\overline{s}) \neq \bot$) is desugared to $\overline{s};\,\textbf{return}~()$ before body typing. Non-unit returns get no desugaring — the rule's $\tau_r \neq \texttt{unit} \implies \text{tail}(\overline{s}^\dagger) = \bot$ premise then statically rejects an `i64`-returning lambda whose body is a let-statement or a bare expression statement that produces a value but never $\textbf{return}$s it. Together, the desugar and the premise pin the surface convention at rule level: unit returners may omit `return ()`; non-unit returners must explicitly `return` (or $\textbf{throw}$ / loop forever) on every control-flow path.
 
-<a id="T-Raise-Ctor"></a>
+<a id="T-Throw-Ctor"></a>
 
 $$\dfrac{
   \begin{array}{l}
@@ -1116,10 +1116,10 @@ $$\dfrac{
   \Gamma;\, \rho_q \vdash_e c(\overline{\ell : e_a}) : \texttt{Exn} \mathbin{!} \rho_0
   \end{array}
 }{
-  \Gamma;\, \rho_q \vdash_e \textbf{raise}~e : {?}\alpha \mathbin{!} \lbrace c \rbrace \cup \rho_0
-} \;\textsc{T-Raise-Ctor}$$
+  \Gamma;\, \rho_q \vdash_e \textbf{throw}~e : {?}\alpha \mathbin{!} \lbrace c \rbrace \cup \rho_0
+} \;\textsc{T-Throw-Ctor}$$
 
-<a id="T-Raise-CtorNullary"></a>
+<a id="T-Throw-CtorNullary"></a>
 
 $$\dfrac{
   \begin{array}{l}
@@ -1128,22 +1128,22 @@ $$\dfrac{
   \Gamma;\, \rho_q \vdash_e c : \texttt{Exn} \mathbin{!} \rho_0
   \end{array}
 }{
-  \Gamma;\, \rho_q \vdash_e \textbf{raise}~e : {?}\alpha \mathbin{!} \lbrace c \rbrace \cup \rho_0
-} \;\textsc{T-Raise-CtorNullary}$$
+  \Gamma;\, \rho_q \vdash_e \textbf{throw}~e : {?}\alpha \mathbin{!} \lbrace c \rbrace \cup \rho_0
+} \;\textsc{T-Throw-CtorNullary}$$
 
-<a id="T-Raise-Val"></a>
+<a id="T-Throw-Val"></a>
 
 $$\dfrac{
   e~\text{is neither a constructor application nor a bare exception-constructor identifier} \qquad
   \Gamma;\, \rho_q \vdash_e e : \tau \mathbin{!} \rho_0 \qquad
   \text{unify}(\tau, \texttt{Exn})
 }{
-  \Gamma;\, \rho_q \vdash_e \textbf{raise}~e : {?}\alpha \mathbin{!} \lbrace \texttt{Exn} \rbrace \cup \rho_0
-} \;\textsc{T-Raise-Val}$$
+  \Gamma;\, \rho_q \vdash_e \textbf{throw}~e : {?}\alpha \mathbin{!} \lbrace \texttt{Exn} \rbrace \cup \rho_0
+} \;\textsc{T-Throw-Val}$$
 
-The split records variant identity in the effect row. **T-Raise-Ctor** fires when the raise expression is syntactically a constructor application (e.g.\ $\textbf{raise}~\texttt{NotFound}(\textit{path}: p)$) — the row gets the precise constructor name $\lbrace \texttt{NotFound} \rbrace$. **T-Raise-CtorNullary** fires for the bare-identifier form of a zero-field exception (e.g.\ $\textbf{raise}~\texttt{MissingMain}$, where $\texttt{MissingMain}$ is bound at value scheme $\forall \overline{\alpha}.\,\texttt{Exn}$ by the nullary clause of [D-Exception](#D-Exception)) — the row again gets the precise variant name $\lbrace \texttt{MissingMain} \rbrace$, not the catch-all sentinel. **T-Raise-Val** fires for the residual case — a variable, projection, or other expression yielding $\texttt{Exn}$ (typically a catch-bound binding being re-raised: $\textbf{catch}~e \to \textbf{raise}~e$); the row gets the catch-all sentinel $\lbrace \texttt{Exn} \rbrace$, which subsumes any variant via [U-Row-Exn](#U-Row-Exn). All three rules produce the universal type $?\alpha$ since $\textbf{raise}$ never returns to its caller. The companion [T-TryCatch](#T-TryCatch) consumes these row entries — specific-variant arms subtract specific entries, catch-all arms subtract $\texttt{Exn}$ and any constructors covered by U-Row-Exn.
+The split records variant identity in the effect row. **T-Throw-Ctor** fires when the throw expression is syntactically a constructor application (e.g.\ $\textbf{throw}~\texttt{NotFound}(\textit{path}: p)$) — the row gets the precise constructor name $\lbrace \texttt{NotFound} \rbrace$. **T-Throw-CtorNullary** fires for the bare-identifier form of a zero-field exception (e.g.\ $\textbf{throw}~\texttt{MissingMain}$, where $\texttt{MissingMain}$ is bound at value scheme $\forall \overline{\alpha}.\,\texttt{Exn}$ by the nullary clause of [D-Exception](#D-Exception)) — the row again gets the precise variant name $\lbrace \texttt{MissingMain} \rbrace$, not the catch-all sentinel. **T-Throw-Val** fires for the residual case — a variable, projection, or other expression yielding $\texttt{Exn}$ (typically a catch-bound binding being re-raised: $\textbf{catch}~e \to \textbf{throw}~e$); the row gets the catch-all sentinel $\lbrace \texttt{Exn} \rbrace$, which subsumes any variant via [U-Row-Exn](#U-Row-Exn). All three rules produce the universal type $?\alpha$ since $\textbf{throw}$ never returns to its caller. The companion [T-TryCatch](#T-TryCatch) consumes these row entries — specific-variant arms subtract specific entries, catch-all arms subtract $\texttt{Exn}$ and any constructors covered by U-Row-Exn.
 
-The disambiguation between T-Raise-CtorNullary and T-Raise-Val on a bare identifier follows [P-CtorNullary](#P-CtorNullary)'s convention: $\Gamma$-lookup decides. If $\Gamma(c)$ is a value scheme rooted at $\texttt{Exn}$ (i.e.\ $c$ was declared by the nullary clause of D-Exception), T-Raise-CtorNullary fires and preserves variant precision; otherwise (a catch-bound $e : \texttt{Exn}$, a record-field projection, etc.), T-Raise-Val fires and assigns the catch-all sentinel.
+The disambiguation between T-Throw-CtorNullary and T-Throw-Val on a bare identifier follows [P-CtorNullary](#P-CtorNullary)'s convention: $\Gamma$-lookup decides. If $\Gamma(c)$ is a value scheme rooted at $\texttt{Exn}$ (i.e.\ $c$ was declared by the nullary clause of D-Exception), T-Throw-CtorNullary fires and preserves variant precision; otherwise (a catch-bound $e : \texttt{Exn}$, a record-field projection, etc.), T-Throw-Val fires and assigns the catch-all sentinel.
 
 [T-Handler](#T-Handler) types $\textbf{handler}~x~[\textbf{require}~\rho]~\textbf{do}~\overline{\ell = e}~\textbf{end}$ — a record-of-lambdas implementing the methods of port $x$. We assume a global lookup $\text{methods}(x)$ returning the method signatures declared for port $x$ (populated by port declarations, see §1):
 
@@ -1410,7 +1410,7 @@ T-PortCall is the missing link between handler declarations and call sites. Thre
 
 - $\alpha \subseteq \rho_q$ — the method's declared **require** row must be a subset of the ambient capability row, so the caller already holds whatever capabilities this method invocation transitively needs (delegated to the handler's body).
 - $x \in \rho_q$ — the port $x$ itself must be in the ambient row, meaning a handler for $x$ has been brought into scope by an enclosing [T-Inject](#T-Inject) (or by the function's own require annotation).
-- $\beta$ joins the call's effect row — exceptions a method may raise propagate to the caller's $\rho_e$.
+- $\beta$ joins the call's effect row — exceptions a method may throw propagate to the caller's $\rho_e$.
 
 The argument premises mirror [T-App](#T-App) exactly — three fixes that landed in T-App are ported here for consistency (nexus-q52x.2 / nexus-2z0b.2 / nexus-t9cl.18):
 
@@ -1509,7 +1509,7 @@ $$\dfrac{
   \Gamma;\, \rho_q;\, \tau_r \vdash_s \textbf{let}~p = e : \Gamma' \mathbin{!} \rho_0
 } \;\textsc{T-LetPat-Diverge}$$
 
-$\text{diverges}(e)$ holds iff $e$ is syntactically $\textbf{raise}~e'$ (for any $e'$) — the only expression form that produces no value. The split rules avoid the ill-defined case $\text{exhaustive}(?\alpha, [p])$ that would otherwise arise: T-Raise gives $\textbf{raise}$ the type $?\alpha$ (a fresh unification variable), against which the Maranget head-shape rules (Exh-Bool, Exh-Sum, Exh-Record) cannot fire — a non-wildcard pattern like $\texttt{Some}(y)$ would leave the check stuck. T-LetPat-Diverge bypasses exhaustiveness because divergence semantically *short-circuits* the binding: the pattern is never actually destructured at runtime. The pattern is still typed via $\Gamma \vdash p : \tau$ so the body's $\Gamma'$ contains the right bindings (their types are $?\alpha$-instantiations, but they are unreachable). This carve-out mirrors the $\text{tail}(\overline{s})$ classification of $\textbf{let}~\mu\,x = \textbf{raise}~e'$ as $\bot$ (§Expressions, T-If/T-Match).
+$\text{diverges}(e)$ holds iff $e$ is syntactically $\textbf{throw}~e'$ (for any $e'$) — the only expression form that produces no value. The split rules avoid the ill-defined case $\text{exhaustive}(?\alpha, [p])$ that would otherwise arise: T-Throw gives $\textbf{throw}$ the type $?\alpha$ (a fresh unification variable), against which the Maranget head-shape rules (Exh-Bool, Exh-Sum, Exh-Record) cannot fire — a non-wildcard pattern like $\texttt{Some}(y)$ would leave the check stuck. T-LetPat-Diverge bypasses exhaustiveness because divergence semantically *short-circuits* the binding: the pattern is never actually destructured at runtime. The pattern is still typed via $\Gamma \vdash p : \tau$ so the body's $\Gamma'$ contains the right bindings (their types are $?\alpha$-instantiations, but they are unreachable). This carve-out mirrors the $\text{tail}(\overline{s})$ classification of $\textbf{let}~\mu\,x = \textbf{throw}~e'$ as $\bot$ (§Expressions, T-If/T-Match).
 
 ### Statement Sequences
 
@@ -1533,7 +1533,7 @@ $$\dfrac{
   \Gamma;\, \rho_q;\, \tau_r \vdash_s s; \overline{s'} : \Gamma_2 \mathbin{!} \rho_1 \cup \rho_2
 } \;\textsc{T-Seq-Cons}$$
 
-T-Seq-Cons threads the environment ($\Gamma_1$ from the head feeds into the tail) and unions the effect rows. The premise $\text{tail}(s) \neq \bot \vee \overline{s'} = \cdot$ rejects **dead statements after divergence**: if $s$ is $\textbf{return}~e$, $\textbf{raise}~e$ (as expression statement), $\textbf{let}~\mu\,x = \textbf{raise}~e'$, or $\textbf{let}~p = e$ with $\text{diverges}(e)$, then $\text{tail}(s) = \bot$ and the sequence must end there. Programs with statements after a $\textbf{return}$ are rejected at type-checking time rather than silently dropped — the rejection surfaces a likely programmer error (writing past a return) and avoids the question of how to type-check unreachable code. The destructuring form $\textbf{let}~p = e$ with a divergent RHS is the [T-LetPat-Diverge](#T-LetPat-Diverge) carve-out — both single-binder and pattern-destructuring lets diverge symmetrically when their RHS does. The same $\text{tail}$ predicate used in [T-If](#T-If)/[T-Match](#T-Match) is reused here, so divergence handling stays uniform across the spec.
+T-Seq-Cons threads the environment ($\Gamma_1$ from the head feeds into the tail) and unions the effect rows. The premise $\text{tail}(s) \neq \bot \vee \overline{s'} = \cdot$ rejects **dead statements after divergence**: if $s$ is $\textbf{return}~e$, $\textbf{throw}~e$ (as expression statement), $\textbf{let}~\mu\,x = \textbf{throw}~e'$, or $\textbf{let}~p = e$ with $\text{diverges}(e)$, then $\text{tail}(s) = \bot$ and the sequence must end there. Programs with statements after a $\textbf{return}$ are rejected at type-checking time rather than silently dropped — the rejection surfaces a likely programmer error (writing past a return) and avoids the question of how to type-check unreachable code. The destructuring form $\textbf{let}~p = e$ with a divergent RHS is the [T-LetPat-Diverge](#T-LetPat-Diverge) carve-out — both single-binder and pattern-destructuring lets diverge symmetrically when their RHS does. The same $\text{tail}$ predicate used in [T-If](#T-If)/[T-Match](#T-Match) is reused here, so divergence handling stays uniform across the spec.
 
 ### Metatheoretic Properties
 
@@ -1541,7 +1541,7 @@ The type system commits to five soundness properties (P1–P5) plus the three lo
 
 $$\textbf{P1}~\text{(Progress)}.\quad \text{If}~\emptyset;\,\lbrace\rbrace;\,\bot \vdash_s s : \Gamma' \mathbin{!} \rho_e,~\text{then either:}$$
 
-$$\quad\text{(a)}~s~\text{reduces to some}~s'~\text{by an operational step, or (b)}~s~\text{is a terminal form (value, terminating}~\textbf{return}, \text{escaping}~\textbf{raise}\text{).}$$
+$$\quad\text{(a)}~s~\text{reduces to some}~s'~\text{by an operational step, or (b)}~s~\text{is a terminal form (value, terminating}~\textbf{return}, \text{escaping}~\textbf{throw}\text{).}$$
 
 $$\textbf{P2}~\text{(Preservation)}.\quad \text{If}~\Gamma;\,\rho_q;\,\tau_r \vdash_s s : \Gamma' \mathbin{!} \rho_e~\text{and}~s \longrightarrow s',~\text{then}$$
 
@@ -1566,11 +1566,11 @@ $$\textbf{P4}~\text{(Capability containment)}.\quad \text{For any well-typed fun
 
 $$\quad \text{and [T-App](#T-App) inside the body satisfies its respective}~\alpha \subseteq \rho_q~\text{premise.}$$
 
-$$\textbf{P5}~\text{(Exception containment)}.\quad \text{For any well-typed function body typed under declared}~\rho_e,~\text{every [T-Raise-Ctor](#T-Raise-Ctor)}$$
+$$\textbf{P5}~\text{(Exception containment)}.\quad \text{For any well-typed function body typed under declared}~\rho_e,~\text{every [T-Throw-Ctor](#T-Throw-Ctor)}$$
 
-$$\quad \text{/ [T-Raise-CtorNullary](#T-Raise-CtorNullary) / [T-Raise-Val](#T-Raise-Val) inside the body produces a row entry that is in}~\rho_e~\text{or subsumed by}~\texttt{Exn} \in \rho_e~\text{via [U-Row-Exn](#U-Row-Exn).}$$
+$$\quad \text{/ [T-Throw-CtorNullary](#T-Throw-CtorNullary) / [T-Throw-Val](#T-Throw-Val) inside the body produces a row entry that is in}~\rho_e~\text{or subsumed by}~\texttt{Exn} \in \rho_e~\text{via [U-Row-Exn](#U-Row-Exn).}$$
 
-P1 and P2 are stated relative to an operational semantics — the spec does not give small-step rules in this document; the reduction relation $\longrightarrow$ is defined narratively in [semantics.md](../semantics) and is the obligation of the runtime/codegen pipeline. The other three properties (P3–P5) are *structural*: every $\text{check}$ pass on a term derives them by induction over the relevant rules' premises, with [P-FnEnd](#T-Lambda)/[P-Block](#environment-and-usage)/[P-Loop](#T-While) discharging P3, the $\subseteq$ premises of T-App / T-PortCall discharging P4, and the row-entry constructions in T-Raise-* discharging P5. In this sense P3–P5 are *intrinsic* to the rules' shape — any conformant implementation that admits a rule's conclusion has already established the corresponding fragment of the property.
+P1 and P2 are stated relative to an operational semantics — the spec does not give small-step rules in this document; the reduction relation $\longrightarrow$ is defined narratively in [semantics.md](../semantics) and is the obligation of the runtime/codegen pipeline. The other three properties (P3–P5) are *structural*: every $\text{check}$ pass on a term derives them by induction over the relevant rules' premises, with [P-FnEnd](#T-Lambda)/[P-Block](#environment-and-usage)/[P-Loop](#T-While) discharging P3, the $\subseteq$ premises of T-App / T-PortCall discharging P4, and the row-entry constructions in T-Throw-* discharging P5. In this sense P3–P5 are *intrinsic* to the rules' shape — any conformant implementation that admits a rule's conclusion has already established the corresponding fragment of the property.
 
 The numbering reserves P1–P5 for these global properties so the rule-local P6–P8 (which are convenient where they're stated, but not architectural) can stay in their natural sections without renumbering. A future revision may add P9, P10 etc.\ for new local properties.
 
@@ -1725,7 +1725,7 @@ $$\dfrac{
   \mathcal{T} \;\vdash_d\; \textbf{let}~p = e \;\Rightarrow\; \mathcal{T}[\Gamma \mathrel{:=} \Gamma']
 } \;\textsc{D-LetPat-Top}$$
 
-A top-level $\textbf{let}$ is type-checked as an ordinary statement under an empty ambient capability row, an empty effect row, and a $\bot$ return-type (no enclosing function): D-Let-Top reuses [T-Let](#T-Let), [T-Let-PolyFn](#T-Let-PolyFn), or [T-Let-Alias](#T-Let-Alias) according to the RHS shape; D-LetPat-Top covers destructuring binders by reusing [T-LetPat](#T-LetPat) (or [T-LetPat-Diverge](#T-LetPat-Diverge) when the RHS is a $\textbf{raise}$). The pure-row premise rejects top-level expressions that require capabilities the program root cannot grant; an $\textbf{inject}$ at the top level is the recommended way to introduce capabilities for an evaluating block.
+A top-level $\textbf{let}$ is type-checked as an ordinary statement under an empty ambient capability row, an empty effect row, and a $\bot$ return-type (no enclosing function): D-Let-Top reuses [T-Let](#T-Let), [T-Let-PolyFn](#T-Let-PolyFn), or [T-Let-Alias](#T-Let-Alias) according to the RHS shape; D-LetPat-Top covers destructuring binders by reusing [T-LetPat](#T-LetPat) (or [T-LetPat-Diverge](#T-LetPat-Diverge) when the RHS is a $\textbf{throw}$). The pure-row premise rejects top-level expressions that require capabilities the program root cannot grant; an $\textbf{inject}$ at the top level is the recommended way to introduce capabilities for an evaluating block.
 
 Self-recursive (`let factorial = fn ... factorial(n: n - 1) ... end`) and mutually-recursive top-level functions are handled by the unified two-phase scheme stated at the top of this section: [D-Let-Forward](#D-Let-Forward) seeds $\Gamma$ with each `let x = fn ...`'s declared signature scheme during the $\vdash_d^{\text{pre}}$ pre-pass; D-Let-Top / D-LetPat-Top then run with that environment, so a self-call $x(\ldots)$ or mutual call $g(\ldots)$ inside $f$'s body resolves through [T-Var](#T-Var). `let x = e` whose RHS is *not* a $\textbf{fn}$ literal (data binding, computed value) does not participate in $\vdash_d^{\text{pre}}$ and cannot be self-referential through the top-level `let` channel — recursive data constructors go through [D-Type-Sum](#D-Type-Sum)'s forward registration instead.
 
@@ -1768,7 +1768,7 @@ $$\quad \exists~\textit{main} \in \text{dom}(\Gamma).\;\Gamma(\textit{main}) = (
 The four conjuncts encode the constraints stated narratively in [semantics.md](../semantics) §Entrypoint and [effects.md](../effects) §Main Constraints:
 
 - **Signature** — $(\,) \to \texttt{unit}$ with no arguments and a $\texttt{unit}$ return.
-- **Empty throws row** — `main`'s declared $\rho_e$ is $\lbrace\rbrace$. Every exception that the program may raise must be handled by an inner $\textbf{try}$ before propagating out of `main`; the runtime has no exception consumer outside of `main`.
+- **Empty throws row** — `main`'s declared $\rho_e$ is $\lbrace\rbrace$. Every exception that the program may throw must be handled by an inner $\textbf{try}$ before propagating out of `main`; the runtime has no exception consumer outside of `main`.
 - **Require subset of SysCaps** — `main` may declare any subset of system capabilities ($\texttt{PermFs}$, $\texttt{PermNet}$, etc.) which the runtime grants from the WASI environment. User-declared port names may **not** appear in `main`'s $\rho_q$ — there is no enclosing $\textbf{inject}$ to provide them.
 - **Non-exported** — `main` is not in $\text{exports}(\mathcal{T})$. Other modules cannot import `main`; it is a runtime-side hook, not part of any module's API.
 

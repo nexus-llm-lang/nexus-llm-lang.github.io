@@ -62,11 +62,11 @@ Sigils are not annotations -- they impose runtime behavioral constraints.
 
 ## Exception Propagation
 
-`raise` immediately terminates the current computation and unwinds the call stack until it reaches a `try/catch` block. The `Exn` value is passed to the `catch` parameter:
+`throw` immediately terminates the current computation and unwinds the call stack until it reaches a `try/catch` block. The `Exn` value is passed to the `catch` parameter:
 
 ```nexus
 try
-  raise NotFound(msg: "key")
+  throw NotFound(msg: "key")
 catch e ->
   // e : Exn
   match e do
@@ -76,7 +76,7 @@ catch e ->
 end
 ```
 
-Exceptions are checked -- any function that may raise must declare `throws { Exn }`. `try/catch` discharges `Exn` from the protected region.
+Exceptions are checked -- any function that may throw must declare `throws { Exn }`. `try/catch` discharges `Exn` from the protected region.
 
 ## Loops
 
@@ -126,15 +126,15 @@ end
 All non-diverging arm bodies must produce the same type. An arm **diverges** — and is excluded from the unified result type — when its last statement is:
 
 - `return e` (function-level return)
-- `raise e` used as an expression statement
-- `let μx = raise e'` (the binding's RHS never produces a value)
+- `throw e` used as an expression statement
+- `let μx = throw e'` (the binding's RHS never produces a value)
 
 If every arm diverges, the match expression's type is a fresh type variable (left to be pinned by surrounding context). See the `tail`/`branchType` definitions in [type-system-formal.md](./type-system-formal#T-Match) for the formal carve-out reused by `if`/`else` and pattern-let.
 
 ```nexus
 let result = match x do
   | A -> 5
-  | B -> raise NotFound(path: "x")   // diverges — `B` does not pin the result type
+  | B -> throw NotFound(path: "x")   // diverges — `B` does not pin the result type
 end  // result : i64 (from arm A)
 ```
 
