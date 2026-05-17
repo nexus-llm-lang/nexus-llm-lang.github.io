@@ -388,6 +388,17 @@ Linearity is entirely structural: the split $\otimes$ ensures each linear bindin
 
 $$\text{wfRef}(\mathord{\sim}\sigma) \;\Longleftrightarrow\; \neg\text{linear}(\sigma)$$
 
+**Checked at (introduction sites).**  $\text{wfRef}$ is enforced at every type-formation site that can introduce a $\mathord{\sim}\sigma$ into the typing context:
+
+| Site | Rule |
+|------|------|
+| Parameter and return slots of a $\textbf{fn}$ literal | [T-Lambda](#T-Lambda), [T-Let-PolyFn](#T-Let-PolyFn) |
+| Method signature in a port declaration | [D-Port](#D-Port) |
+| Type annotation of an external binding | [D-External](#D-External) |
+| Field types of a record type declaration | [D-Type-Record](#D-Type-Record) |
+| Field types of a sum-type variant | [D-Type-Sum](#D-Type-Sum) |
+| Explicit type annotation on a let-binding | [T-Let](#T-Let) |
+
 $\text{wfRef}$ is checked at every **type-formation site** that can introduce a $\mathord{\sim}\sigma$: parameter and return slots of $\textbf{fn}$ literals ([T-Lambda](#T-Lambda) / [T-Let-PolyFn](#T-Let-PolyFn)), the signature of a method declared by [D-Port](#D-Port), the type annotation of [D-External](#D-External), the field types of [D-Type-Record](#D-Type-Record) / [D-Type-Sum](#D-Type-Sum), and any explicit type annotation on [T-Let](#T-Let). The check fails fast at declaration time rather than letting a $\mathord{\sim}\%T$-shaped value smuggle in through e.g.\ an externally-declared signature, then duplicate the inner linear via successive $\mathord{\sim}x$ reads. T-Let itself also carries the rule-local guard $\mu = \mathord{\sim} \implies \neg\text{linear}(\tau')$ (see [T-Let](#T-Let)); $\text{wfRef}$ is the global counterpart that catches the same hazard when the type sneaks in through a non-sigil channel.
 
 Two additional behaviors are embedded in specific rules rather than stated as standalone inference rules:
