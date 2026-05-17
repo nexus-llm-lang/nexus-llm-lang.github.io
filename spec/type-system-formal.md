@@ -1292,6 +1292,8 @@ Three restrictions are inherited from the surface notation:
 
 Together with T-Let-Alias, these two rules exhaust the entry-points for polymorphic schemes in $\Gamma$, justifying P8's "no implicit generalization" property mechanically rather than only by side-remark.
 
+**Inner $\textbf{fn}\langle\overline{X}\rangle$ rejected at expression position.** The surface grammar admits $\textbf{fn}\langle X_1, \ldots, X_n\rangle\,(\overline{\ell{:}\tau}) \to \ldots~\textbf{end}$ at any expression site, but [T-Lambda](#T-Lambda) takes no type-parameter list — its conclusion is $\Gamma;\,\rho_q' \vdash_e \textbf{fn}\,(\overline{\ell{:}\tau}) \to \ldots~\textbf{end} : \tau_\to^\star \mathbin{!} \lbrace\rbrace$. T-Let-PolyFn is the *only* rule whose conclusion accepts the $\langle\overline{X}\rangle$ form, and its conclusion is a $\textbf{let}\,x = e$ statement, not an expression. Therefore an inner $\textbf{fn}\langle X\rangle\ldots$ — e.g. as the argument of a call, the RHS of an assignment, an arm of a $\textbf{match}$, or the body of another lambda — has no derivation. The impl makes this rejection a focused typecheck diagnostic ("polymorphic `fn` only allowed at top-level `let` RHS"; `src/typecheck/infer.nx`, nexus-t9cl.23) rather than letting the failure surface as a generic "no rule applies"-style error far from the cause. Wrap the polymorphic body in a top-level $\textbf{let}\,f = \textbf{fn}\langle X\rangle\ldots$ and reference $f$ instead.
+
 $$\dfrac{
   \tau_r \neq \bot \qquad
   \Gamma;\, \rho_q \vdash_e e : \tau \mathbin{!} \rho_0 \qquad
