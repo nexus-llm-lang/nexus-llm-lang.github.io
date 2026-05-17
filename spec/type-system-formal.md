@@ -1369,12 +1369,14 @@ Two linearity-related details:
 
 $$\dfrac{
   \begin{array}{c}
-  \Gamma = \Gamma_1 \otimes \ldots \otimes \Gamma_k \\[2pt]
+  B = \lbrace x \in \text{dom}(\Gamma) \mid \Gamma(x) = (1, \_) \wedge \exists i.\; e_i = \&x \wedge \forall j.\; x \in \text{fv}(e_j) \implies e_j = \&x \rbrace \\[2pt]
+  \Gamma \mid_B~\text{is shared as}~\omega~\text{across}~\Gamma_1, \ldots, \Gamma_k \quad\text{(borrow-only linears coexist; see T-App)} \\[2pt]
+  (\Gamma \setminus B) = \Gamma_1 \otimes \ldots \otimes \Gamma_k \\[2pt]
   \text{methods}(x).\ell = (\overline{\ell' : P}) \to \kappa;\, \alpha;\, \beta \\[2pt]
   \alpha \subseteq \rho_q \qquad
   x \in \rho_q \\[2pt]
-  \forall i.\;\Gamma_i;\, \rho_q \vdash_e e_i : \tau_i \mathbin{!} \rho_i \\[2pt]
-  \forall i.\;\begin{cases} \text{unify}(\tau_i, \text{strip}(P_i)) & \text{if } P_i = \%\sigma \wedge \neg\text{linear}(\tau_i) \\ \text{unify}(\tau_i, P_i) & \text{otherwise} \end{cases}
+  \forall i.\;(\Gamma_i \cup \Gamma\mid_B);\, \rho_q \vdash_e^{\text{arg}} e_i \mathrel{\Updownarrow} P_i : \tau_i \mathbin{!} \rho_i \\[2pt]
+  \forall i.\;\begin{cases} \text{unify}(\tau_i, \text{strip}(P_i)) & \text{if } P_i = \%\sigma \wedge \neg\text{linear}(\tau_i) \wedge \tau_i \neq \&\sigma' \\ \text{unify}(\tau_i, P_i) & \text{otherwise} \end{cases}
   \end{array}
 }{
   \Gamma;\, \rho_q \vdash_e x.\ell(\overline{\ell' : e}) : \kappa \mathbin{!} \beta \cup \textstyle\bigcup_i \rho_i
@@ -1386,7 +1388,15 @@ T-PortCall is the missing link between handler declarations and call sites. Thre
 - $x \in \rho_q$ — the port $x$ itself must be in the ambient row, meaning a handler for $x$ has been brought into scope by an enclosing [T-Inject](#T-Inject) (or by the function's own require annotation).
 - $\beta$ joins the call's effect row — exceptions a method may raise propagate to the caller's $\rho_e$.
 
-The argument unification follows [T-App](#T-App)'s shape, including the $\%$-weakening carve-out. Linear arguments ($\tau_i$ already linear) bypass weakening and unify directly against the linear parameter slot. The result type $\kappa$ is the method's declared return type; no instantiation step is needed because **port declarations are monomorphic at every level** — port names $X$ take no type parameters in the surface grammar (`cap X do ... end`, never `cap X<T> do ... end`), and method signatures inside a port are not generalised by [D-Port](#D-Port). The parser rejects the polymorphic-port form at the declaration site; the spec therefore needs no rule for "instantiating a port's type parameters at the call site".
+The argument premises mirror [T-App](#T-App) exactly — three fixes that landed in T-App are ported here for consistency (nexus-q52x.2 / nexus-2z0b.2 / nexus-t9cl.18):
+
+1. **B set and shared-borrow split (nexus-q52x.2 / nexus-2z0b.2).** The set $B$ collects every linear binding that appears in argument position *only* as $\&x$ (never consumed directly). These bindings are withdrawn from the $\otimes$-split and instead *shared* across all partitions $\Gamma_1,\ldots,\Gamma_k$ as $\omega$ for the duration of argument typing — because a borrow is a non-consuming view, the same linear can legally appear in multiple argument borrows without violating the split. This covers the case $x.\text{method}(p: \&\%q,\; r: \&\%q)$ where the same linear $q$ is borrowed twice (nexus-2z0b.2): without the $B$-set, a naive $\otimes$-split would assign $q$ to exactly one partition and reject the second borrow.
+
+2. **Argument-position typing $\vdash_e^{\text{arg}}\,e \mathrel{\Updownarrow} P$ (nexus-q52x.2).** Arguments are typed with the dedicated $\vdash_e^{\text{arg}}$ judgement that includes [T-App-BorrowLin](#T-App): when the argument is syntactically $\&x$ and the parameter shape is $\&\sigma$, the borrow is admitted even if $x$ is a linear binding. This allows $x.\ell(\text{arg}: \&\%q)$ where $\%q$ is a linear binding — the same permission T-App grants for ordinary function calls.
+
+3. **Borrow-to-ownership smuggling rejection $\tau_i \neq \&\sigma'$ (nexus-t9cl.18).** The $\%$-weakening case additionally requires $\tau_i \neq \&\sigma'$ to exclude borrow types from the weakening path. Without this carve-out, $\text{linear}(\&\sigma') = \text{false}$ would make a $\&\texttt{T}$ argument appear non-linear and thus eligible to satisfy a $\%\texttt{T}$ parameter slot via weakening — silently converting a borrow into an ownership claim. The fix matches T-App's identical side condition.
+
+The result type $\kappa$ is the method's declared return type; no instantiation step is needed because **port declarations are monomorphic at every level** — port names $X$ take no type parameters in the surface grammar (`cap X do ... end`, never `cap X<T> do ... end`), and method signatures inside a port are not generalised by [D-Port](#D-Port). The parser rejects the polymorphic-port form at the declaration site; the spec therefore needs no rule for "instantiating a port's type parameters at the call site".
 
 If polymorphic ports become a surface feature in the future (e.g.\ for a collection-style cap `Vec<T>`), D-Port would have to store a scheme $\forall \overline{\alpha}.\,\text{methods}$ and T-PortCall would read the concrete instantiation $\overline{\sigma}$ off the injected handler's type (extending $\textbf{handler}\;X\;\rho$ to $\textbf{handler}\;X\langle \overline{\sigma}\rangle\;\rho$). This is recorded here as a forward-pointer, not a current rule.
 
