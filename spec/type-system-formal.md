@@ -1229,7 +1229,7 @@ Idempotency makes $\textbf{let}~\%x = \textit{make\_linear}()$ produce $\%T$ reg
 $$\dfrac{
   \begin{array}{l}
   \Gamma;\, \rho_q \vdash_e e : \tau \mathbin{!} \rho_0 \\[2pt]
-  \tau' = \begin{cases} \sigma~\text{and}~\text{unify}(\tau, \sigma) & \text{if annotation } \sigma \text{ present (unification must succeed; rule fails otherwise)} \\ \text{default}(\tau) & \text{if annotation absent} \end{cases} \\[2pt]
+  \tau' = \begin{cases} \sigma & \text{if annotation } \sigma \text{ present and } \text{unify}(\tau, \sigma) \\ \text{default}(\tau) & \text{otherwise} \end{cases} \\[2pt]
   \mu = \mathord{\sim} \implies \neg\text{linear}(\tau') \\[2pt]
   \tau_f = \text{wrapSigil}(\mu, \tau') \qquad
   S = \text{mono}(\tau_f) \\[2pt]
@@ -1239,9 +1239,7 @@ $$\dfrac{
   \Gamma;\, \rho_q;\, \tau_r \vdash_s \textbf{let}~\mu\,x = e : (\Gamma \setminus\!\!\setminus e),\, x :^{q} S \mathbin{!} \rho_0
 } \;\textsc{T-Let}$$
 
-The annotation case **pins** $\tau'$ to $\sigma$ before any defaulting could fire: $\text{unify}(\tau, \sigma)$ resolves the inferred type (which may be $\texttt{intlit}$/$\texttt{floatlit}$) against the user-written annotation, and $\tau'$ takes $\sigma$ verbatim. The two cases are **mutually exclusive on annotation presence alone** — when an annotation $\sigma$ is present and $\text{unify}(\tau, \sigma)$ fails, the rule itself fails (no fallback to $\text{default}$). Reading the case-split as "if annotation-present-AND-unify-succeeds, else default" would silently accept $\textbf{let}~x : \texttt{i32} = \texttt{"hello"}$ by running $\text{default}(\texttt{string}) = \texttt{string}$ in the "otherwise" branch, ignoring the annotation. The correct reading: annotation-present always selects the annotation case; the unification is a *side condition* of that case, not a discriminator between cases.
-
-The annotation case matters because — per [U-IntLit / U-FloatLit](#U-IntLit) (nexus-q52x.1) — those unifications return the **empty substitution** and do *not* mutate $\tau$ in place; running $\text{default}(\tau)$ first would commit to $\texttt{i64}$/$\texttt{f64}$ and then mis-unify against any narrower annotation like $\texttt{i32}$. The reproducer is $\textbf{let}~x : \texttt{i32} = 1$: $\tau = \texttt{intlit}$, $\text{unify}(\texttt{intlit}, \texttt{i32})$ succeeds, $\tau' = \texttt{i32}$, accept. Without the case-split — i.e. if $\text{default}$ fired unconditionally — $\tau' = \texttt{i64}$ and the subsequent unify against $\texttt{i32}$ would fail spuriously. This mirrors `src/typecheck/infer.nx::infer_let`: annotation-present skips the literal-defaulter and surfaces unification failure as an error; annotation-absent runs the defaulter.
+The annotation case **pins** $\tau'$ to $\sigma$ before any defaulting could fire: $\text{unify}(\tau, \sigma)$ resolves the inferred type (which may be $\texttt{intlit}$/$\texttt{floatlit}$) against the user-written annotation, and $\tau'$ takes $\sigma$ verbatim. This matters because — per [U-IntLit / U-FloatLit](#U-IntLit) (nexus-q52x.1) — those unifications return the **empty substitution** and do *not* mutate $\tau$ in place; running $\text{default}(\tau)$ first would commit to $\texttt{i64}$/$\texttt{f64}$ and then mis-unify against any narrower annotation like $\texttt{i32}$. The reproducer is $\textbf{let}~x : \texttt{i32} = 1$: $\tau = \texttt{intlit}$, $\text{unify}(\texttt{intlit}, \texttt{i32})$ succeeds, $\tau' = \texttt{i32}$, accept. Without the case-split — i.e. if $\text{default}$ fired unconditionally — $\tau' = \texttt{i64}$ and the subsequent unify against $\texttt{i32}$ would fail spuriously. This mirrors `src/typecheck/infer.nx::infer_let`: annotation-present skips the literal-defaulter, annotation-absent runs it.
 
 The side-condition $\mu = \mathord{\sim} \implies \neg\text{linear}(\tau')$ enforces the [types.md](../types#mutable-references-) invariant that mutable-ref cells cannot hold linear values. Without it, $\textbf{let}~\mathord{\sim}r = \textit{make\_linear}()$ would produce a $\mathord{\sim}\%T$ binding; subsequent $\mathord{\sim}r$ deref-reads would each yield a fresh $\%T$ value, duplicating the linear resource. The check applies uniformly to inferred types and to explicit annotations ($\textbf{let}~\mathord{\sim}x : \%T = e$). Linearity is structural, so the check also rejects $\mathord{\sim}$ cells holding records or ADTs with any linear component.
 
@@ -1361,14 +1359,12 @@ Two linearity-related details:
 
 $$\dfrac{
   \begin{array}{c}
-  B = \lbrace y \in \text{dom}(\Gamma) \mid \Gamma(y) = (1, \_) \wedge \exists i.\; e_i = \&y \wedge \forall j.\; y \in \text{fv}(e_j) \implies e_j = \&y \rbrace \\[2pt]
-  \Gamma\mid_B~\text{is shared as}~\omega~\text{across}~\Gamma_1, \ldots, \Gamma_k \\[2pt]
-  (\Gamma \setminus B) = \Gamma_1 \otimes \ldots \otimes \Gamma_k \\[2pt]
+  \Gamma = \Gamma_1 \otimes \ldots \otimes \Gamma_k \\[2pt]
   \text{methods}(x).\ell = (\overline{\ell' : P}) \to \kappa;\, \alpha;\, \beta \\[2pt]
   \alpha \subseteq \rho_q \qquad
   x \in \rho_q \\[2pt]
-  \forall i.\;(\Gamma_i \cup \Gamma\mid_B);\, \rho_q \vdash_e^{\text{arg}} e_i \mathrel{\Updownarrow} P_i : \tau_i \mathbin{!} \rho_i \\[2pt]
-  \forall i.\;\begin{cases} \text{unify}(\tau_i, \text{strip}(P_i)) & \text{if } P_i = \%\sigma \wedge \neg\text{linear}(\tau_i) \wedge \tau_i \neq \&\sigma' \\ \text{unify}(\tau_i, P_i) & \text{otherwise} \end{cases}
+  \forall i.\;\Gamma_i;\, \rho_q \vdash_e e_i : \tau_i \mathbin{!} \rho_i \\[2pt]
+  \forall i.\;\begin{cases} \text{unify}(\tau_i, \text{strip}(P_i)) & \text{if } P_i = \%\sigma \wedge \neg\text{linear}(\tau_i) \\ \text{unify}(\tau_i, P_i) & \text{otherwise} \end{cases}
   \end{array}
 }{
   \Gamma;\, \rho_q \vdash_e x.\ell(\overline{\ell' : e}) : \kappa \mathbin{!} \beta \cup \textstyle\bigcup_i \rho_i
@@ -1380,7 +1376,7 @@ T-PortCall is the missing link between handler declarations and call sites. Thre
 - $x \in \rho_q$ — the port $x$ itself must be in the ambient row, meaning a handler for $x$ has been brought into scope by an enclosing [T-Inject](#T-Inject) (or by the function's own require annotation).
 - $\beta$ joins the call's effect row — exceptions a method may raise propagate to the caller's $\rho_e$.
 
-The argument typing mirrors [T-App](#T-App) exactly: the borrow-set $B$ pre-extracts linear bindings that appear only as $\&y$ across the arguments and shares them as $\omega$ (so $x.\ell(p: \&y, q: \&y)$ type-checks for linear $y$); each argument is typed via $\vdash_e^{\text{arg}}$ (the [T-App-BorrowLin](#T-App) / [T-App-ArgDefault](#T-App) dispatch); and the weakening unification carries the $\tau_i \neq \&\sigma'$ side condition that closes the borrow-to-ownership smuggling hole (nexus-t9cl.18). Linear arguments ($\tau_i$ already linear) bypass weakening and unify directly against the linear parameter slot. The result type $\kappa$ is the method's declared return type; no instantiation step is needed because **port declarations are monomorphic at every level** — port names $X$ take no type parameters in the surface grammar (`cap X do ... end`, never `cap X<T> do ... end`), and method signatures inside a port are not generalised by [D-Port](#D-Port). The parser rejects the polymorphic-port form at the declaration site; the spec therefore needs no rule for "instantiating a port's type parameters at the call site".
+The argument unification follows [T-App](#T-App)'s shape, including the $\%$-weakening carve-out. Linear arguments ($\tau_i$ already linear) bypass weakening and unify directly against the linear parameter slot. The result type $\kappa$ is the method's declared return type; no instantiation step is needed because **port declarations are monomorphic at every level** — port names $X$ take no type parameters in the surface grammar (`cap X do ... end`, never `cap X<T> do ... end`), and method signatures inside a port are not generalised by [D-Port](#D-Port). The parser rejects the polymorphic-port form at the declaration site; the spec therefore needs no rule for "instantiating a port's type parameters at the call site".
 
 If polymorphic ports become a surface feature in the future (e.g.\ for a collection-style cap `Vec<T>`), D-Port would have to store a scheme $\forall \overline{\alpha}.\,\text{methods}$ and T-PortCall would read the concrete instantiation $\overline{\sigma}$ off the injected handler's type (extending $\textbf{handler}\;X\;\rho$ to $\textbf{handler}\;X\langle \overline{\sigma}\rangle\;\rho$). This is recorded here as a forward-pointer, not a current rule.
 
