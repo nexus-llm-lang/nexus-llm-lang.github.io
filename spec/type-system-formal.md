@@ -764,6 +764,14 @@ Uniqueness of $\pi$ follows from the constructor declaration providing a label-s
 
 $$\textbf{P6}~\text{(Exhaustiveness).}\quad \text{check}(M, [\tau]) = \text{ok} \implies \forall v : \tau.\;\exists i.\; v \in \text{match}(p_i)$$
 
+<a id="redundancy"></a>
+
+**Redundancy (per-arm usefulness).** Beyond exhaustiveness, the type system rejects programs containing an *unreachable* match arm — a row that no run-time value can reach because earlier rows already cover its shape. Maranget's $\text{useful}(M, \overline{p})$ predicate decides "row $\overline{p}$ matches at least one value not already matched by $M$"; the impl invokes it row-by-row against the prefix matrix and reports the first row for which $\text{useful}(M_{<i}, [p_i]) = \text{false}$.
+
+$$\textbf{P6'}~\text{(No redundant arms).}\quad \forall i.\;\text{useful}(\{[p_1], \ldots, [p_{i-1}]\},\, [p_i]) = \text{true}$$
+
+The redundancy scan operates on the same $\text{spec}$/$D$ machinery as exhaustiveness, but switches the constructor-signature classification at one point: for a head type $\tau_1$, the signature is $\text{SigFinite}(\overline{c_j})$ when $\text{variants}(\tau_1)$ is a *closed* set (records, ordinary user-defined sums, $\texttt{bool}$) and $\text{SigInfinite}$ otherwise (infinite-domain primitives like $\texttt{i64}$, $\texttt{string}$; and crucially the open-extensible $\texttt{Exn}$). The $\texttt{Exn}$ classification matters because [D-Exception](#D-Exception) makes $\text{variants}(\texttt{Exn})$ *grow* across modules — a fresh $\textbf{exception}$ declaration in any reachable module extends the set. Treating it as $\text{SigFinite}$ at any single use site would let $\text{useful}$'s "all constructors present in $M$" branch trivially succeed against an empty closed-variant list at the catch-all carve-out site (since the catch-all + main-wrap pass guarantees coverage), classifying every wildcard or variable arm following a concrete-constructor arm as redundant. Instead, $\texttt{Exn}$ is surfaced as $\text{SigInfinite}$: the wildcard-head usefulness check falls through to $\text{default}(M)$, which preserves wildcard rows, and only genuine duplicates (a second arm whose $\text{spec}(M_{<i}, c)$ specialisation is already covered) are flagged. See `src/typecheck/exhaustive.nx::column_signature` (nexus-t9cl.19). P6' applies symmetrically to [T-Match](#T-Match) and [T-TryCatch](#T-TryCatch).
+
 ### Expressions
 
 $$\Gamma;\, \rho_q \vdash_e e : \tau \mathbin{!} \rho_e$$
