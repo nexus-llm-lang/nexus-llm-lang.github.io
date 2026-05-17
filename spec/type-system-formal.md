@@ -275,7 +275,7 @@ $$\begin{array}{rcl}
 
 $\text{typedef}(x)$ denotes the definition of named type $x$ in the global type-definition environment.
 
-Other functions are introduced where first used: $\text{linear}$, $\text{autoDrop}$ (Linearity), $\text{strip}$ (Pattern Matching), $\text{open}$ and $\text{selectInt}$/$\text{selectFloat}$ and $\text{comparable}$ (Expressions), $\text{default}$, $\text{wrapSigil}$ (Statements), $\text{merge}$ (Statements), $\text{tail}$, $\text{branchType}$ (Expressions), $\text{methods}$ (Expressions), $\text{caughtVariants}$, $\text{hasCatchAll}$, $\text{members}$, $\text{diverges}$ (Statements), $\text{closeBlock}$ (Statements).
+Other functions are introduced where first used: $\text{linear}$, $\text{autoDrop}$ (Linearity), $\text{strip}$ (Pattern Matching), $\text{open}$, $\text{stripCall}$, $\text{selectInt}$/$\text{selectFloat}$ and $\text{comparable}$ (Expressions), $\text{default}$, $\text{wrapSigil}$ (Statements), $\text{merge}$ (Statements), $\text{tail}$, $\text{branchType}$ (Expressions), $\text{methods}$ (Expressions), $\text{caughtVariants}$, $\text{hasCatchAll}$, $\text{members}$, $\text{diverges}$ (Statements), $\text{closeBlock}$ (Statements).
 
 ### Free Variables
 
@@ -834,7 +834,8 @@ $$\dfrac{
   B = \lbrace x \in \text{dom}(\Gamma) \mid \Gamma(x) = (1, \_) \wedge \exists i.\; e_i = \&x \wedge \forall j.\; x \in \text{fv}(e_j) \implies e_j = \&x \rbrace \\[2pt]
   \Gamma \mid_B~\text{is shared as}~\omega~\text{across}~\Gamma_f, \Gamma_1, \ldots, \Gamma_k \quad\text{(borrow-only linears coexist; see below)} \\[2pt]
   (\Gamma \setminus B) = \Gamma_f \otimes \Gamma_1 \otimes \ldots \otimes \Gamma_k \\[2pt]
-  \Gamma_f;\, \rho_q \vdash_e f : (\overline{\ell' : P}) \to \tau_r;\, \rho_q';\, \rho_e' \mathbin{!} \rho_f \\[2pt]
+  \Gamma_f;\, \rho_q \vdash_e f : \tau_f \mathbin{!} \rho_f \\[2pt]
+  \text{stripCall}(\tau_f) = (\overline{\ell' : P}) \to \tau_r;\, \rho_q';\, \rho_e' \\[2pt]
   \lbrace \overline{\ell} \rbrace = \lbrace \overline{\ell'} \rbrace \quad\text{(label sets match; no duplicates; full coverage)} \\[2pt]
   \pi: \lbrace 1,\ldots,k \rbrace \to \lbrace 1,\ldots,k \rbrace,\; \ell_i = \ell'_{\pi(i)} \quad\text{(unique permutation by label name)} \\[2pt]
   \forall i.\;(\Gamma_i \cup \Gamma\mid_B);\, \rho_q \vdash_e^{\text{arg}} e_i \mathrel{\Updownarrow} P_{\pi(i)} : \tau_i \mathbin{!} \rho_i \\[2pt]
@@ -844,6 +845,18 @@ $$\dfrac{
 }{
   \Gamma;\, \rho_q \vdash_e f(\overline{\ell : e}) : \tau_r \mathbin{!} \rho_e' \cup \rho_f \cup \textstyle\bigcup_i \rho_i
 } \;\textsc{T-App}$$
+
+$$\text{stripCall}(\tau) = \begin{cases}
+\sigma & \text{if } \tau \in \lbrace \%\sigma,\, @\sigma \rbrace \\
+\tau & \text{otherwise}
+\end{cases}$$
+
+$\text{stripCall}$ peels the outermost closure modality before extracting the arrow shape. It handles two cases:
+
+- $\tau_f = \%\tau_\to$: a lambda that captured linear bindings is given a $\%$ wrapper by T-Lambda's closure-linearization premise ($\tau_\to^\star = \%\tau_\to$ when $\Gamma_\text{cap} \neq \emptyset$). The wrapper records that the closure is one-shot — its linear captures may be consumed at most once. Calling such a closure consumes the $\%\tau_\to$ value (via T-Var with $q = 1$) and delegates to the inner arrow.
+- $\tau_f = @\tau_\to$: a thunk whose payload is itself a function. The call implicitly forces the thunk — the $@$ wrapper is discarded and the inner arrow is used directly. This is equivalent to writing $(@f)(\overline{\ell:e})$ with an explicit [T-Force](#T-Force) step, but the surface syntax allows the parentheses to be omitted. The thunk is consumed by the implicit force ($q = 1$ on the $@\tau_\to$ binding), so a second call to the same $f$ would violate linearity.
+
+$\text{stripCall}$ deliberately does **not** peel $\&$ or $\mathord{\sim}$: a borrow $\&\tau_\to$ or mutable-ref $\mathord{\sim}\tau_\to$ in the callee position is a type error — the caller does not own the closure and cannot invoke it. Contrast with the pattern-matching $\text{strip}$, which peels $\%$ and $\&$ (borrows are valid scrutinees) but not $@$.
 
 The caller's argument labels $\overline{\ell}$ are matched against the callee's parameter labels $\overline{\ell'}$ **by name**, not by position. The permutation $\pi$ aligns the caller's $i$-th argument to the callee's $\pi(i)$-th parameter so that $\ell_i = \ell'_{\pi(i)}$; both directions of the label-set equality must hold (every callee parameter is supplied, no extra caller labels). The permutation is unique because labels are required to be distinct on each side (the surface parser rejects duplicate-label calls and parameter lists). This formalises the *order-independent labeled arguments* guarantee from [semantics.md](../semantics) §Label Order Independence — `f(b: 2, a: 1)` and `f(a: 1, b: 2)` produce the same derivation up to $\pi$.
 
