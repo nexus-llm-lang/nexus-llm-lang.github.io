@@ -433,7 +433,7 @@ program   ::= top_level*
 top_level ::= type_def
             | exception_def
             | import_def
-            | port_def
+            | cap_def
             | external_def
             | let_def
             | comment
@@ -455,7 +455,7 @@ import_def    ::= "import" "external" import_path
 import_item   ::= IDENT [ "as" IDENT ]
 import_path   ::= STRING_LITERAL
 
-port_def      ::= [ "export" ] "port" UIDENT "do" fn_signature* "end"
+cap_def       ::= [ "export" ] "cap" UIDENT "do" fn_signature* "end"
 fn_signature  ::= "fn" IDENT param_list "->" type [ "require" throws_type ] [ "throws" throws_type ]
 
 let_def       ::= [ "export" ] "let" IDENT [ ":" type ] "=" expr
@@ -546,7 +546,7 @@ expr_stmt   ::= expr
 
 expr             ::= expr binary_op expr   (* left-associative *)
                    | match_expr
-                   | postfix_expr
+                   | unary_expr
 
 binary_op        ::= "||"
                    | "&&"
@@ -557,6 +557,10 @@ binary_op        ::= "||"
                    | "*" | "/" | "%" | "&"
                    | "*." | "/."
                    | "<<" | ">>"
+
+unary_expr       ::= unary_op unary_expr           (* right-associative *)
+                   | postfix_expr
+unary_op         ::= "-" | "-." | "!"              (* int neg, float neg, bool not *)
 
 postfix_expr     ::= postfix_expr "." IDENT        (* field access *)
                    | postfix_expr "[" expr "]"     (* index *)
@@ -580,7 +584,7 @@ atom_expr        ::= "(" expr ")"
                    | literal
                    | variable
 
-raise_expr       ::= "raise" expr
+raise_expr       ::= ( "raise" | "throw" ) expr   (* "throw" is a lexer-level synonym *)
 borrow_expr      ::= "&" [ sigil ] IDENT
 lambda_expr      ::= "fn" [ type_params ] "(" [ param ( "," param )* ] ")"
                      "->" type [ "require" throws_type ] [ "throws" throws_type ]
@@ -588,6 +592,7 @@ lambda_expr      ::= "fn" [ type_params ] "(" [ param ( "," param )* ] ")"
 handler_expr     ::= "handler" UIDENT [ "require" row_type ] "do" handler_fn* "end"
 handler_fn       ::= "fn" IDENT [ type_params ] "(" [ param ( "," param )* ] ")"
                      "->" type [ "require" throws_type ] [ "throws" throws_type ]
+                     [ "with" "@" IDENT ]                              (* continuation binder *)
                      "do" stmt* "end"
 call_expr        ::= dotted_ident "(" [ labeled_arg ( "," labeled_arg )* ] ")"
 labeled_arg      ::= IDENT ":" expr | pun_arg
@@ -619,7 +624,8 @@ list_pattern        ::= "[" [ pattern ( "," pattern )* [ "," ] ] "]"
                                                        (* desugars to nested Cons/Nil *)
 literal_pattern     ::= literal
 variable_pattern    ::= [ sigil ] IDENT
-constructor_pattern ::= UIDENT "(" [ ctor_pat_arg ( "," ctor_pat_arg )* ] ")"
+constructor_pattern ::= [ sigil ] UIDENT "(" [ ctor_pat_arg ( "," ctor_pat_arg )* ] ")"
+                         (* sigil routes ~/%/@/& onto the matching cell shape — see nexus-nahg *)
 ctor_pat_arg        ::= IDENT ":" pattern | pun_pat_arg
 pun_pat_arg         ::= IDENT                    (* desugars to IDENT ":" IDENT *)
                       | sigil IDENT              (* desugars to IDENT ":" sigil IDENT *)
