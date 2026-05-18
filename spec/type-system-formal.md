@@ -2027,7 +2027,8 @@ $$\dfrac{
   \begin{array}{l}
   D = \textbf{external}~x = \texttt{"} w \texttt{"} : \langle \overline{\alpha} \rangle (\overline{\ell : \tau}) \to \tau_r \\[2pt]
   \forall \ell.\;\text{wfRef}(\tau_\ell) \qquad \text{wfRef}(\tau_r) \qquad \neg\text{escapesRef}(\tau_r) \\[2pt]
-  S = \forall \overline{\alpha}.\,(\overline{\ell : \tau}) \to \tau_r;\,\lbrace\rbrace;\,\lbrace\rbrace \quad\text{(empty require / throws)}
+  \forall i.\;\kappa_i = \text{kindOf}(\alpha_i,\;(\overline{\ell : \tau}) \to \tau_r;\,\lbrace\rbrace;\,\lbrace\rbrace) \quad\text{(see §Polymorphism Introduction)} \\[2pt]
+  S = \forall \overline{\alpha_i{:}\kappa_i}.\,(\overline{\ell : \tau}) \to \tau_r;\,\lbrace\rbrace;\,\lbrace\rbrace \quad\text{(empty require / throws)}
   \end{array}
 }{
   \mathcal{T} \;\vdash_d\; D \;\Rightarrow\; \mathcal{T}[\Gamma \mathrel{:=} \Gamma,\, x :^{\omega} S]
