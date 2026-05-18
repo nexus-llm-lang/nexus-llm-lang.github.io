@@ -523,8 +523,7 @@ U-Var produces a non-empty substitution because $?\alpha$ stands for a *named* u
 $$\dfrac{
   \begin{array}{l}
   \lvert\overline{p_1}\rvert = \lvert\overline{p_2}\rvert \qquad
-  \forall i.\;\ell_i^1 = \ell_{\pi(i)}^2 \qquad
-  \text{unify}(\tau_i^1, \tau_{\pi(i)}^2) \\[2pt]
+  \forall i.\;\text{unify}(\tau_i^1, \tau_i^2) \\[2pt]
   \text{unify}(\tau_{r1}, \tau_{r2}) \qquad
   \text{unify}(\rho_{q1}, \rho_{q2}) \qquad
   \text{unify}(\rho_{e1}, \rho_{e2})
@@ -535,7 +534,9 @@ $$\dfrac{
 } \;\textsc{U-Arrow}$$
 </div>
 
-where $\pi$ is the permutation matching labels by name ($\ell_i^1 = \ell_{\pi(i)}^2$). Parameters are matched by label, not position.
+Arrow parameters unify **positionally**, by index — labels are not part of the arrow type's structural identity. A parameter label is metadata used at the *call site* (see [T-App](#T-App)): the caller writes $f(\ell_i\colon e_i)$ using the labels declared on the *type the caller sees*, and call-site label matching is what resolves which positional slot each argument fills. Two arrow types $(x\colon \tau) \to \tau'$ and $(y\colon \tau) \to \tau'$ therefore unify (and the call site uses whichever label its surface type carries), but $(x\colon \tau_1, y\colon \tau_2)$ and $(y\colon \tau_2, x\colon \tau_1)$ do **not** — order is significant.
+
+This contrasts with [U-Record](#U-Record) below, where field names *are* part of the type's identity: a record value carries its labels into every use site, so two records with the same labels but in different declaration order are the same type, while two records with different labels are distinct types.
 
 <div markdown="0">
 $$\dfrac{
