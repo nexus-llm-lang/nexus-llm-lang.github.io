@@ -5,32 +5,32 @@ title: Design
 
 # Design
 
-Nexus is built on one observation: **LLMs are strong at literal program constructs but weak at contextual ones.** Garbage collection, implicit conversions, ambient I/O, continuation-based control flow -- these contextual mechanisms are where LLM-generated code breaks and where human review fails. Nexus replaces each with a syntactically explicit alternative.
+Nexus rests on one bet: **LLMs are good at code you can read on the page, and bad at code that depends on what's off the page.** GC, implicit casts, ambient I/O, hidden control flow — these are the spots where LLM code goes wrong and where humans miss it on review. Nexus swaps each one for a form you can see in the source.
 
-## Literal vs Contextual
+## On the page vs off it
 
-| Contextual (eliminated) | Literal (Nexus alternative) |
+| Off the page (cut) | On the page (Nexus form) |
 |---|---|
-| Implicit resource cleanup (GC, finalizers) | `%` linear types -- consumed exactly once |
-| Hidden aliasing | `&` borrow -- explicit read-only view |
-| Ambient I/O | `require { PermNet }` -- declared capability |
-| Implicit control transfer (continuations) | `try/catch` -- traditional unwind semantics |
-| Positional arguments | `add(a: 1, b: 2)` -- mandatory labeled arguments |
-| Brace-matching (off-by-one) | `do ... end` -- keyword-terminated blocks |
+| Implicit resource cleanup (GC, finalizers) | `%` linear types — used once |
+| Hidden aliasing | `&` borrow — a read-only view |
+| Ambient I/O | `require { PermNet }` — stated up front |
+| Implicit control transfer (continuations) | `try/catch` — old-school unwind |
+| Positional arguments | `add(a: 1, b: 2)` — labels required |
+| Brace-matching (off-by-one) | `do ... end` — keyword blocks |
 | Implicit scope termination | `if ... then ... end`, `match ... do ... end` |
 
-The principle is simple: if a construct requires looking elsewhere to understand what happens here, replace it with something that doesn't.
+The rule is plain. If a construct sends you elsewhere to know what happens here, swap it for one that doesn't.
 
-## Why Capabilities, Not Effects
+## Why caps, and why not effects
 
-Most effect system research focuses on *algebraic effects* -- functions perform effect operations, and handlers intercept them using delimited continuations. The handler decides whether and how to resume the suspended computation. This is powerful but fundamentally *contextual*: the call site `Logger.info(msg: x)` tells you nothing about control flow. The handler could resume, abort, restart, or run the continuation multiple times.
+Most of the effect-system literature centers on *algebraic effects*. A function performs an effect op, and a handler intercepts the op through a delimited continuation. The handler picks whether and how to resume the suspended work. That model is powerful, but it lives off the page. At the call site, `Logger.info(msg: x)` says nothing about control flow. The handler might resume, abort, restart, or fire the continuation many times over.
 
-Nexus rejects continuations entirely. Instead:
+Nexus drops continuations altogether. Instead:
 
-- **Caps** define stateless interfaces (like traits or interfaces in other languages).
-- **Handlers** are ordinary values that implement a cap's methods.
-- **`inject`** supplies a handler to a lexical scope -- dependency injection, not algebraic effect handling.
-- **Cap calls** are direct, statically resolved function calls. `Logger.info(msg: x)` calls a function. It returns. No implicit control transfer.
+- A **cap** spells out a stateless interface, much like a trait in other languages.
+- A **handler** is a plain value that implements the cap's methods.
+- **`inject`** hands a handler to a lexical scope. Read it as dependency injection, rather than as algebraic effect handling.
+- **Cap calls** are direct, statically resolved function calls. `Logger.info(msg: x)` runs a function. It returns. There's no hidden jump.
 
 ```nexus
 cap Logger do
@@ -52,11 +52,11 @@ let main = fn () -> unit require { PermConsole } do
 end
 ```
 
-The tradeoff is explicit: less expressive handlers in exchange for every call site meaning exactly what it says.
+The trade is plain. You give up handler expressiveness so that each call site means just what it says.
 
-## Linear Types as Literal Resource Tracking
+## Linear types track resources on the page
 
-Garbage collectors and finalizers are contextual -- resources disappear "sometime later" through an invisible mechanism. Nexus makes resource lifecycle visible in syntax with the `%` sigil:
+GCs and finalizers live off the page. A resource goes away "sometime later," through a step you can't see. Nexus puts the lifecycle in the syntax through the `%` sigil:
 
 ```nexus
 let %h = Fs.open_read(path: path)   // acquire
@@ -67,11 +67,11 @@ match %r do
 end
 ```
 
-The compiler enforces exactly-once consumption. Fail to consume, consume twice, or discard with `_` -- rejected at compile time. No GC, no finalizers, no implicit drop.
+The compiler holds you to once-and-only-once use. Skip a consume, use it twice, or drop it with `_`, and the code fails to build. There's no GC, no finalizer, and no quiet drop.
 
-## Borrowing as Explicit Aliasing
+## Borrowing puts aliasing on the page
 
-Hidden aliasing is a major source of bugs in both human and LLM-generated code. The `&` sigil makes every alias visible:
+Hidden aliasing chews up code from humans and LLMs alike. The `&` sigil makes every alias show up at the use site:
 
 ```nexus
 let server = Net.listen(addr: addr)
@@ -81,11 +81,11 @@ let _ = Net.respond(req: req, ...)     // consume req
 Net.stop(server: server)               // consume server
 ```
 
-Every read-without-consuming is syntactically marked. No hidden reference counting, no shared pointers, no implicit copies.
+Every read-without-consume gets marked in the syntax. There's no quiet refcount, no shared pointer, and no automatic copy.
 
-## Labeled Arguments and Keyword Blocks
+## Labeled args and keyword blocks
 
-Positional arguments require looking at the function signature to know what each argument means. Brace-delimited blocks require counting braces to find boundaries. Nexus eliminates both:
+Positional arguments push you to the function signature to learn what each slot means. Brace-delimited blocks push you to count braces to find the end. Nexus drops both:
 
 ```nexus
 // Every argument is self-documenting
@@ -102,9 +102,9 @@ if condition then
 end
 ```
 
-## Capability-Based Security
+## Cap-based security
 
-Ambient authority -- where any function can read files, make network requests, or access the clock -- is deeply contextual. The `require` clause makes the security surface visible at every function boundary:
+Ambient authority — where any function can read files, hit the network, or read the clock — lives entirely off the page. The `require` clause pins the security surface to every function boundary:
 
 ```nexus
 let main = fn () -> unit require { PermNet, PermConsole } do
@@ -116,4 +116,4 @@ let main = fn () -> unit require { PermNet, PermConsole } do
 end
 ```
 
-`require { PermNet, PermConsole }` is checked at compile time and enforced at the WASI runtime level. A function cannot perform network I/O unless it declares `PermNet` and a handler satisfying `Net` is injected. See [WASM and WASI](../env/wasm) for the permission-to-capability mapping.
+`require { PermNet, PermConsole }` is checked at build time and enforced again by the WASI runtime. A function may do network I/O only when it declares `PermNet` and a handler for `Net` is in scope. See [WASM and WASI](../env/wasm) for how perms map to caps.

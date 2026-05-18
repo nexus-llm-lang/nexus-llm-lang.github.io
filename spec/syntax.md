@@ -5,7 +5,7 @@ title: Syntax
 
 # Syntax
 
-Nexus uses keyword-terminated blocks and mandatory labeled arguments to make program structure unambiguous (see [Design](../../design)). This reference covers all syntactic constructs. For semantic behavior, see [Types](../types), [Effects](../effects), and [Semantics](../semantics).
+Nexus uses keyword-terminated blocks, and it requires labels on every argument. The goal is that program structure reads off the page (see [Design](../../design)). This page lists every syntactic construct. For runtime meaning, head to [Types](../types), [Effects](../effects), and [Semantics](../semantics).
 
 ## Comments
 
@@ -138,7 +138,7 @@ Binary operators with standard precedence (multiplicative binds tighter than add
 | `&&` | Logical AND |
 | `\|\|` | Logical OR (lowest) |
 
-The `::` operator is right-associative and desugars to `Cons(v: lhs, rest: rhs)`. For example, `1 :: 2 :: []` produces `Cons(v: 1, rest: Cons(v: 2, rest: Nil))`.
+The cons operator is right-associative and written as a pair of colons. Each use desugars into a `Cons` ctor whose `v` field is the head and whose `rest` field is the tail. So `1 :: 2 :: []` builds a chain of `Cons` cells ending in `Nil`.
 
 ### Function Calls
 
@@ -148,9 +148,9 @@ Console.println(val: "hello")
 list.map(xs: items, f: transform)
 ```
 
-All arguments are labeled. Argument order at the call site does not matter -- `add(b: 2, a: 1)` is equivalent to `add(a: 1, b: 2)`. Cap method calls use `Cap.method(...)` syntax.
+Every argument carries a label. Order at the call site does not matter; reordering the args yields the same call. Cap method calls take the form `Cap.method(...)`.
 
-**Punning.** When the argument is a bare variable whose name equals the label, the label may be omitted. The parser desugars `f(x)` to `f(x: x)`. Sigils ride along: `f(%v)` desugars to `f(v: %v)`, `f(&v)` to `f(v: &v)`, `f(~v)` to `f(v: ~v)`, `f(@v)` to `f(v: @v)`, and `f(&%v)` (borrow of a linear) to `f(v: &%v)`. The same rule applies to constructor calls and constructor patterns. Punning does **not** apply to record literals or record patterns, which still require `name: value`.
+**Punning.** When the argument is a bare variable whose name matches the label, you can drop the label. The parser desugars an unlabeled bare-variable call into the fully labeled form. Sigils ride along, so a call like `f(%v)` rewrites with the matching `v` label, and the same expansion runs for `&v`, `~v`, `@v`, and `&%v` (borrow of a linear). Constructor calls and constructor patterns follow the same rule. Punning does **not** apply to record literals or record patterns; those still need a `name` `value` pair spelled out.
 
 ### Lambda Expressions
 
@@ -301,7 +301,7 @@ while condition do
 end
 ```
 
-Evaluates `condition` before each iteration. If false, exits the loop. Returns `unit`.
+At the top of each iteration, the loop checks `condition` and exits when it is false. The expression returns `unit`.
 
 ```nexus
 let ~i = 0

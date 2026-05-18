@@ -5,9 +5,9 @@ title: Checked Exceptions and Capabilities
 
 # Checked Exceptions and Capabilities
 
-Nexus separates two concerns in function signatures: **capabilities** (what the function needs from its environment) and **checked exceptions** (what exceptions the function may throw). This distinction is central to the [design thesis](../../design#why-capabilities-not-effects) -- every dependency and side effect is declared, not implied.
+A Nexus function signature splits two concerns. **Caps** name what the function needs from its environment. **Checked exceptions** name what it may throw. The split sits at the core of the [design thesis](../../design#why-capabilities-not-effects). Each dep and side effect lands in the signature where you can see it.
 
-> **Terminology note.** The `require` clause is sometimes called a *coeffect* in the literature, as it tracks environmental requirements (the dual of effects). We use *capability* because Nexus's system — row-polymorphic, discharged by `inject`, annotations on function signatures — differs structurally from coeffect calculi (Petricek et al.), which use semiring-indexed annotations on individual variable bindings.
+> **Terminology note.** Some papers call the `require` clause a *coeffect*. The term fits, since it tracks environmental needs (the dual of effects). Here we use *capability*. The Nexus form is row-polymorphic, discharged by `inject`, and shows up as an annotation on a function signature. That structure differs from the coeffect calculi of Petricek and others, which use semiring-indexed annotations on each variable binding.
 
 ## Function Signature Shape
 
@@ -32,7 +32,7 @@ end
 
 ## Checked Exceptions
 
-The only builtin throws type is `Exn`. `try/catch` discharges `Exn` from the protected block:
+The one builtin throws type is `Exn`. A `try/catch` block clears `Exn` from the protected code:
 
 ```nexus
 exception NotFound(msg: string)
@@ -54,17 +54,17 @@ let main = fn () -> unit do
 end
 ```
 
-Exception declarations extend the builtin `Exn` type:
+Each new exception extends the builtin `Exn` type:
 
 ```nexus
 export exception PermissionDenied(msg: string, code: i64)
 ```
 
-`throw` is an expression that immediately unwinds to the nearest `catch`. All I/O capabilities use the capability system, not throws.
+`throw` is an expression that unwinds straight to the nearest `catch`. Every I/O capability goes through the cap system instead of through throws.
 
 ## Capabilities
 
-A `cap` defines a capability interface -- a set of function signatures that must be provided by the environment:
+A `cap` defines an interface. The interface is a set of function signatures the environment has to supply:
 
 ```nexus
 export cap Logger do
@@ -73,9 +73,9 @@ export cap Logger do
 end
 ```
 
-When a function calls `Logger.info(...)`, it must have `Logger` in its `require` row.
+When a function calls `Logger.info(...)`, it must list `Logger` in its `require` row.
 
-Cap methods can themselves declare throws and capabilities:
+Cap methods can declare their own throws and caps:
 
 ```nexus
 export cap Fs do
@@ -87,7 +87,7 @@ end
 
 ## Handlers
 
-A handler is a value that implements all methods of a cap:
+A handler is a value that implements every method on a cap.
 
 ```nexus
 let console_logger = handler Logger require { Console } do
@@ -107,9 +107,11 @@ let mock_logger = handler Logger do
 end
 ```
 
-Handler `require { ... }` is a **precondition on every `inject` site**: a handler value with `require { Console }` may only be injected inside a scope that already provides `Console` (i.e. whose enclosing function declares `require { Console }` or whose surroundings injected a `Console` handler). The injection does **not** retroactively add `Console` to the calling function's requirements — the caller must already hold it.
+Handler `require { ... }` is a **precondition on every `inject` site**. A handler value with `require { Console }` may be injected only inside a scope that already supplies `Console`. The enclosing function must either declare `require { Console }` or sit under a surrounding `Console` injection. The inject does **not** retroactively add `Console` to the caller's requirements; the caller must already hold it.
 
-This is the rule formalised by [T-Inject](./type-system-formal#T-Inject): the handler's require row $\rho_i$ must satisfy $\rho_i \subseteq \rho_q$, where $\rho_q$ is the ambient row at the inject site. The opposite reading (propagation, where injecting a `require {Console}` handler would push `Console` upward into the caller's signature) was considered and rejected — it would let a function reach capabilities its declared signature does not advertise, breaking capability containment as an audit property.
+Formally, [T-Inject](./type-system-formal#T-Inject) makes this precise. The handler's require row $\rho_i$ must satisfy $\rho_i \subseteq \rho_q$, where $\rho_q$ is the ambient row at the inject site.
+
+An opposite reading is propagation, where injecting a `require {Console}` handler would push `Console` upward into the caller's signature. We weighed that path and rejected it. A function could then reach caps its declared signature does not advertise, and cap containment as an audit property would break.
 
 The type checker enforces:
 - Handler methods must match cap signatures exactly
@@ -119,7 +121,7 @@ The type checker enforces:
 
 ## Inject
 
-`inject` supplies handler values to a lexical scope, discharging matching `require` entries:
+`inject` hands handler values to a lexical scope and clears the matching `require` entries:
 
 ```nexus
 inject stdio.system_handler do
@@ -136,7 +138,7 @@ Rules:
 
 ## Exception Groups
 
-Exception groups let you catch multiple related exceptions with a single pattern. See [Exception Groups](../exception-groups) for the full reference.
+An exception group lets you catch several related exceptions with one pattern. See [Exception Groups](../exception-groups) for the full reference.
 
 ```nexus
 exception NotFound(path: string)
@@ -154,7 +156,7 @@ end
 
 ## Main Constraints
 
-The `main` function has special restrictions:
+A few rules apply only to `main`:
 
 - Signature: `() -> unit`
 - `throws` must be empty (all exceptions must be handled internally)
@@ -169,13 +171,13 @@ let main = fn () -> unit require { PermConsole } do
 end
 ```
 
-## Permission Mapping
+## Permission mapping
 
-Runtime permissions (`PermFs`, `PermNet`, etc.) are special capabilities that map to WASI capabilities. They serve as the bridge between the type system and the runtime sandbox. See [WASM and WASI](../../env/wasm) for the complete mapping table.
+Runtime perms (`PermFs`, `PermNet`, and the rest) are caps that map to WASI caps. They sit between the type system and the runtime sandbox. See [WASM and WASI](../../env/wasm) for the full table.
 
-## Row Typing
+## Row typing
 
-Throws and capability rows are checked by row unification (no subtyping). Open rows use tail variables for polymorphism:
+Throws and cap rows are checked by row unification, with no subtyping. Open rows use tail variables for polymorphism:
 
 ```nexus
 // This function is polymorphic over additional requirements
@@ -186,4 +188,4 @@ let log_and_do = fn <R>(f: () -> unit require { Logger | R }) -> unit require { 
 end
 ```
 
-Compatibility is structural -- two rows unify if they contain the same entries (order-independent).
+Compatibility is structural. Two rows unify when they list the same entries, in any order.

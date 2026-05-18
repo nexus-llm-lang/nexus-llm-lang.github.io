@@ -5,11 +5,11 @@ title: WASM and WASI
 
 # WASM and WASI
 
-Nexus compiles to the WebAssembly Component Model with WASI for system interfaces. The capability system maps directly to WASI capabilities -- every `require { PermX }` in your program corresponds to a concrete WASI interface grant.
+Nexus compiles to the WebAssembly Component Model and uses WASI for system interfaces. The cap system maps to WASI caps one-to-one. Every `require { PermX }` in the program lines up with a concrete WASI interface grant.
 
-## Permission-to-Capability Mapping
+## Perm-to-cap mapping
 
-A program's required permissions are declared in `main`'s `require` clause and emitted into the `nexus:capabilities` custom section. When `nexus run` invokes `wasmtime`, it translates each present permission into the matching `wasmtime` flag — only `Fs` and `Net` need a runtime flag today; the rest are statically checked only (the underlying WASI calls always succeed under the default `-Scli` profile).
+A program's required perms live in `main`'s `require` clause. They end up in a custom WASM section named after the cap list. When `nexus run` invokes `wasmtime`, it maps each present perm to the matching `wasmtime` flag. Only `Fs` and `Net` need a runtime flag today; the rest are checked statically. The underlying WASI calls always succeed under the default `-Scli` profile.
 
 | Nexus Permission | Runtime mapping (`nexus run` → wasmtime) |
 |---|---|
@@ -23,17 +23,17 @@ A program's required permissions are declared in `main`'s `require` clause and e
 
 The mapping is defined by `cap_wasmtime_flags` in `src/cli/format.nx`.
 
-## Capability Enforcement
+## Cap enforcement
 
-### Static Verification
+### Static check
 
-The type checker ensures:
-1. Any function calling a capability-requiring cap must itself `require` that capability or have it satisfied via `inject`
-2. `main`'s `require` clause is the source of truth for the entire program's capability surface
+The type checker ensures the following:
+1. Any function that calls a cap-requiring cap must itself `require` that cap, or have it satisfied via `inject`.
+2. `main`'s `require` clause is the source of truth for the program's cap surface.
 
-### Binary Encoding
+### Binary encoding
 
-Required permissions are stored in a custom WASM section named `nexus:capabilities`:
+Required perms live in a custom WASM section. The shape:
 
 ```
 Section name: "nexus:capabilities"
@@ -41,19 +41,19 @@ Data format:  UTF-8 newline-separated capability names
 Example:      "Fs\nNet\nConsole\n"
 ```
 
-This allows tools to inspect required permissions without executing the binary.
+So a tool can inspect the required perms without running the binary.
 
-### Runtime Enforcement
+### Runtime enforcement
 
-The Nexus runtime (via wasmtime) configures the WASI context based on declared capabilities:
+The Nexus runtime (via wasmtime) sets up the WASI context from the declared caps:
 
-- **Filesystem isolation**: if `PermFs` is not required, no directories are preopened
-- **Network isolation**: if `PermNet` is not required, network interfaces are not inherited
-- **Console isolation**: if `PermConsole` is not required, stdio is not inherited
+- **Filesystem isolation**: with no `PermFs`, no directory is preopened.
+- **Network isolation**: with no `PermNet`, network interfaces are not inherited.
+- **Console isolation**: with no `PermConsole`, stdio is not inherited.
 
 ## ABI
 
-This section documents how Nexus values are represented in WebAssembly. Understanding the ABI is necessary for writing FFI bindings and debugging compiled output.
+This section spells out how Nexus values are stored in WebAssembly. You'll need this to write FFI bindings or to debug compiled output.
 
 ### Type Mapping
 
@@ -75,7 +75,7 @@ Every Nexus type maps to a WASM value type:
 | ADT variant | `i64` | Heap pointer |
 | closure / `fn(...)` | `i64` | Heap pointer |
 
-All heap-allocated values (records, ADTs, lists, arrays, closures) are represented as `i64` pointers into linear memory. Primitives smaller than 64 bits (`bool`, `char`, `i32`, `f32`) use their native WASM types.
+Every heap-allocated value (record, ADT, list, array, or closure) is an `i64` pointer into linear memory. Primitives smaller than 64 bits — `bool`, `char`, `i32`, `f32` — use their native WASM types.
 
 ### String Encoding
 
@@ -89,7 +89,7 @@ bits 31-0:  length (u32, byte count)
 Pack: `(offset << 32) | length`
 Unpack: `offset = value >>> 32`, `length = value & 0xFFFFFFFF`
 
-String literal bytes are written to the WASM data section starting at offset 16. Literals are deduplicated by value. The heap base is aligned to 8 bytes after all string data.
+String literal bytes are written to the WASM data section starting at offset 16. Literals are deduped by value. The heap base is aligned to 8 bytes after all string data.
 
 ### Memory Layout
 
@@ -101,10 +101,10 @@ Offset align8(N): Heap base — objects grow upward
 
 **Allocation strategy:**
 
-- **With stdlib.wasm**: Calls `allocate(bytes: i32) -> i32` from the stdlib module. This uses dlmalloc internally.
-- **Without stdlib**: Bump allocator using WASM global 0 as the heap pointer. Grows memory on demand via `memory.grow`.
+- **With stdlib.wasm**: Calls `allocate(bytes: i32) -> i32` from the stdlib module. The impl uses dlmalloc.
+- **Without stdlib**: Bump allocator that uses WASM global 0 as the heap pointer. Memory grows on demand via `memory.grow`.
 
-All heap objects are stored in 8-byte words.
+Every heap object lives in 8-byte words.
 
 ### Heap Object Layout
 
@@ -117,9 +117,9 @@ Word 2:  i64  field[1]
 ...
 ```
 
-The tag is computed via FNV-1a: `hash(name) ^ arity * FNV_PRIME`. Pattern matching compares tags with `i64.eq`.
+The tag is computed via FNV-1a, with the formula `hash(name) ^ arity * FNV_PRIME`. Pattern matching compares tags with `i64.eq`.
 
-**Field ordering**: Fields are stored in **lexicographic order by field name**. When a constructor is created with labeled arguments (e.g., `Cons(v: x, rest: xs)`), the arguments are sorted before storage. Field extraction via pattern matching uses the same sorted index. List literals `[a, b, c]` desugar to `Cons` with positional arguments in this sorted order.
+**Field ordering**: Fields are stored in **lexicographic order by field name**. When a constructor is built with labeled arguments (such as `Cons(v: x, rest: xs)`), the args are sorted before storage. Field extraction via pattern matching uses the same sorted index. The list literal `[a, b, c]` desugars to `Cons` with positional args in that sorted order.
 
 #### Record
 
@@ -143,11 +143,11 @@ Word 2:  i64  captured value[1]
 ...
 ```
 
-Closures are called via `call_indirect`. The closure pointer is passed as the first argument (`__env: i64`), and the callee loads captured values from `__env` at the appropriate offsets.
+Closures are called via `call_indirect`. The closure pointer goes in as the first argument, named `__env` and typed `i64`. The callee then loads captured values from `__env` at the right offsets.
 
 ### Value Packing
 
-When storing values in heap objects, all values are normalized to `i64`:
+When a value gets stored in a heap object, it's first normalized to `i64`:
 
 | Source Type | Pack to i64 | Unpack from i64 |
 |---|---|---|
@@ -159,15 +159,15 @@ When storing values in heap objects, all values are normalized to `i64`:
 
 ### Calling Convention
 
-- **Internal functions**: All labeled parameters and arguments are sorted **lexicographically by label**. Both the function signature and call sites use the same sorted order.
-- **External functions (FFI)**: Parameters stay in **source (definition) order** to match the stdlib WASM ABI. Call arguments are matched to external parameters **by label**, not by position.
-- `unit` parameters generate no WASM parameter.
-- `unit`-returning functions have an empty WASM result type.
-- Tail calls use WASM `return_call` when not inside a `try` block.
+- **Internal functions**: Every labeled parameter and argument is sorted **lexicographically by label**. The function signature and the call sites use the same sorted order.
+- **External functions (FFI)**: Parameters stay in **source (definition) order** to match the stdlib WASM ABI. Call arguments are matched to external parameters **by label**, with order ignored.
+- A `unit` parameter generates no WASM parameter.
+- A `unit`-returning function has an empty WASM result type.
+- Tail calls use WASM `return_call`, except inside a `try` block.
 
 ### Indirect Calls (Closures)
 
-Closure calls use `call_indirect` with an extended signature. The first parameter is always `__env: i64` (the closure heap pointer):
+Closure calls use `call_indirect` with an extended signature. The first parameter is always `__env: i64`, the closure heap pointer:
 
 ```
 // Nexus: let f = fn (x: i64) -> i64 do ... end
@@ -175,7 +175,7 @@ Closure calls use `call_indirect` with an extended signature. The first paramete
 //                   ^env ^x
 ```
 
-The caller pushes `__env`, then the normal arguments, then the table index as `i32` for `call_indirect`.
+The caller pushes `__env` first, then the normal args, and finally the table index as `i32` for `call_indirect`.
 
 ### Exception Model
 
@@ -186,12 +186,12 @@ Exceptions use two WASM globals (not WASM exception handling):
 (global $exn_value (mut i64) (i64.const 0))   ;; exception object pointer
 ```
 
-**Raise**: stores the exception value, sets the flag to 1, returns a dummy value.
-**Catch**: after each statement, checks `$exn_flag`. If set, jumps to the catch handler, clears the flag, and binds `$exn_value` to the catch parameter.
+**Raise**: store the exception value, set the flag to 1, and return a dummy value.
+**Catch**: after each statement, check `$exn_flag`. If set, jump to the catch handler, clear the flag, and bind `$exn_value` to the catch parameter.
 
 ### FFI Boundary
 
-External functions use a different parameter encoding for strings and arrays. The packed `i64` representation is split into separate pointer and length parameters:
+External functions use a different parameter encoding for strings and arrays. The packed `i64` form is split into a pointer and a length:
 
 | Nexus Type | WASM Params (FFI) | Notes |
 |---|---|---|
@@ -204,9 +204,9 @@ External functions use a different parameter encoding for strings and arrays. Th
 | `%ByteBuffer`, opaque | 1x `i64` | Handle passed directly |
 | `unit` | (none) | No parameter generated |
 
-Parameter order: external function parameters preserve **source (definition) order**, not lexicographic order. This is because the WASM function type signature must match the stdlib export exactly. Call-site arguments are reordered to match by looking up each external parameter's label.
+Parameter order: external function parameters keep **source (definition) order** rather than lexicographic order. The WASM function type signature has to match the stdlib export exactly. Call-site args are reordered to match by looking up each external parameter's label.
 
-Return values use the same types as internal functions (strings return as packed `i64`).
+Return values use the same types as internal functions; strings return as packed `i64`.
 
 ### Module Structure
 
@@ -233,7 +233,7 @@ Return values use the same types as internal functions (strings return as packed
 
 #### Funcref Table
 
-If the program uses closures or function references, a funcref table is emitted:
+When the program uses closures or function references, a funcref table is emitted:
 
 - Element type: `funcref`
 - Size: number of unique function references
@@ -249,7 +249,7 @@ nexus build program.nx                  # outputs main.wasm
 nexus build program.nx -o output.wasm   # custom output path
 ```
 
-The build step requires `wasm-merge` for dependency bundling. Configure via `--wasm-merge PATH` or the `NEXUS_WASM_MERGE` environment variable.
+The build step needs `wasm-merge` to bundle deps. Set it via `--wasm-merge PATH` or the `NEXUS_WASM_MERGE` env var.
 
 ### Run with wasmtime
 

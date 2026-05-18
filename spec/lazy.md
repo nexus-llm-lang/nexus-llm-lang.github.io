@@ -3,18 +3,18 @@ layout: default
 title: Lazy Evaluation, Concurrency, and Parallelism
 ---
 
-# Lazy Evaluation, Concurrency, and Parallelism (`@`)
+# Lazy evaluation, concurrency, and parallelism (`@`)
 
-The `@` sigil is Nexus's unified primitive for lazy evaluation, concurrency, and parallelism, designed around **one-shot delimited continuations** and **linear types**.
+The `@` sigil rolls lazy evaluation, concurrency, and parallelism into one primitive. The shape rests on **one-shot delimited continuations** and **linear types**.
 
-A lazy binding `let @x = expr` suspends `expr` as an unevaluated thunk. Forcing with `@x` evaluates it. Independent thunks within a force expression are evaluated in parallel via DAG scheduling — data dependencies determine execution order, not left-to-right evaluation.
+A lazy binding `let @x = expr` suspends `expr` as an unevaluated thunk. Forcing with `@x` runs it. Within a force expression, thunks with no data dependency on each other run side by side under DAG scheduling; the source order has no say in what fires when.
 
-## Design Rationale
+## Design rationale
 
-- **No async/await keywords**: `@` integrates into the existing sigil system (`%` linear, `&` borrow, `@` lazy) rather than adding new syntax
-- **Lazy, not eager**: Unlike JS Promises (eager evaluation, implicit error swallowing), `@` thunks are unevaluated until forced
-- **One-shot continuation**: Internally based on one-shot delimited continuations (cf. OCaml 5). Linear types guarantee single-use — no copying, no multi-shot
-- **Exception propagation**: No separate rejection channel. `throw` inside a thunk propagates via standard `try/catch` at the force site
+- **No async/await keywords**: `@` slots into the sigil system already in place (`%` linear, `&` borrow, `@` lazy), so no new keywords show up.
+- **Lazy, then forced**: JS Promises evaluate eagerly and swallow errors quietly. An `@` thunk waits until you force it.
+- **One-shot continuation**: The runtime uses one-shot delimited continuations (compare OCaml 5). Linear types keep the use to one, so there's no copy and no multi-shot.
+- **Exception propagation**: There's no separate rejection channel. A `throw` inside a thunk surfaces at the force site through the standard `try/catch`.
 
 ## Sigil Table
 
@@ -40,7 +40,7 @@ let delayed: @string = @("hello" ++ " world")
 
 ## Parallel Evaluation
 
-`@x` forces a single thunk. Parallel evaluation of a *list* of thunks is opt-in via the stdlib helper `force_all` (`std:lazy`):
+`@x` forces a single thunk. To run a *list* of thunks side by side, opt in through the stdlib helper `force_all`. The wrapper ships in the lazy stdlib module.
 
 ```nexus
 let @p1 = compute1()
@@ -48,13 +48,13 @@ let @p2 = compute2()
 let xs = force_all(tasks: [p1, p2])   // [p1's result, p2's result]
 ```
 
-Each thunk is dispatched as a task (one struct in linear memory) and joined left-to-right. The dispatch primitives `lazy_spawn` / `lazy_join` live in `nxlib/stdlib/runtime/lazy.nx`.
+Each thunk is dispatched as a task — one struct in linear memory — and joined left-to-right. The dispatch primitives `lazy_spawn` and `lazy_join` live in `nxlib/stdlib/runtime/lazy.nx`.
 
-> **Status note.** The current `lazy_spawn` implementation is *sequential* — it forces each thunk inline and stores the result, so `force_all` runs all tasks one after another. A `wasi:threads` worker entry point (`wasi_thread_start`) is exported for compatibility with `wasmtime -S threads` runs, but the sequential `lazy_spawn` does not invoke it. True parallel execution via the component-model `future<T>` migration is tracked as future work.
+> **Status note.** The current `lazy_spawn` runs *sequentially*. It forces each thunk inline and stores the result, so `force_all` runs the tasks one after the other. A `wasi:threads` worker entry point (`wasi_thread_start`) is exported for runs under `wasmtime -S threads`, but the sequential `lazy_spawn` does not invoke it. The plan is to switch over to the component-model `future<T>` for real parallel execution. That switch is tracked as future work.
 
 ## Linearity
 
-`@T` is inherently linear — a one-shot continuation must be consumed exactly once. Three consumption operations:
+`@T` is linear. A one-shot continuation must be consumed exactly once. The three consume forms are:
 
 | Operation | Executes? | Waits? | Use case |
 |---|---|---|---|
@@ -62,7 +62,7 @@ Each thunk is dispatched as a task (one struct in linear memory) and joined left
 | `detach(a: x)` | Yes | No | Fire-and-forget |
 | `cancel(a: x)` | No | — | Discard unneeded computation |
 
-Unconsumed `@T` is a compile error. Copying is forbidden (not multi-shot).
+An unconsumed `@T` is a build error. Copying is forbidden, so a thunk runs at most once.
 
 `@`'s linearity is orthogonal to the result's linearity:
 
@@ -84,11 +84,11 @@ f()   // ERROR: f already consumed
 
 ## Deadlock Freedom
 
-Linear types structurally prevent deadlock:
+Linear types prevent deadlock by construction.
 
-1. **No forward references**: `let` bindings are sequential — a thunk cannot reference a later-defined `@` value, so simple cycles are syntactically impossible
-2. **No sharing**: `@T` is non-copyable — two thunks cannot depend on the same `@` value, so circular dependencies cannot be constructed
-3. **Acyclic DAG**: The parallel evaluation DAG is derived from the AST, which is structurally a tree (acyclic)
+1. **No forward references.** `let` bindings run in order. A thunk cannot reach a later `@` value, so a simple cycle never lands in the source.
+2. **No sharing.** `@T` cannot be copied. Two thunks cannot share an `@` value, so a circular dependency is unreachable.
+3. **Acyclic DAG.** The parallel evaluation DAG comes from the AST. The AST is a tree, and a tree has no cycles.
 
 ## Data Race Freedom
 
@@ -100,11 +100,11 @@ let @a = do let lock = &%arr; lock[0] <- 1 end
 let @b = do let lock = &%arr; lock[1] <- 2 end   // ERROR: %arr already borrowed
 ```
 
-Shared mutable state across parallel thunks requires explicit concurrency primitives (channels, atomics).
+Sharing mutable state across parallel thunks requires explicit concurrency primitives — channels, atomics, and the like.
 
 ## Exception Semantics
 
-Exceptions thrown inside a thunk propagate at the force site via standard `try/catch`:
+A throw inside a thunk surfaces at the force site, where the usual `try/catch` picks it up:
 
 ```nexus
 let @result = do
@@ -118,11 +118,11 @@ catch
 end
 ```
 
-When `force_all` is used and one of the forced thunks throws, the exception propagates at the join point and the remaining thunks' results are discarded; linear types guarantee no resource leak.
+When `force_all` runs and one of its thunks throws, the exception surfaces at the join point. The other thunks' results are then discarded. Linear types keep this leak-free.
 
 ## Standard Library (`std:lazy`)
 
-Only the `@` sigil is built into the language. Combinators are provided as stdlib functions:
+Only the `@` sigil is built into the language. The rest ship as stdlib functions.
 
 | Function | Signature | Description |
 |---|---|---|

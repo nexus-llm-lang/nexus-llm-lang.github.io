@@ -9,7 +9,7 @@ This document describes the execution model of Nexus.
 
 ## Evaluation Strategy
 
-Nexus is **call-by-value**. All expressions are fully evaluated before being passed to functions or constructors.
+Nexus is **call-by-value**. Each expression runs in full before its result reaches a function or constructor.
 
 ### Evaluation Order
 
@@ -20,7 +20,7 @@ Strict **left-to-right**:
 
 ### Label Order Independence
 
-Labeled arguments at call sites may appear in any order. `f(b: 2, a: 1)` and `f(a: 1, b: 2)` pass the same values. Argument expressions are evaluated left-to-right in source order regardless of label names.
+Labeled arguments at call sites may appear in any order. The calls `f(b: 2, a: 1)` and `f(a: 1, b: 2)` end up with the same pairing. Argument expressions still evaluate left-to-right in source order, regardless of which labels they carry.
 
 ## Scoping
 
@@ -30,7 +30,7 @@ Labeled arguments at call sites may appear in any order. `f(b: 2, a: 1)` and `f(
 
 ## Sigil Behavioral Semantics
 
-Sigils are not annotations -- they impose runtime behavioral constraints.
+Sigils are no mere annotations; they pin down runtime behavior.
 
 ### Mutability (`~`)
 
@@ -62,7 +62,7 @@ Sigils are not annotations -- they impose runtime behavioral constraints.
 
 ## Exception Propagation
 
-`throw` immediately terminates the current computation and unwinds the call stack until it reaches a `try/catch` block. The `Exn` value is passed to the `catch` parameter:
+A `throw` ends the current computation at once and unwinds the call stack up to the nearest `try/catch`. The `Exn` value lands in the `catch` parameter:
 
 ```nexus
 try
@@ -76,7 +76,7 @@ catch e ->
 end
 ```
 
-Exceptions are checked -- any function that may throw must declare `throws { Exn }`. `try/catch` discharges `Exn` from the protected region.
+Exceptions are checked. Any function that may throw must declare `throws { Exn }`. A `try/catch` clears `Exn` from the protected region.
 
 ## Loops
 
@@ -109,7 +109,7 @@ while ~var < ~__end do
 end
 ```
 
-`start` and `end_expr` must be `i64`. The loop variable is immutable within the body. The range is `[start, end_expr)` (exclusive upper bound). If `start >= end_expr`, the body never executes.
+`start` and `end_expr` must be `i64`. The loop variable is immutable in the body. The range is `[start, end_expr)`, so the upper bound is exclusive. When `start >= end_expr`, the body never runs.
 
 ## Match as Expression
 
@@ -123,13 +123,13 @@ let result = match x do
 end
 ```
 
-All non-diverging arm bodies must produce the same type. An arm **diverges** — and is excluded from the unified result type — when its last statement is:
+Every non-diverging arm body must produce the same type. An arm **diverges**, and so drops out of the unified result type, when its last statement is one of:
 
 - `return e` (function-level return)
 - `throw e` used as an expression statement
 - `let μx = throw e'` (the binding's RHS never produces a value)
 
-If every arm diverges, the match expression's type is a fresh type variable (left to be pinned by surrounding context). See the `tail`/`branchType` definitions in [type-system-formal.md](./type-system-formal#T-Match) for the formal carve-out reused by `if`/`else` and pattern-let.
+When every arm diverges, the match expression takes a fresh type variable, which the surrounding context pins. See the `tail` and `branchType` definitions in [type-system-formal.md](./type-system-formal#T-Match) for the formal carve-out, which `if`/`else` and pattern-let reuse.
 
 ```nexus
 let result = match x do
@@ -140,7 +140,7 @@ end  // result : i64 (from arm A)
 
 ## Concurrency Model
 
-Nexus expresses deferred computation through the `@` (thunk) sigil. A thunk `let @x = expr` suspends `expr` until forced via `@x`. Parallel forcing of a list of thunks is opt-in via `force_all` from `std:lazy`:
+Nexus expresses deferred computation through the `@` (thunk) sigil. A thunk `let @x = expr` suspends `expr` until forced via `@x`. To force a list of thunks side by side, opt in through `force_all`, exported from the lazy stdlib module.
 
 ```nexus
 let @p1 = compute1()
@@ -150,11 +150,11 @@ let xs  = force_all(tasks: [p1, p2])
 
 - `@` thunks are unevaluated until forced (`@x`)
 - Thunks cannot capture mutable (`~`) bindings — the `~` stack-confinement rule rules out cross-thread aliasing
-- The current runtime forces each `force_all` task sequentially; parallel execution via WASI threads is tracked as future work. See [lazy.md](./lazy) for the dispatch primitives and the migration plan.
+- The current runtime forces each `force_all` task in turn. Parallel execution over WASI threads is tracked as future work. See [lazy.md](./lazy) for the dispatch primitives and the migration plan.
 
 ## Implicit Unit Return
 
-Functions with return type `unit` may omit the trailing `return ()`. If the function body does not contain any `return` statement, the compiler implicitly appends `return ()`:
+A function whose return type is `unit` may omit the trailing `return ()`. When the body has no `return` at all, the compiler tacks on a `return ()` for you:
 
 ```nexus
 let greet = fn (name: string) -> unit require { Console } do
@@ -163,7 +163,7 @@ let greet = fn (name: string) -> unit require { Console } do
 end
 ```
 
-Functions with non-`unit` return types still require explicit `return`.
+A function with a non-`unit` return type still needs an explicit `return`.
 
 ## Entrypoint
 
@@ -185,4 +185,4 @@ let main = fn () -> unit require { PermConsole } do
 end
 ```
 
-The runtime calls `main`, which performs all side effects via injected handlers. Exit code is `0` on success, non-zero on unhandled error.
+The runtime calls `main`. Side effects flow through injected handlers. The exit code is `0` on success and non-zero on any error left unhandled.

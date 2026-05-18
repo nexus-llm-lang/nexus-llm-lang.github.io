@@ -4,8 +4,8 @@ title: Nexus
 ---
 
 <p class="hero-tagline">
-<strong>Nexus</strong> is a programming language built on one premise: <strong>LLMs are strong at literal program constructs but weak at contextual ones.</strong>
-Garbage collection, implicit conversions, ambient I/O, continuation-based control flow — these contextual mechanisms are where LLM-generated code breaks and where human review fails. Nexus replaces them with syntactically explicit alternatives.
+<strong>Nexus</strong> is a language built on one bet: <strong>LLMs are good at code you can read on the page, and bad at code that depends on what's off the page.</strong>
+GC, implicit casts, ambient I/O, hidden control flow — these are the spots where LLM-written code goes wrong, and where humans miss it on review. Nexus swaps each one for a form you can see in the source.
 </p>
 
 <div class="code-showcase code-showcase-top" markdown="1">
@@ -13,7 +13,7 @@ Garbage collection, implicit conversions, ambient I/O, continuation-based contro
 
 ### Capabilities -- Hello world
 
-Capability requirements declared in function signatures. Dependency injection via caps and handlers.
+Each function says what caps it needs. You inject the caps with handlers at the call site.
 
 ```nexus
 import { Console }, * as stdio from "std:stdio"
@@ -33,7 +33,7 @@ end
 
 ### Linear Types
 
-Resources consumed exactly once. No GC — the compiler tracks every allocation.
+Use each resource once, then it's gone. No GC. The compiler tracks every cell.
 
 ```nexus
 let %h = Fs.open_read(path: "data.txt")
@@ -47,15 +47,15 @@ end
 </div>
 <div class="code-card" markdown="1">
 
-### Lazy Parallelism (`@`)
+### Lazy and Parallel
 
-Lazy thunks with automatic DAG-parallel evaluation. Linear types guarantee one-shot semantics.
+A thunk waits to run. When two thunks don't depend on each other, the runtime fires them in parallel. Linear types keep each one to a single shot.
 
 ```nexus
-let @a = compute_a()      // suspended — not evaluated
-let @b = compute_b()      // suspended — not evaluated
-let result_a = @a          // force both in parallel
-let result_b = @b          // (compiler detects independence)
+let @a = compute_a()
+let @b = compute_b()
+// evaluate parallely
+let result = @{ a, b }
 ```
 
 </div>

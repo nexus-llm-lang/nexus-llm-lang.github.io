@@ -15,14 +15,14 @@ title: CLI
 
 ### `nexus run FILE`
 
-Compile a Nexus source file and immediately execute it via wasmtime. Arguments after `--` are forwarded verbatim to the running program.
+Compile a Nexus source file and run it on wasmtime. Args after `--` are passed straight through to the program.
 
 ```bash
 nexus run program.nx
 nexus run program.nx -- arg1 arg2
 ```
 
-Sandbox flags constrain the execution environment for reproducibility:
+Sandbox flags pin the run environment so the result is reproducible:
 
 | Flag | Effect |
 |---|---|
@@ -44,13 +44,13 @@ nexus build program.nx                  # outputs main.wasm
 nexus build program.nx -o output.wasm   # custom output path
 ```
 
-Requires `wasm-merge` for dependency bundling. Configure via:
+Build needs `wasm-merge` to bundle deps. Set it via:
 - `--wasm-merge PATH` flag
-- `NEXUS_WASM_MERGE` environment variable
+- `NEXUS_WASM_MERGE` env var
 
-Resolution order: `--wasm-merge` > `NEXUS_WASM_MERGE` > `wasm-merge` from `PATH`.
+Lookup order: `--wasm-merge` first, then `NEXUS_WASM_MERGE`, then `wasm-merge` on the `PATH`.
 
-Inspect declared capabilities:
+Inspect declared caps:
 
 ```bash
 nexus build program.nx --explain-capabilities           # list capability names (default)
@@ -74,13 +74,13 @@ wasmtime run -Scli -Shttp -Sinherit-network -Sallow-ip-name-lookup -Stcp main.wa
 
 ### `nexus typecheck FILE`
 
-Parse and typecheck only. No execution, no WASM output.
+Parse and typecheck only. No run, no WASM output.
 
 ```bash
 nexus typecheck program.nx
 ```
 
-Structured JSON output for CI, scripting, and LLM tool use:
+Structured JSON output for CI, scripts, and LLM tool use:
 
 ```bash
 nexus typecheck --format json program.nx
@@ -113,11 +113,11 @@ nexus typecheck --format json program.nx
 }
 ```
 
-Exit code is `0` on success, `1` if any errors are present. Warnings alone do not cause failure.
+The exit code is `0` on success and `1` if any error shows up. A warning alone does not fail the run.
 
 ### `nexus lsp`
 
-Start the Language Server Protocol server over stdio. Connect from any LSP-compatible editor (VS Code, Neovim, Emacs, Helix, etc.).
+Start the LSP server over stdio. Any LSP-aware editor can connect: VS Code, Neovim, Emacs, Helix, and so on.
 
 ```bash
 nexus lsp
@@ -135,7 +135,7 @@ Supported LSP features:
 | Rename | `textDocument/rename` | Rename an identifier across the file |
 | Completion | `textDocument/completion` | Keywords, env symbols, module members |
 
-Project root is detected by walking up from the file to the nearest `.git` directory.
+The server walks up from the file to the nearest `.git` directory and uses that as the project root.
 
 ### `nexus repl`
 
@@ -145,11 +145,11 @@ Launch an interactive session:
 nexus repl
 ```
 
-Each input line is parsed, typechecked, and evaluated against a persistent session; bindings established at one prompt are visible at the next. Press Ctrl-D to exit.
+Each input line is parsed, typechecked, and run against a persistent session. A binding made at one prompt is visible at the next. Press Ctrl-D to exit.
 
 ## Capabilities
 
-Capabilities are **declared in source** via `require { ... }`, not passed on the command line. The compiler embeds the required set into the binary's `nexus:capabilities` custom section. `nexus run` reads that section and forwards the matching `wasmtime` flags for the program — no opt-in flag list is needed.
+Caps are **declared in source** with `require { ... }`. They never come from the command line. The compiler embeds the required set into the binary's `nexus:capabilities` custom section, and `nexus run` reads that section. The runner then forwards the matching `wasmtime` flags for the program. There's no opt-in flag list to maintain.
 
 To inspect what a program requires:
 
@@ -159,7 +159,7 @@ nexus build program.nx --explain-capabilities=wasmtime  # show wasmtime run comm
 nexus build program.nx --explain-capabilities=none      # suppress capability output
 ```
 
-To *strip* capabilities at run time (the run aborts if the program declared one of the stripped caps):
+To *strip* caps at run time (the run aborts if the program declared one of the stripped caps):
 
 | Flag | Effect |
 |---|---|
@@ -168,4 +168,4 @@ To *strip* capabilities at run time (the run aborts if the program declared one 
 | `--no-clock` | Refuse `Clock` |
 | `--no-rand` | Refuse `Random` |
 
-See [WASM and WASI](../wasm) for the per-capability WASI mapping.
+See [WASM and WASI](../wasm) for the per-cap WASI mapping.

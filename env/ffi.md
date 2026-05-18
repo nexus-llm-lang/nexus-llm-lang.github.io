@@ -5,7 +5,7 @@ title: Foreign Function Interface (FFI)
 
 # Foreign Function Interface (FFI)
 
-Nexus interoperates with WebAssembly modules, allowing extension with functions written in Rust, C, or other languages that compile to WASM.
+Nexus calls out to WebAssembly modules. So you can extend a program with functions written in Rust, C, or any language that targets WASM.
 
 ## Importing WASM Modules
 
@@ -32,13 +32,13 @@ external internal_helper = "helper" : (x: i64) -> unit
 
 ## Generic External Bindings
 
-Polymorphic externals require explicit type parameters:
+A polymorphic external needs explicit type parameters:
 
 ```nexus
 export external length = "array_length" : <T>(arr: &[| T |]) -> i64
 ```
 
-Using an undeclared type variable (e.g., `T` without `<T>`) is a type error. This prevents typos from silently becoming type variables.
+Using an undeclared type variable (`T` without `<T>`) is a type error. The check stops a typo from quietly turning into a type variable.
 
 ## Type Mapping
 
@@ -73,11 +73,11 @@ end
 
 ## How to Write Bindings
 
-A WASM module that exports functions with the correct signatures can be used from Nexus via `external` declarations. This section documents the ABI contract that the WASM module must satisfy, the Nexus-side declaration patterns, and how the compiler transforms types at the boundary.
+A WASM module that exports functions with the right signatures can be used from Nexus through `external` declarations. This section spells out the ABI contract the WASM module has to meet, the Nexus-side declaration patterns, and how the compiler transforms types at the boundary.
 
 ### FFI Parameter Encoding
 
-The compiler transforms certain Nexus types when crossing the FFI boundary. Internal calls use packed representations, but external calls unpack them:
+The compiler transforms a few Nexus types when crossing the FFI boundary. Internal calls use packed forms; external calls unpack them:
 
 | Nexus Type | WASM Signature (external) | Notes |
 |---|---|---|
@@ -89,15 +89,15 @@ The compiler transforms certain Nexus types when crossing the FFI boundary. Inte
 | `string` | 2x `i32` (ptr, len) | Unpacked from internal `i64` |
 | `unit` | (none) | No parameter generated |
 
-**String parameters** are the critical case. Internally, Nexus represents strings as a packed `i64` (`(offset << 32) | length`). At the FFI boundary, the compiler automatically unpacks this into two `i32` arguments — a pointer into linear memory and a byte length. The WASM export must accept these two `i32`s, not a single `i64`.
+**String parameters** are the critical case. Internally, Nexus stores a string as a packed `i64` (`(offset << 32) | length`). At the FFI boundary, the compiler unpacks that into two `i32` arguments: a pointer into linear memory and a byte length. The WASM export must accept these two `i32`s in place of a single `i64`.
 
-**String return values** go the other direction: the WASM export returns a packed `i64` using the same `(offset << 32) | length` encoding. The caller is responsible for allocating memory and writing UTF-8 bytes into linear memory before packing the result.
+**String return values** go the other way. The WASM export returns a packed `i64` with the same `(offset << 32) | length` encoding. The caller has to allocate memory and write the UTF-8 bytes into linear memory before packing the result.
 
-**Bool values** are encoded as `i32` in both directions — `0` for false, `1` for true.
+**Bool values** are encoded as `i32` in both directions, with `0` for false and `1` for true.
 
 ### Labeled Argument Reordering
 
-Nexus uses labeled (named) arguments, but WASM functions are positional. The compiler converts labeled arguments to positional parameters **sorted by label name** (lexicographic order). This matters when the WASM export's parameter order must match.
+Nexus uses labeled args, but WASM functions are positional. The compiler turns labeled args into positional parameters **sorted by label name** in lexicographic order. The order matters when the WASM export's parameter order has to line up.
 
 For example:
 
@@ -105,7 +105,7 @@ For example:
 external write = "write_buf" : (content: string, offset: i64) -> i64
 ```
 
-The WASM signature for `write_buf` will be `(i32, i32, i64) -> i64` — the `content` string (unpacked to ptr + len) comes before `offset`, because `"content" < "offset"` lexicographically.
+The WASM signature for `write_buf` is `(i32, i32, i64) -> i64`. The `content` string (unpacked to ptr and len) comes before `offset`, since `"content" < "offset"` lexicographically.
 
 If you declare:
 
@@ -113,24 +113,24 @@ If you declare:
 external send = "send_msg" : (to: i64, msg: string) -> bool
 ```
 
-The WASM signature is `(i32, i32, i64) -> i32` — `msg` (→ ptr, len) before `to`, because `"msg" < "to"`.
+The WASM signature is `(i32, i32, i64) -> i32`; `msg` (→ ptr, len) comes before `to`, since `"msg" < "to"`.
 
-When writing a WASM module, order your export's parameters alphabetically by the label names used in the Nexus declaration.
+When you write a WASM module, sort the export's parameters alphabetically by the label names used in the Nexus decl.
 
 ### WASM Module Requirements
 
-A WASM module used via FFI must:
+A WASM module used over FFI must do all of the following:
 
-1. **Export named functions** matching the WASM names in `external` declarations.
-2. **Use the correct parameter encoding** as described above — especially the string split.
-3. **Share linear memory** with the Nexus caller. String pointers reference offsets in this shared memory.
-4. **Export `allocate(i32) -> i32`** if the module returns strings or allocates memory that the caller reads. The Nexus runtime calls this to allocate space for data that crosses the boundary.
+1. **Export named functions** matching the WASM names in the `external` decls.
+2. **Use the right parameter encoding** as described above; in particular, do the string split.
+3. **Share linear memory** with the Nexus caller. String pointers are offsets in this shared memory.
+4. **Export `allocate(i32) -> i32`** when the module returns strings or allocates memory that the caller reads. The Nexus runtime calls this to make room for data that crosses the boundary.
 
 ### Declaring Bindings
 
 #### Primitive Functions
 
-When the WASM export uses only numeric types, the declaration is straightforward:
+When the WASM export uses only numeric types, the decl is plain:
 
 ```nexus
 import external "mylib.wasm"
@@ -152,11 +152,11 @@ external char_count = "char_count" : (s: string) -> i64
 external repeat = "str_repeat" : (s: string, n: i64) -> string
 ```
 
-A WASM export for `char_count` must have the signature `(i32, i32) -> i64`, and `str_repeat` must have `(i32, i32, i64) -> i64`. You never declare the split manually.
+The WASM export for `char_count` must have signature `(i32, i32) -> i64`. The export for `str_repeat` must have `(i32, i32, i64) -> i64`. You never write the split by hand.
 
 #### Wrapping with Opaque Types
 
-For stateful resources backed by handles, wrap the raw `i64` in an `opaque type` with linear ownership:
+For a stateful resource backed by a handle, wrap the raw `i64` in an `opaque type` with linear ownership:
 
 ```nexus
 import external "mylib.wasm"
@@ -200,16 +200,16 @@ end
 
 The patterns at work:
 
-- **`opaque type`** — hides the constructor from importers. Only this module can construct/destructure `Counter`.
-- **`%Counter`** (linear) — the type system enforces that every counter is eventually freed. You cannot silently drop it.
+- **`opaque type`** — hides the constructor from importers. Only this module can build or destructure `Counter`.
+- **`%Counter`** (linear) — the type system makes sure every counter is freed in the end. You cannot drop it on the floor.
 - **`&Counter`** (borrow) — read-only access without consuming the handle.
-- **Consume-and-return** — mutating operations destructure the handle, call the FFI function, then reconstruct and return. This preserves linear ownership across the boundary.
+- **Consume-and-return** — a mutating op destructures the handle, calls the FFI function, then builds and returns a fresh handle. So linear ownership is preserved across the boundary.
 
-The WASM module is responsible for managing the actual state behind the handle (e.g., an ID-keyed table). Nexus only sees the `i64` handle value.
+The WASM module manages the real state behind the handle, say an ID-keyed table. Nexus only sees the `i64` handle value.
 
 ### Organizing Bindings — One Wrapper File per WASM Module
 
-**Keep every `import external "foo.wasm"` and its `external` declarations confined to a single `.nx` file** — a thin wrapper module — and have all other code depend on that wrapper instead of re-declaring the bindings.
+**Pin every `import external "foo.wasm"` and its `external` decls to a single `.nx` file** — a thin wrapper module. Other code should depend on the wrapper rather than redeclare the bindings.
 
 ```
 nxlib/stdlib/                        // root of the `std` package
@@ -222,14 +222,14 @@ app/
 
 Why this matters:
 
-- **Single source of truth for the ABI.** Parameter order, encoding, and WASM export names are fragile (see [Labeled Argument Reordering](#labeled-argument-reordering)). Declaring the same binding in two files invites them to drift.
-- **Linear/borrow discipline lives in the wrapper.** Raw `external` functions traffic in plain `i64` handles; the wrapper is where `%T` / `&T` / opaque types re-establish safety. Callers should never see the raw external form.
-- **`wasm-merge` inlining is per-module.** One wrapper file means one place where the `.wasm` blob is linked, avoiding duplicate symbol work at build time.
+- **One source of truth for the ABI.** Parameter order, encoding, and WASM export names are fragile (see [Labeled Argument Reordering](#labeled-argument-reordering)). When the same binding is declared in two files, the two copies tend to drift.
+- **Linear/borrow discipline lives in the wrapper.** Raw `external` functions deal in plain `i64` handles. The wrapper layer puts `%T`, `&T`, and opaque types back in. A caller should never see the raw external form.
+- **`wasm-merge` inlining is per-module.** One wrapper file means one place where the `.wasm` blob is linked, so the build avoids duplicate symbol work.
 
-Rule of thumb: if a non-wrapper `.nx` file contains the keyword `external`, that's a smell — extract the bindings into a dedicated wrapper module.
+Rule of thumb. When a non-wrapper `.nx` file uses the `external` keyword, that is a smell. Move the bindings into a dedicated wrapper module.
 
 ### Linking
 
-The compiler resolves `import external "mylib.wasm"` at build time via `wasm-merge`. The referenced `.wasm` file path is relative to the importing `.nx` file. After merging, the final binary has no unresolved imports — all external functions are inlined.
+The compiler resolves `import external "mylib.wasm"` at build time through `wasm-merge`. The `.wasm` path is taken relative to the importing `.nx` file. After the merge, the final binary has no unresolved imports; every external function is inlined.
 
 See [WASM and WASI](wasm.md) for details on memory layout, the allocator protocol, and the full ABI specification.

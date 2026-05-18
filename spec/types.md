@@ -5,7 +5,7 @@ title: Types
 
 # Types
 
-Nexus uses a strict type system with Hindley-Milner inference, structural records, algebraic data types, and linear types for resource tracking.
+Nexus has a strict type system. The core pieces are Hindley-Milner inference, structural records, ADTs, and linear types for tracking resources.
 
 ## Primitive Types
 
@@ -27,7 +27,7 @@ Numeric literals default to `i64` (integers) and `f64` (floats) unless constrain
 
 ### Records
 
-Structural record types. Defined with `type` or used inline:
+Records are structural. You can define one with `type` or use it inline:
 
 ```nexus
 export type User = { id: i64, name: string }
@@ -35,9 +35,9 @@ export type User = { id: i64, name: string }
 let u = { id: 1, name: "Alice" }
 ```
 
-### ADTs (Sum Types)
+### ADTs (sum types)
 
-Algebraic data types with labeled constructor arguments:
+ADTs use labeled constructor arguments:
 
 ```nexus
 export type Result<T, E> = Ok(val: T) | Err(err: E)
@@ -46,13 +46,13 @@ export type Option<T> = Some(val: T) | None
 
 ### Opaque Types
 
-The `opaque` modifier hides constructors from importers. The type name is visible but construction and pattern matching are only possible inside the defining module:
+The `opaque` modifier hides constructors from importers. The type name shows up, yet you can only build or match the value inside the defining module.
 
 ```nexus
 export opaque type Set = Set(id: i64)
 ```
 
-Importers see `Set` as a type but cannot use `Set(id: ...)` to construct or destructure it. The module must provide functions for creation and access.
+Importers see `Set` as a type. The constructor form is off-limits for both building and pattern matching from the outside. The defining module has to expose functions for creation and access.
 
 ### Lists
 
@@ -66,7 +66,7 @@ Lists cannot contain mutable references.
 
 ### Arrays
 
-Linear mutable arrays. Arrays are inherently linear to ensure unique ownership:
+Arrays are linear and mutable. Linearity ensures one owner at a time:
 
 ```nexus
 let %arr: [| i64 |] = [| 1, 2, 3 |]
@@ -86,7 +86,7 @@ export type Pair<A, B> = Pair(left: A, right: B)
 
 ## Linear Types (`%`)
 
-Linear types make resource lifecycle visible in syntax (see [Design](../../design#linear-types-as-literal-resource-tracking)). The `%` sigil marks a binding that must be consumed **exactly once**.
+Linear types put resource lifecycle in the syntax (see [Design](../../design#linear-types-as-literal-resource-tracking)). The `%` sigil marks a binding that must be used **exactly once**.
 
 ### Rules
 
@@ -104,20 +104,20 @@ Primitive linear values (`i64`, `f64`, `bool`, `string`, `unit`) are automatical
 
 ### Composite Consumption
 
-Composite linear values (records, ADTs, arrays) must be explicitly consumed via:
-- Function call (passing the linear binding as an argument)
-- Pattern matching (destructuring extracts the value)
-- Return (propagating ownership to the caller)
+A composite linear value (record, ADT, or array) needs an explicit consume. The three channels are:
+- A function call. Pass the linear binding as an argument.
+- A pattern match. The destructure pulls out the value.
+- A return. Ownership moves to the caller.
 
-Field projection (`r.field`) is **not** a consumption channel for linear records: a single projection would expose only one field while silently dropping the other linear obligations on the value. The type system rejects projection on any record whose type is structurally linear; pattern matching is the only way to extract individual fields.
+Field projection (`r.field`) is **not** a consume for a linear record. A single field read would expose one field while quietly dropping the other linear obligations on the value. The type system rejects projection on any record whose type is structurally linear. Use pattern matching to pull out fields.
 
 ### Linearity Weakening
 
-A plain `T` value can be passed to a function expecting `%T`. The value is treated as linear for the duration of the call.
+A plain `T` value can be passed to a function expecting `%T`. The value is then treated as linear while the call runs.
 
 ### Linear Closures
 
-If a closure captures a linear binding, the closure itself becomes linear and can only be invoked once:
+When a closure captures a linear binding, the closure becomes linear too. You can call it once:
 
 ```nexus
 let %resource = acquire()
@@ -131,11 +131,11 @@ f()  // error -- closure already consumed
 
 ## Borrowing (`&`)
 
-The `&` sigil creates an immutable, non-consuming view of a value (see [Design](../../design#borrowing-as-explicit-aliasing)).
+The `&` sigil creates an immutable, non-consuming view of a value (see [Design](../../design#borrowing-puts-aliasing-on-the-page)).
 
 ### Syntax
 
-`&` works both as a prefix operator and as a let-binding sigil:
+`&` works as a prefix operator and as a let-binding sigil:
 
 ```nexus
 let borrowed = &arr  // prefix operator on immutable binding
@@ -160,9 +160,9 @@ end
 
 ### Properties
 
-- Multiple borrows of the same binding are allowed simultaneously
-- Borrow lifetime is tied to the scope of the source binding
-- Borrowing a linear value does not consume it
+- You can take many borrows of the same binding at once
+- A borrow lives only as long as the source binding's scope
+- A borrow of a linear value does not consume it
 
 ## Mutable References (`~`)
 
@@ -181,7 +181,7 @@ Mutable references cannot escape the defining function:
 - Cannot be stored in heap-allocated structures (records, ADTs, lists)
 - Cannot be captured by closures or `@` thunks (which may evaluate in parallel)
 
-This ensures mutation remains localized and predictable.
+So mutation stays local and easy to follow.
 
 ### Restrictions
 
@@ -202,11 +202,15 @@ This ensures mutation remains localized and predictable.
 | Borrow with `&` | yes | yes (`&~r`) | yes | yes |
 | Discard with `_` | yes | yes | no (composites) | yes |
 
-The "Pass to function" entry for `~` cells reads **the current value out of the cell**; the cell itself does not escape its defining function. Writing `f(arg: ~r)` at a call site dereferences `r` and passes the resulting value (of inner type `T`, not `~T`); the callee receives a plain `T` parameter and has no way to mutate the caller's cell. To let a callee read or update the cell, take a borrow: pass `&~r` and have the callee accept a `&T` (read-only) parameter — this preserves the cell's stack-confinement (the borrow cannot outlive the cell, per the gravity rules above). Passing the cell *itself* as a `~T` parameter is rejected: it would either duplicate ownership (two stack frames holding the same cell) or violate the no-escape rule.
+The "Pass to function" row for `~` cells reads **the current value out of the cell**. The storage stays in the defining function. Writing `f(arg: ~r)` at a call site reads `r` and passes that value. The inner type `T` shows up at the callee, in place of `~T`. So the callee gets a plain `T` and has no path back to the caller's storage.
+
+To let a callee read or update the cell, take a borrow. Pass `&~r` and have the callee accept a `&T` (read-only) parameter. The borrow stays stack-confined under the gravity rules above; it cannot outlive its source.
+
+Passing the storage *itself* as a `~T` parameter is rejected. Either two frames would hold the same backing slot, or the no-escape rule would break.
 
 ## Function Types
 
-Functions are first-class values with labeled parameters and optional throws/capability annotations:
+Functions are first-class values. Each parameter has a label. The throws and cap annotations are optional.
 
 ```nexus
 (label: T) -> R                                 // pure function
@@ -218,7 +222,7 @@ Functions are first-class values with labeled parameters and optional throws/cap
 
 ### Closures
 
-Lambdas capture immutable bindings from their lexical scope:
+A lambda captures immutable bindings from its lexical scope:
 
 ```nexus
 let f = fn (x: i64) -> i64 do
@@ -233,7 +237,7 @@ Closure constraints:
 
 ## Row Types
 
-Effect and capability annotations use row types:
+Row types back the effect and cap annotations:
 
 ```nexus
 { Exn }          // single entry
@@ -241,4 +245,4 @@ Effect and capability annotations use row types:
 { Console | e }  // open row with tail variable
 ```
 
-Empty row (omitted or `{}`) means no effects/requirements.
+An empty row, written `{}` or just omitted, means no effects and no requirements.

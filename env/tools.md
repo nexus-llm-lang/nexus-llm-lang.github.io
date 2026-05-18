@@ -5,9 +5,9 @@ title: Tools
 
 # Tools
 
-## Language Server (LSP)
+## Language server (LSP)
 
-Nexus ships a built-in Language Server Protocol server for editor integration and programmatic analysis.
+Nexus ships a built-in LSP server. The server hooks into editors and supports script-driven analysis.
 
 ### Usage
 
@@ -15,7 +15,7 @@ Nexus ships a built-in Language Server Protocol server for editor integration an
 nexus lsp          # start LSP server (stdio)
 ```
 
-Configure your editor to run `nexus lsp` as the language server for `.nx` files.
+Point your editor at `nexus lsp` as the LSP server for `.nx` files.
 
 ### Capabilities
 
@@ -31,13 +31,13 @@ Configure your editor to run `nexus lsp` as the language server for `.nx` files.
 
 ### CLI Diagnostics (LLM-friendly)
 
-For non-interactive use (CI pipelines, LLM tool calls, scripts), `nexus check --format json` outputs structured diagnostics to stdout:
+For non-interactive use — CI pipelines, LLM tool calls, scripts — `nexus check --format json` writes structured diagnostics to stdout:
 
 ```bash
 nexus check --format json program.nx
 ```
 
-The output contains `file`, `ok` (bool), `diagnostics` (with range, severity, message), and `symbols` (with name, kind, range). Exit code is `0` on success, `1` on errors.
+The output has `file`, `ok` (bool), `diagnostics` (range, severity, message), and `symbols` (name, kind, range). The exit code is `0` on success and `1` on errors.
 
 ### Editor Setup Examples
 
@@ -58,7 +58,7 @@ vim.api.nvim_create_autocmd('FileType', {
 
 **VS Code (settings.json)**
 
-Use a generic LSP client extension (e.g., [vscode-languageclient](https://github.com/AstroNvim/astrolsp)) and configure `nexus lsp` as the server command for `.nx` files.
+Use a generic LSP client extension (such as [vscode-languageclient](https://github.com/AstroNvim/astrolsp)) and point it at `nexus lsp` as the server for `.nx` files.
 
 **Helix (languages.toml)**
 
@@ -76,9 +76,9 @@ args = ["lsp"]
 
 ---
 
-## AI Coding Agent Skill
+## AI coding agent skill
 
-Nexus is designed to be written by LLMs. To help coding agents produce correct Nexus code, this repository provides a [Claude Code skill](https://docs.anthropic.com/en/docs/claude-code/skills) containing the full language reference.
+Nexus is built for LLMs to write. To help coding agents land correct Nexus code, this repo ships a [Claude Code skill](https://docs.anthropic.com/en/docs/claude-code/skills) with the full language reference.
 
 ### Installation
 
@@ -86,7 +86,7 @@ Nexus is designed to be written by LLMs. To help coding agents produce correct N
 npx skills add nexus-llm-lang/Nexus --skill nexus-lang
 ```
 
-The skill activates automatically when Claude Code works with `.nx` files.
+Claude Code activates the skill as soon as it touches a `.nx` file.
 
 ### Contents
 
@@ -102,16 +102,16 @@ The skill activates automatically when Claude Code works with `.nx` files.
 
 ### What the skill teaches agents
 
-- **Labeled arguments** -- all call sites use `f(param: value)`, never positional
-- **Block delimiters** -- `do ... end`, `then ... else ... end`, not braces
-- **Linear types** (`%`) -- resources consumed exactly once, compiler-enforced
-- **Borrowing** (`&`) -- immutable views without consumption
-- **Capability system** -- `cap` → `handler` → `inject` → `require` flow
-- **Runtime permissions** -- `PermConsole`, `PermFs`, `PermNet`, etc.
-- **Standard library** -- correct import forms and function signatures
+- **Labeled arguments** — every call site uses `f(param: value)`; positional forms are out.
+- **Block delimiters** — `do ... end` and `then ... else ... end`; braces are out.
+- **Linear types** (`%`) — used once, compiler-enforced
+- **Borrowing** (`&`) — immutable views without consume
+- **Cap system** — `cap` → `handler` → `inject` → `require` flow
+- **Runtime perms** — `PermConsole`, `PermFs`, `PermNet`, and the rest
+- **Stdlib** — correct import forms and function signatures
 
 ### Other agents
 
-The skill is a set of Markdown files. Agents that don't support Claude Code skills can read the files directly from `skills/nexus-lang/`.
+The skill is a set of Markdown files. Agents that lack Claude Code skill support can read the files straight from `skills/nexus-lang/`.
 
-LLM agents can also use `nexus check --format json` as a tool to get structured diagnostics without installing the skill.
+LLM agents can also call `nexus check --format json` as a tool. They get structured diagnostics without installing the skill.

@@ -11,18 +11,19 @@ nix develop
 jekyll serve --source . --config _config.yml --baseurl /latest
 ```
 
-The devshell provisions Jekyll, Ruby, and the Nexus tree-sitter grammar
-(via a flake input). Entering the shell writes `~/.config/tree-sitter/config.json`
-so `_plugins/nexus_highlight.rb` can resolve the `nexus` language.
+A flake input pulls in Jekyll, Ruby, and the Nexus tree-sitter grammar
+for the dev shell. When the shell starts, it writes a config file at
+`~/.config/tree-sitter/config.json` so the `_plugins/nexus_highlight.rb`
+plugin can find the `nexus` lang.
 
 ## Layout
 
-- `_config.yml`, `_layouts/`, `_includes/` — Jekyll theme configuration
-- `_plugins/nexus_highlight.rb` — tree-sitter-based syntax highlighter for
-  `nexus` code blocks
-- `spec/`, `env/`, `design.md`, `refactor_baseline.md` — documentation content
+- `_config.yml`, `_layouts/`, `_includes/` — Jekyll theme bits
+- `_plugins/nexus_highlight.rb` — tree-sitter highlighter for `nexus`
+  code blocks
+- `spec/`, `env/`, `design.md`, `refactor_baseline.md` — site docs
 
 ## Deployment
 
-`.github/workflows/deploy.yml` builds versioned + latest sites on `v*` tag
-push or manual dispatch and publishes to GitHub Pages.
+On a `v*` tag push or a manual run, `.github/workflows/deploy.yml` builds
+both the versioned and latest sites, then ships them to GitHub Pages.

@@ -5,7 +5,7 @@ title: Exception Groups
 
 # Exception Groups
 
-Exception groups define a named set of exception types. A `catch` arm matching a group name expands to match all members.
+An exception group is a named set of exception types. A `catch` arm naming a group expands to match every member.
 
 ## Declaration
 
@@ -16,11 +16,11 @@ exception PermDenied(path: string, code: i64)
 exception group IOError = NotFound | PermDenied
 ```
 
-Groups are declared with `exception group Name = Member1 | Member2 | ...`. Each member must be a previously declared exception. The `export` modifier makes the group visible to importers.
+Declare a group with `exception group Name = Member1 | Member2 | ...`. Each member has to be an exception that was declared earlier. The `export` modifier opens the group to importers.
 
 ## Structured Exceptions
 
-Individual exceptions carry typed fields -- not pre-formatted strings. This enables both fine-grained and coarse-grained error handling:
+Each exception carries typed fields rather than a pre-formatted string. That shape lets you handle errors either case by case or in bulk:
 
 ```nexus
 exception UnexpectedToken(expected: string, got: string, span: Span)
@@ -45,13 +45,13 @@ catch
 end
 ```
 
-This is syntactic sugar -- the compiler expands `| ParseError ->` into one arm per member.
+The form is sugar; the compiler expands `| ParseError ->` into one arm per member.
 
-In the formal type system ([type-system-formal.md](../type-system-formal)), throws-rows are variant-precise: each member of a group becomes its own row entry. Group catches subtract the union of expanded member constructors from the row. The formal rules never observe a group as such — only its post-expansion constructor list (see `caughtVariants` and `members` in T-TryCatch).
+In the formal type system ([type-system-formal.md](../type-system-formal)), throws-rows are variant-precise. Each member of a group becomes its own row entry. A group catch subtracts the union of its member constructors from the row. The formal rules never see the group at all — only the expanded constructor list shows up (see `caughtVariants` and `members` in T-TryCatch).
 
 ## Catching Specific Exceptions
 
-For precise handling, match individual exception types and destructure their fields:
+For tighter handling, match each exception type and destructure its fields:
 
 ```nexus
 try
@@ -66,7 +66,7 @@ catch
 end
 ```
 
-Specific arms and group arms can be mixed. The compiler checks each arm independently.
+You can mix specific arms with group arms. The compiler checks each arm on its own.
 
 ## Multi-Arm Catch
 
@@ -90,7 +90,7 @@ Multi-arm catch desugars to `catch __exn -> match __exn do ... end` during compi
 
 ## Group Composition
 
-Groups reference individual exceptions, not other groups. To create a "super-group" spanning multiple phases, list all members directly:
+A group lists individual exceptions only; one group cannot reference another. For a "super-group" spanning several phases, name every member directly:
 
 ```nexus
 exception group CompileError =
@@ -99,7 +99,7 @@ exception group CompileError =
   | SymbolNotFound
 ```
 
-Groups are expanded at catch sites -- there is no hierarchical nesting at runtime.
+A group is expanded at the catch site, so there's no nesting at runtime.
 
 ---
 

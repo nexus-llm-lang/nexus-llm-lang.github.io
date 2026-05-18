@@ -5,21 +5,21 @@ title: Standard Library
 
 # Standard Library
 
-The standard library is the `std` package, rooted at `nxlib/stdlib/`. Import its modules with the `std:<name>` form:
+The stdlib is the `std` package, rooted at `nxlib/stdlib/`. Each module imports under a `std:`-prefixed path; here is one example.
 
 ```nexus
 import { Console }, * as stdio from "std:stdio"
 ```
 
-Bare paths (no colon) remain relative file imports. Each `std:<name>` resolves to `nxlib/stdlib/<name>.nx`; the WIT interface name is `nexus:std/<name>` (with `_` rewritten to `-`, e.g. `std:str` ↔ `nexus:std/string-ops`).
+A bare path (no colon) is still a relative file import. Each `std:`-prefixed name resolves to a file in `nxlib/stdlib/`. The WIT interface name comes from the same name, with `_` rewritten to `-`. For instance, the `str` module maps to the `string-ops` WIT interface under the same WIT prefix.
 
 ## I/O Caps
 
-I/O is capability-gated via caps. Each cap has a `system_handler` that declares `require { PermX }`, propagating the permission to the caller when injected. Mock handlers without `require` need no runtime permissions.
+I/O is gated by caps. Each cap has a `system_handler` that declares `require { PermX }`. The handler hands the perm up to the caller on inject. A mock handler with no `require` clause needs no runtime perm.
 
 ### Console (`std:stdio`)
 
-Requires `PermConsole`.
+Needs `PermConsole`.
 
 ```nexus
 cap Console do
@@ -44,7 +44,7 @@ end
 
 ### File System (`std:fs`)
 
-Requires `PermFs`.
+Needs `PermFs`.
 
 **Exception types:** `FileNotFound(path)`, `WriteError(path)`, `RemoveError(path)`. Exception group: `FsThrow = FileNotFound | WriteError | RemoveError`.
 
@@ -92,7 +92,7 @@ cap Fs do
 end
 ```
 
-The fd operations use a **consume-and-return** pattern: the linear handle is consumed and a fresh handle is returned in the result record, enabling stateless handlers.
+The fd operations use a **consume-and-return** shape. The linear handle is consumed; a fresh one comes back in the result record. So a handler can stay stateless.
 
 ```nexus
 let %h = Fs.open_read(path: "data.txt")
@@ -102,7 +102,7 @@ Fs.close(handle: %h2)
 
 ### Network (`std:network`)
 
-Requires `PermNet`.
+Needs `PermNet`.
 
 **Exception types:** `RequestError(url)`, `BindError(addr)`, `ResponseError(msg)`. Exception group: `NetError = RequestError | BindError | ResponseError`.
 
@@ -122,7 +122,7 @@ opaque type RespondStream = RespondStream(...)     // linear streaming response 
 fn header(name: string, value: string) -> Header
 ```
 
-**Cap methods:** all HTTP client and server operations are reached through the `Net` cap (no direct-call API is exported — code must `inject` a handler).
+**Cap methods**: every HTTP client and server op goes through the `Net` cap. No direct-call API is exported, so code must `inject` a handler.
 
 ```nexus
 cap Net do
@@ -153,7 +153,7 @@ end
 
 ### Random (`std:rand`)
 
-Requires `PermRandom`.
+Needs `PermRandom`.
 
 ```nexus
 cap Random do
@@ -165,7 +165,7 @@ end
 
 ### Clock (`std:clock`)
 
-Requires `PermClock`.
+Needs `PermClock`.
 
 ```nexus
 cap Clock do
@@ -176,7 +176,7 @@ end
 
 ### Process (`std:proc`)
 
-Requires `PermProc`.
+Needs `PermProc`.
 
 **Types:**
 
@@ -202,7 +202,7 @@ end
 
 ### Environment (`std:env`)
 
-Requires `PermEnv`.
+Needs `PermEnv`.
 
 ```nexus
 cap Env do
@@ -211,7 +211,7 @@ cap Env do
 end
 ```
 
-`Env.get` returns `None` when the variable is not set, avoiding exceptions for simple absence.
+`Env.get` returns `None` when the variable is unset. The shape skips exceptions for the absent case.
 
 ## Data Structures
 
@@ -232,8 +232,7 @@ fn expect<T>(opt: Option<T>, msg: string) -> T throws { Exn }
 
 ### List (`std:list`)
 
-Immutable singly-linked list: `type List<T> = Nil | Cons(v: T, rest: List<T>)`.
-`[ T ]` is an alias for `List<T>` with literal syntax sugar.
+An immutable cons list, with two ctors named `Nil` and `Cons`. The `Cons` ctor takes a head `v` and a tail `rest`. The form `[ T ]` is an alias for `List<T>`, with literal sugar.
 
 ```nexus
 type Partition<T> = Partition(matched: [ T ], rest: [ T ])
@@ -265,11 +264,11 @@ fn fst<A, B>(p: Pair<A, B>) -> A
 fn snd<A, B>(p: Pair<A, B>) -> B
 ```
 
-Arrays use the built-in linear type `[| T |]`. Construction and indexing are language primitives (`[| e1, e2 |]`, `arr[i]`); there is no `std:array` module.
+Arrays use the built-in linear type `[| T |]`. Building and indexing are language primitives, written as `[| e1, e2 |]` and `arr[i]`. The stdlib ships no separate array module.
 
 ### HashMap (`std:hashmap`)
 
-Open-addressed (linear-probing) hash map from `i64` keys to `i64` values, implemented over `std:runtime/collection`. The map is an opaque linear handle and must be `free`d.
+Open-addressed hash map (linear probing) from `i64` keys to `i64` values. The impl rides on the runtime collection module. The map is an opaque linear handle and must be `free`d.
 
 ```nexus
 opaque type HashMap = HashMap(id: i64)  // linear -- must be freed
@@ -289,7 +288,7 @@ fn free(map: %HashMap) -> unit
 
 ### StringMap (`std:stringmap`)
 
-Open-addressed (linear-probing) hash map from `string` keys to `i64` values, implemented over `std:runtime/collection`. The map is an opaque linear handle and must be `free`d.
+Open-addressed hash map (linear probing) from `string` keys to `i64` values. The impl rides on the runtime collection module. The map is an opaque linear handle and must be `free`d.
 
 ```nexus
 opaque type StringMap = StringMap(id: i64)  // linear -- must be freed
@@ -309,7 +308,7 @@ fn free(map: %StringMap) -> unit
 
 ### ByteBuffer (`std:bytebuffer`)
 
-Mutable byte buffer for binary data construction, implemented over a bump-arena-allocated header in linear memory. Uses opaque linear handles. Provides LEB128 encoding, little-endian integer writes, and raw byte/string/buffer append operations.
+Mutable byte buffer for building binary data. The impl uses a bump-arena header in linear memory. Handles are opaque and linear. The API offers LEB128 encoding, little-endian int writes, and raw byte, string, and buffer appends.
 
 ```nexus
 opaque type ByteBuffer = ByteBuffer(id: i64)  // linear -- must be freed
@@ -329,7 +328,7 @@ fn write_file(buf: &ByteBuffer, path: string) -> bool require { PermFs }
 fn free(buf: %ByteBuffer) -> unit
 ```
 
-All mutating operations consume the buffer and return a new handle (consume-and-return pattern).
+Every mutating op consumes the buffer and returns a new handle. The shape is consume-and-return.
 
 ## Utilities
 
@@ -412,7 +411,7 @@ fn backtrace(exn: Exn) -> [string]
 
 ### Char (`std:char`)
 
-Character classification functions for ASCII analysis:
+ASCII character class tests:
 
 ```nexus
 fn ord(c: char) -> i64
@@ -432,7 +431,7 @@ fn hex_digit_value(c: char) -> i64
 
 ### Lazy (`std:lazy`)
 
-Combinators for `@` thunk evaluation. Implemented in pure Nexus over `std:runtime/lazy`'s `lazy_spawn` / `lazy_join` dispatch primitives.
+Combinators for `@` thunk forcing. The code is pure Nexus, layered over the `lazy_spawn` and `lazy_join` dispatch primitives in the runtime lazy module.
 
 ```nexus
 fn race(a: i64, b: i64) -> i64
@@ -448,11 +447,11 @@ fn force_all(tasks: [i64]) -> [i64]
 | `detach(thunk)` | Fire-and-forget: start evaluation, don't wait for result |
 | `force_all(tasks)` | Spawn all thunks in parallel, join results in order |
 
-Note: functions use `i64` internally (all values are i64 at WASM level). The `@T` linearity is enforced at the call site by the typechecker.
+Note: the underlying functions use `i64` inside, since every value is `i64` at the WASM level. The typechecker pins `@T` use-once at the call site.
 
 ### Core (`std:core`)
 
-Legacy re-exports for backwards compatibility. Prefer `tuple.nx`, `list.nx`, `math.nx` for new code.
+Legacy re-exports for back-compat. Use `tuple.nx`, `list.nx`, and `math.nx` for new code.
 
 ```nexus
 type Pair<A, B> = Pair(left: A, right: B)
