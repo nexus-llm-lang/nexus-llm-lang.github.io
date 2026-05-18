@@ -36,10 +36,10 @@ s & ::= & \textbf{let}~\mu\,x = e & \text{binding} \\
   & \mid & \textbf{try}~\overline{s}~\textbf{catch}~\overline{p \to s}~\textbf{end} & \text{exception handling} \\
   & \mid & \textbf{while}~e~\textbf{do}~\overline{s}~\textbf{end} & \text{while loop} \\
   & \mid & e & \text{expression statement} \\[6pt]
-p & ::= & x & \text{variable pattern (} x \notin \text{dom}(\Gamma)~\text{or}~\Gamma(x)~\text{is not a constructor scheme)} \\
+p & ::= & \mu\,x & \text{variable pattern, } \mu \in \lbrace \varepsilon, \%, \mathord{\sim}, \& \rbrace \text{ (} x \notin \text{dom}(\Gamma)~\text{or}~\Gamma(x)~\text{is not a constructor scheme)} \\
   & \mid & \_ \mid n & \text{wildcard / literal pattern} \\
-  & \mid & c & \text{nullary constructor pattern (} c \in \text{dom}(\Gamma),~\text{arity 0)} \\
-  & \mid & c(\overline{\ell : p}) & \text{constructor pattern (} c \in \text{dom}(\Gamma),~\text{arity} \geq 1 \text{)} \\
+  & \mid & \mu\,c & \text{nullary constructor pattern, } \mu \in \lbrace \varepsilon, \%, \& \rbrace \text{ (} c \in \text{dom}(\Gamma),~\text{arity 0)} \\
+  & \mid & \mu\,c(\overline{\ell : p}) & \text{constructor pattern, } \mu \in \lbrace \varepsilon, \%, \& \rbrace \text{ (} c \in \text{dom}(\Gamma),~\text{arity} \geq 1 \text{)} \\
   & \mid & \lbrace \overline{\ell : p} \rbrace & \text{record pattern} \\
   & \mid & p_1 \mathbin{\vert} p_2 & \text{or-pattern (alternation)}
 \end{array}$$
@@ -792,11 +792,15 @@ The match expression ([T-Match](#T-Match)) consumes the linear scrutinee via $\o
 
 <div markdown="0">
 $$\dfrac{
-  q = \begin{cases} 1 & \text{if } \text{linear}(\tau) \\ \omega & \text{otherwise} \end{cases}
+  \mu \in \lbrace \varepsilon,\, \%,\, \mathord{\sim},\, \& \rbrace \qquad
+  \tau_b = \text{wrapSigil}(\mu, \text{strip}(\tau)) \qquad
+  q = \begin{cases} 1 & \text{if } \text{linear}(\tau_b) \\ \omega & \text{otherwise} \end{cases}
 }{
-  \Gamma \vdash x : \tau \Rightarrow \Gamma,\, x :^{q} (\emptyset, \tau)
+  \Gamma \vdash \mu\,x : \tau \Rightarrow \Gamma,\, x :^{q} (\emptyset, \tau_b)
 } \;\textsc{P-Var}$$
 </div>
+
+P-Var binds $x$ at $\tau_b = \text{wrapSigil}(\mu, \text{strip}(\tau))$: the pattern's sigil decides the modality of the binding regardless of what the scrutinee's sigil was. The combined effect — `strip` peels the scrutinee's outer modality, `wrapSigil` re-applies the pattern's modality — means $\textbf{let}~\%x = (\%v : \%T)$ binds $x$ at $\%T$, $\textbf{let}~\&y = (v : T)$ binds $y$ at $\&T$ (a borrow-let-pattern, mirroring the let-statement form), and $\textbf{let}~x = (\%v : \%T)$ binds at $\%T$ via wrapSigil's $\mu = \varepsilon$ identity clause. The idempotency of `wrapSigil` (§Statements) ensures a single layer is always present, never two. P-Wild / P-Lit / P-Or / P-Record have no sigil prefix at the pattern root (the surface grammar admits sigils only on variable and constructor patterns); their sub-patterns recurse through P-Var or P-Ctor where sigils may again appear.
 
 <div markdown="0">
 $$\dfrac{
@@ -819,6 +823,7 @@ $$\dfrac{
 <div markdown="0">
 $$\dfrac{
   \begin{array}{l}
+  \mu \in \lbrace \varepsilon,\, \%,\, \& \rbrace \qquad
   \Gamma(c) = \forall\overline{\alpha}.\,(\overline{\ell : F}) \to \tau' \\[2pt]
   \text{unify}(\text{strip}(\tau),\, \tau'[\overline{\alpha := {?}\beta}]) \qquad
   \lvert\overline{p}\rvert = \lvert\overline{F}\rvert \\[2pt]
@@ -826,21 +831,22 @@ $$\dfrac{
   \biguplus_i (\Gamma_i \setminus \Gamma)~\text{is defined}
   \end{array}
 }{
-  \Gamma \vdash c(\overline{\ell : p}) : \tau \Rightarrow \Gamma \uplus \textstyle\biguplus_i (\Gamma_i \setminus \Gamma)
+  \Gamma \vdash \mu\,c(\overline{\ell : p}) : \tau \Rightarrow \Gamma \uplus \textstyle\biguplus_i (\Gamma_i \setminus \Gamma)
 } \;\textsc{P-Ctor}$$
 </div>
 
-Field patterns bind in parallel: each $p_i$ is checked against the same input Γ, and the new bindings $\Gamma_i \setminus \Gamma$ are combined by disjoint union $\uplus$. Disjoint union fails if any two field patterns introduce the same variable name (e.g. $c(a: x, b: x)$), so a single use of $x$ across fields is rejected at the rule level instead of silently shadowing.
+Field patterns bind in parallel: each $p_i$ is checked against the same input Γ, and the new bindings $\Gamma_i \setminus \Gamma$ are combined by disjoint union $\uplus$. Disjoint union fails if any two field patterns introduce the same variable name (e.g. $c(a: x, b: x)$), so a single use of $x$ across fields is rejected at the rule level instead of silently shadowing. The pattern's sigil $\mu$ is informational: `strip` already peels the scrutinee's outer modality before the inner-type unify, so $\textbf{let}~\%\texttt{Some}(\textit{val}: x) = e$ types $e$ at $\%\texttt{Option}\langle T \rangle$ and recurses into $\texttt{Option}\langle T \rangle$ for the constructor fields — the recursive sub-patterns then re-attach their own sigils via P-Var.
 
 <a id="P-CtorNullary"></a>
 
 <div markdown="0">
 $$\dfrac{
+  \mu \in \lbrace \varepsilon,\, \%,\, \& \rbrace \qquad
   \Gamma(c) = \forall\overline{\alpha}.\,\tau' \qquad
   \tau'~\text{is not an arrow type} \qquad
   \text{unify}(\text{strip}(\tau),\, \tau'[\overline{\alpha := {?}\beta}])
 }{
-  \Gamma \vdash c : \tau \Rightarrow \Gamma
+  \Gamma \vdash \mu\,c : \tau \Rightarrow \Gamma
 } \;\textsc{P-CtorNullary}$$
 </div>
 
