@@ -268,7 +268,26 @@ For statement sequences, $\text{linConsumed}(\overline{s}, \Gamma)$ folds left-t
 $$\text{linConsumed}(\cdot, \Gamma) = \emptyset \qquad \text{linConsumed}(s; \overline{s'}, \Gamma) = \text{linConsumed}(s, \Gamma) \cup \text{linConsumed}(\overline{s'}, \Gamma \setminus\!\!\setminus s)$$
 </div>
 
-where $\Gamma \setminus\!\!\setminus s$ removes the linears consumed by $s$ before typing the tail. The base cases for individual statements (**let**, **return**, $\mathord{\sim}x \leftarrow e$, etc.) reduce to `linConsumed` of their sub-expressions plus any new linear bindings introduced (e.g. $\textbf{let}~\%y = e$ adds $y$ to the env for the tail, but does not itself consume anything from the input Γ beyond what $e$ consumed).
+where $\Gamma \setminus\!\!\setminus s$ removes the linears consumed by $s$ before typing the tail. The per-statement base cases are:
+
+<div markdown="0">
+$$\begin{array}{rcl}
+\text{linConsumed}(\textbf{let}~\mu\,x = e, \Gamma) & = & \text{linConsumed}(e, \Gamma) \\[2pt]
+\text{linConsumed}(\textbf{let}~p = e, \Gamma) & = & \text{linConsumed}(e, \Gamma) \\[2pt]
+\text{linConsumed}(\textbf{return}~e, \Gamma) & = & \text{linConsumed}(e, \Gamma) \\[2pt]
+\text{linConsumed}(\mathord{\sim}x \leftarrow e, \Gamma) & = & \text{linConsumed}(e, \Gamma) \\[2pt]
+\text{linConsumed}(e~\text{(bare expression stmt)}, \Gamma) & = & \text{linConsumed}(e, \Gamma) \\[6pt]
+\text{linConsumed}(\textbf{inject}~\overline{h}~\textbf{do}~\overline{s}~\textbf{end}, \Gamma) & = & \lbrace h_i \in \overline{h} \mid \Gamma(h_i) = (1, S) \rbrace \;\uplus\; \text{linConsumed}(\overline{s}, \Gamma \cup \overline{h}{:}\omega) \\
+& & \text{(handler bindings whose scheme is linear are consumed by the inject;} \\
+& & \text{the body is typed with the same handlers re-bound at }\omega\text{ inside the block)} \\[6pt]
+\text{linConsumed}(\textbf{while}~e~\textbf{do}~\overline{s}~\textbf{end}, \Gamma) & = & \text{linConsumed}(e, \Gamma) \\
+& & \text{([T-While]'s P-Loop requires the body's linear set to round-trip,} \\
+& & \text{so the body adds nothing to the loop's outer consumption)} \\[6pt]
+\text{linConsumed}(\textbf{try}~\overline{s_t}~\overline{\textbf{catch}~p_i \to \overline{s_i}}~\textbf{end}, \Gamma) & = & \text{linConsumed}(\overline{s_t}, \Gamma) \;\uplus\; L_\text{try} \\
+& & \text{where}~L_\text{try}~\text{is selected by arm equality / divergence,} \\
+& & \text{symmetric with the }L_\text{match}~\text{clause above}
+\end{array}$$
+</div>
 
 The two readings — "T-Var leaves of any derivation" and the syntactic recursion above — coincide on every well-typed program: the recursion eagerly commits to the unique consumption set the $\otimes$-splits would have produced, and undefined-$\uplus$ at any node signals exactly the "$1 + 1 = -$" reject case.
 
