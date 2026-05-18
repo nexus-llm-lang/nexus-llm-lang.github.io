@@ -53,7 +53,7 @@ A value of structurally-linear type must reach exactly one of the following chan
 
 ### Function-end check
 
-`require_empty_or_droppable` (`src/typecheck/linearity.nx:670`) runs at the end of every `EagerBody`. If the live linear set is non-empty and any name is *not* a parameter whose declared inner type is auto-droppable, the checker raises `LinearUnused(name, span)`.
+`require_empty_or_droppable` (`src/typecheck/linearity.nx:670`) runs at the end of every `EagerBody`. If the live linear set is non-empty and any name is *not* a parameter whose declared inner type is auto-droppable, the checker throws `LinearUnused(name, span)`.
 
 ### Throwable-call leak guard
 

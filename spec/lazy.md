@@ -5,7 +5,7 @@ title: Lazy Evaluation, Concurrency, and Parallelism
 
 # Lazy Evaluation, Concurrency, and Parallelism (`@`)
 
-The `@` sigil is Nexus's unified primitive for lazy evaluation, concurrency, and parallelism. It replaces the former `conc` block syntax with a design rooted in **one-shot delimited continuations** and **linear types**.
+The `@` sigil is Nexus's unified primitive for lazy evaluation, concurrency, and parallelism, designed around **one-shot delimited continuations** and **linear types**.
 
 A lazy binding `let @x = expr` suspends `expr` as an unevaluated thunk. Forcing with `@x` evaluates it. Independent thunks within a force expression are evaluated in parallel via DAG scheduling — data dependencies determine execution order, not left-to-right evaluation.
 
@@ -60,19 +60,12 @@ Nested calls create deeper DAGs:
 //   f   g   x         ← level 1: parallel evaluation
 ```
 
-Record force `@{ a: x, b: y }` is a special case — a height-2 tree where fields are leaves evaluated in parallel. This replaces `conc` blocks:
+Record force `@{ a: x, b: y }` is a special case — a height-2 tree where fields are leaves evaluated in parallel:
 
 ```nexus
-// Before (conc block — removed):
-conc do
-  task t1 do arr[0] <- compute1() end
-  task t2 do arr[1] <- compute2() end
-end
-
-// After (@ sigil):
-let @p1 = do arr[0] <- compute1() end
-let @p2 = do arr[1] <- compute2() end
-let _ = @{ r1: p1, r2: p2 }
+let @p1 = compute1()
+let @p2 = compute2()
+let _ = @{ r1: p1, r2: p2 }   // p1 and p2 forced in parallel
 ```
 
 ## Linearity
@@ -127,7 +120,7 @@ Shared mutable state across parallel thunks requires explicit concurrency primit
 
 ## Exception Semantics
 
-Exceptions raised inside a thunk propagate at the force site via standard `try/catch`:
+Exceptions thrown inside a thunk propagate at the force site via standard `try/catch`:
 
 ```nexus
 let @result = do
@@ -141,7 +134,7 @@ catch
 end
 ```
 
-During parallel force (`@{ a: x, b: y }`), if one thunk raises:
+During parallel force (`@{ a: x, b: y }`), if one thunk throws:
 - The exception propagates at the join point
 - The other thunk's continuation is dropped (= cancelled)
 - If already running, it completes but the result is discarded

@@ -140,7 +140,7 @@ end  // result : i64 (from arm A)
 
 ## Concurrency Model
 
-Nexus expresses parallelism through the `@` (thunk) sigil rather than a dedicated `conc`/`task` block — the latter was removed during the migration to data-dependency-driven scheduling. Independent thunks within a force expression evaluate in parallel via DAG scheduling; data dependencies determine execution order, not lexical position.
+Nexus expresses parallelism through the `@` (thunk) sigil. Independent thunks within a force expression evaluate in parallel via DAG scheduling; data dependencies determine execution order, not lexical position.
 
 ```nexus
 let @p1 = compute1()

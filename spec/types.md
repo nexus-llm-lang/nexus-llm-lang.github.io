@@ -179,7 +179,7 @@ Mutable references cannot escape the defining function:
 
 - Cannot be returned from functions
 - Cannot be stored in heap-allocated structures (records, ADTs, lists)
-- Cannot be captured by closures or concurrent tasks
+- Cannot be captured by closures or `@` thunks (which may evaluate in parallel)
 
 This ensures mutation remains localized and predictable.
 
