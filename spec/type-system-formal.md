@@ -1412,7 +1412,9 @@ where $\alpha_j$ and $\beta_j$ are the require row and throw row declared for me
 $$\dfrac{
   \begin{array}{l}
   \text{methods}(x) = \lbrace\; \ell_j : (\overline{\pi_j}) \to \kappa_j;\, \alpha_j;\, \beta_j \;\mid\; j \in J \;\rbrace \\[2pt]
-  \lbrace \ell_j \mid j \in J \rbrace = \lbrace \ell \mid (\ell = e) \in \overline{\ell_j = e_j} \rbrace \quad\text{(1-1 arm/method correspondence: no missing arm, no extra arm)} \\[2pt]
+  \text{handler literal arms} = \lbrace\; \ell'_k = e'_k \;\mid\; k \in K \;\rbrace \\[2pt]
+  \lbrace \ell_j \mid j \in J \rbrace = \lbrace \ell'_k \mid k \in K \rbrace \quad\text{(1-1 arm/method correspondence: name-set equality, no missing arm, no extra arm)} \\[2pt]
+  \forall j \in J.\;\exists!\;k \in K.\;\ell_j = \ell'_k \qquad e_j \mathrel{\stackrel{\Delta}{=}} e'_{k(j)} \quad\text{where}~k(j)~\text{is the unique}~k~\text{with}~\ell_j = \ell'_k \\[2pt]
   \Gamma_\text{cap} = \lbrace y :^{1} S \in \Gamma \mid y \in \textstyle\bigcup_j \text{fv}(e_j) \rbrace \\[2pt]
   \Gamma_\omega = \lbrace y :^{\omega} S \in \Gamma \mid y \in \textstyle\bigcup_j \text{fv}(e_j) \rbrace \\[2pt]
   \forall y \in \textstyle\bigcup_j \text{fv}(e_j) \cap \text{dom}(\Gamma).\;\Gamma(y) \neq \mathord{\sim}\sigma \\[2pt]
@@ -1423,7 +1425,7 @@ $$\dfrac{
   \tau_h = \textbf{handler}\;x\;\rho_\text{req}
   \end{array}
 }{
-  \Gamma;\, \rho_q' \vdash_e \textbf{handler}~x~[\textbf{require}~\rho_\text{annot}]~\textbf{do}~\overline{\ell_j = e_j}~\textbf{end} : \tau_h^\star \mathbin{!} \lbrace\rbrace
+  \Gamma;\, \rho_q' \vdash_e \textbf{handler}~x~[\textbf{require}~\rho_\text{annot}]~\textbf{do}~\overline{\ell'_k = e'_k}~\textbf{end} : \tau_h^\star \mathbin{!} \lbrace\rbrace
 } \;\textsc{T-Handler}$$
 </div>
 
@@ -1435,7 +1437,7 @@ The handler is pure ($\mathbin{!} \lbrace\rbrace$) — its construction has no e
 
 As with [T-Lambda](#T-Lambda), the conclusion's ambient $\rho_q'$ is universally quantified — handler construction is ambient-independent (the per-arm $\alpha_j$ are validated against the arms' own bodies, not the surrounding ambient). The connection between $\rho_q'$ and $\rho_\text{req}$ is enforced at the [T-Inject](#T-Inject) site.
 
-**Arm/method 1-1 correspondence.** The premise $\lbrace \ell_j \mid j \in J \rbrace = \lbrace \ell \mid (\ell = e) \in \overline{\ell_j = e_j} \rbrace$ enforces that the handler literal supplies exactly the methods declared on cap $x$ — no missing arm (which would leave a cap-method invocation through [T-CapCall](#T-CapCall) with no implementation at runtime) and no extra arm (which would silently introduce a name unreachable by any method-dispatch path). Earlier formulations indexed the per-arm typing premise by $j \in J$ alone, which left the case of an extra user arm $\ell_\text{extra} = e_\text{extra}$ never type-checked and the case of a missing arm vacuously satisfied; this premise makes both failure modes a rule-level rejection. The same shape mirrors how [T-Record](#T-Record)'s $\text{distinct}(\overline{\ell})$ + [T-App](#T-App)'s label-permutation premises pin record-construction field sets to declared shapes. The impl in `src/typecheck/check.nx::validate_handler_arm_sets` performs the same set-equality, invoked from `check_program` before any arm signature/body work — a structurally incomplete handler is rejected before `register_handler_bindings` would have admitted it.
+**Arm/method 1-1 correspondence.** The cap's declared methods $\lbrace \ell_j \mid j \in J \rbrace$ and the handler literal's arm labels $\lbrace \ell'_k \mid k \in K \rbrace$ are matched **by name**, not by position: the surface allows arms to appear in any order, and the impl's `validate_handler_arm_sets` performs a set-equality check before any per-arm work. The premise $\lbrace \ell_j \mid j \in J \rbrace = \lbrace \ell'_k \mid k \in K \rbrace$ enforces that the handler literal supplies exactly the methods declared on cap $x$ — no missing arm (which would leave a cap-method invocation through [T-CapCall](#T-CapCall) with no implementation at runtime) and no extra arm (which would silently introduce a name unreachable by any method-dispatch path). The accompanying premise $\exists!\,k\in K.\;\ell_j = \ell'_k$ together with the abbreviation $e_j \mathrel{\stackrel{\Delta}{=}} e'_{k(j)}$ explicitly maps each method index $j$ to the unique literal arm carrying the same label — so all subsequent $e_j$ premises are unambiguous regardless of the literal's syntactic ordering. Earlier formulations indexed the per-arm typing premise by $j \in J$ alone, which (a) silently demanded literal-order = methods-order matching, (b) left the case of an extra user arm $\ell_\text{extra} = e_\text{extra}$ never type-checked, and (c) made the missing-arm case vacuously satisfied. The current premise discharges all three. The same shape mirrors how [T-Record](#T-Record)'s $\text{distinct}(\overline{\ell})$ + [T-App](#T-App)'s label-permutation premises pin record / call argument shapes to declared label sets.
 
 **With-continuation arms (`with @k`).** A handler arm may optionally carry a *continuation binder* — a thunk whose body is the rest of the arm's own statement list after the `with @k` point. The surface syntax is:
 
