@@ -518,7 +518,7 @@ $$\dfrac{
   \text{unify}(\lbrace \overline{\tau_1} \rbrace,\; \lbrace \overline{\tau_2} \rbrace)
 } \;\textsc{U-Row-Exn}$$
 
-U-Row-Exn handles the variant-lattice subsumption of $\texttt{Exn}$ described in §1.3: when one side carries the catch-all sentinel $\texttt{Exn}$, any constructors of $\texttt{Exn}$ on the other side are absorbed by it. This is the *only* place the type system admits a row-inclusion relationship — every other row rule requires entry-by-entry equality. U-Row-Exn applies in both argument orders by the symmetry convention. It is intentionally restricted to closed-closed shapes; mixing $\texttt{Exn}$ with an open-row tail $\lbrace \overline{\tau} \mid {?}r \rbrace$ is handled by first instantiating $?r$ via U-Row-Closed-Open, then re-applying U-Row-Exn.
+U-Row-Exn handles the variant-lattice subsumption of $\texttt{Exn}$ described in §1.3: when one side carries the catch-all sentinel $\texttt{Exn}$, any constructors of $\texttt{Exn}$ on the other side are absorbed by it. This is the *only* place the type system admits a row-inclusion relationship — every other row rule requires entry-by-entry equality. U-Row-Exn applies in both argument orders by the symmetry convention. It is intentionally restricted to closed-closed shapes; a shape where one side is an open row $\lbrace \overline{\tau} \mid {?}r \rbrace$ carrying (or paired with) $\texttt{Exn}$ does **not** reduce to U-Row-Closed-Open before re-applying U-Row-Exn: U-Row-Closed-Open's premise $\overline{r_2} = \emptyset$ fails whenever the open side carries $\texttt{Exn}$ (since $\overline{r_2} = \overline{\tau_2} \setminus \overline{c} \ni \texttt{Exn}$). In practice, by the time effect rows are unified against a closed call-site row all tail variables have been solved to closed rows, so the closed-closed form of U-Row-Exn always applies. The Exn-absorption check for raise sites that have not yet resolved an open tail is handled separately in the raise-site well-formedness pass (`row_admits_exception` in `src/typecheck/infer.nx`) rather than through row unification.
 
 $$\dfrac{
   \neg\text{linear}(\tau_2) \qquad
@@ -1690,25 +1690,33 @@ Port declarations populate $\text{methods}$ alone; they do not enter a value-lev
 <a id="D-Exception"></a>
 
 $$\dfrac{
+  \begin{array}{l}
   D = \textbf{exception}~C\,\overline{F} \qquad
+  C \notin \text{variants}(\texttt{Exn}) \quad\text{(no duplicate constructor name)} \\[2pt]
+  \overline{F} \neq \emptyset \implies \text{distinct}(\overline{\ell}) \quad\text{(field labels within this constructor are distinct)} \\[2pt]
   S = \begin{cases} (\overline{\ell : \tau}) \to \texttt{Exn};\,\lbrace\rbrace;\,\lbrace\rbrace & \text{if}~\overline{F} = (\overline{\ell : \tau}),~\text{non-empty} \\ \texttt{Exn} & \text{if}~\overline{F}~\text{is omitted (nullary)} \end{cases}
+  \end{array}
 }{
   \mathcal{T} \;\vdash_d\; D \;\Rightarrow\; \mathcal{T}\!\begin{bmatrix} \Gamma & \mathrel{:=} & \Gamma,\, C :^{\omega} S \\ \text{variants}(\texttt{Exn}) & \mathrel{:=} & \text{variants}(\texttt{Exn}) \cup \lbrace C \rbrace \end{bmatrix}
 } \;\textsc{D-Exception}$$
 
-Exception declarations admit both the parameterised form $\textbf{exception}~\texttt{NotFound}(\textit{path}: \texttt{string})$ — installed as an arrow constructor — and the nullary form $\textbf{exception}~\texttt{MissingMain}$ (no parentheses on declaration or use) — installed as a value of type $\texttt{Exn}$, matching the *"Zero-field exceptions omit parentheses"* convention from [Exception Groups](../exception-groups). The nullary form is the unique reason [P-CtorNullary](#P-CtorNullary) exists; the parameterised form goes through ordinary [P-Ctor](#P-Ctor).
+Exception declarations admit both the parameterised form $\textbf{exception}~\texttt{NotFound}(\textit{path}: \texttt{string})$ — installed as an arrow constructor — and the nullary form $\textbf{exception}~\texttt{MissingMain}$ (no parentheses on declaration or use) — installed as a value of type $\texttt{Exn}$, matching the *"Zero-field exceptions omit parentheses"* convention from [Exception Groups](../exception-groups). The nullary form is the unique reason [P-CtorNullary](#P-CtorNullary) exists; the parameterised form goes through ordinary [P-Ctor](#P-Ctor). The freshness premise $C \notin \text{variants}(\texttt{Exn})$ is the analogue of [D-Type-Sum](#D-Type-Sum)'s $\text{distinct}(c_1,\ldots,c_n)$ for the open $\texttt{Exn}$ union: it prevents two incompatible schemes from co-inhabiting $\Gamma$ under the same constructor name across any reachable module boundary.
 
 Exception declarations are the only rule that mutates a *pre-existing* table entry: $\text{variants}(\texttt{Exn})$ is the union of every $\textbf{exception}$ declaration reached from the program root. The *cross-module extensibility hazard* called out in [T-TryCatch](#T-TryCatch) — a closed-enumeration catch over a $\texttt{Exn}$ row becoming inexhaustive when a downstream module adds a variant — is exactly the cross-module application of D-Exception against the importer's $\text{variants}(\texttt{Exn})$.
 
 <a id="D-ExceptionGroup"></a>
 
 $$\dfrac{
-  D = \textbf{exception group}~G = C_1 \mathbin{\vert} \ldots \mathbin{\vert} C_n
+  \begin{array}{l}
+  D = \textbf{exception group}~G = C_1 \mathbin{\vert} \ldots \mathbin{\vert} C_n \\[2pt]
+  \text{distinct}(C_1, \ldots, C_n) \quad\text{(member names are distinct within this group declaration)} \\[2pt]
+  \forall i \in \lbrace 1,\ldots,n \rbrace.\; C_i \in \text{variants}(\texttt{Exn}) \quad\text{(every member is a declared exception constructor)}
+  \end{array}
 }{
   \mathcal{T} \;\vdash_d\; D \;\Rightarrow\; \mathcal{T}[\text{members}(G) \mathrel{:=} \lbrace C_1, \ldots, C_n \rbrace]
 } \;\textsc{D-ExceptionGroup}$$
 
-Group declarations affect only the parse-time expansion table $\text{members}$. No typing rule reads $\text{members}$ directly — the parser uses it to fan out $\textbf{catch}~\vert~G \to \ldots$ into one arm per constructor before the rule fires.
+Group declarations affect only the parse-time expansion table $\text{members}$. No typing rule reads $\text{members}$ directly — the parser uses it to fan out $\textbf{catch}~\vert~G \to \ldots$ into one arm per constructor before the rule fires. The $\text{distinct}$ premise prevents the same constructor from appearing twice in a group's member list (a duplicate would silently produce redundant catch arms). The membership premise $C_i \in \text{variants}(\texttt{Exn})$ ensures every listed name is a previously declared exception constructor, not an undeclared identifier or another group name (see nexus-8n1b).
 
 <a id="D-Let-Top"></a>
 
