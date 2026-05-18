@@ -1453,7 +1453,7 @@ A group-name pattern $G$ has no clause here — group patterns are flattened to 
 
 $$\text{members}(G) = \lbrace C_1, C_2, \ldots, C_n \rbrace \quad\text{where}~G~\text{was declared}~\textbf{exception group}~G = C_1 \mathrel{\vert} \ldots \mathrel{\vert} C_n$$
 
-Nesting is resolved transitively: if $G_2 = G_1 \mathrel{\vert} C_k$ and $G_1 = C_1 \mathrel{\vert} C_2$, then $\text{members}(G_2) = \lbrace C_1, C_2, C_k \rbrace$.
+Group members must be individual exception constructors, not other group names. Nesting is **rejected**: a declaration $\textbf{exception group}~G_2 = G_1 \mathrel{\vert} C_k$ where $G_1$ is itself a group name is ill-formed — [D-ExceptionGroup](#D-ExceptionGroup) requires each $C_i \in \text{variants}(\texttt{Exn})$, and group names are not exception constructors. To create a "super-group" spanning the members of $G_1$, list all individual constructors directly (see [Exception Groups](../exception-groups) §Group Composition). This matches the implementation, which does not perform transitive group expansion.
 
 $$\text{hasCatchAll}(\overline{p}) = \exists i.\;p_i = \_ \;\vee\; p_i~\text{is a variable pattern}~x$$
 
@@ -1648,8 +1648,10 @@ D-Type-Sum-Opaque, alone among §3 rules, depends on the **current module being 
 
 $$\dfrac{
   \begin{array}{l}
-  D = \textbf{opaque type}~x\langle \overline{\alpha} \rangle = c_1(\overline{\ell_1 : \tau_1}) \mathbin{\vert} \ldots \mathbin{\vert} c_n(\overline{\ell_n : \tau_n}) \\[2pt]
-  S_i = \forall \overline{\alpha}.\,(\overline{\ell_i : \tau_i}) \to x\langle \overline{\alpha} \rangle;\,\lbrace\rbrace;\,\lbrace\rbrace \quad (i = 1, \ldots, n) \\[2pt]
+  D = \textbf{opaque type}~x\langle \overline{\alpha} \rangle = c_1\,\overline{F_1} \mathbin{\vert} \ldots \mathbin{\vert} c_n\,\overline{F_n} \quad\text{where each}~\overline{F_i}~\text{is either}~(\overline{\ell_i : \tau_i})~\text{or empty} \\[2pt]
+  \text{distinct}(c_1, \ldots, c_n) \qquad
+  \forall i \in \lbrace 1,\ldots,n \rbrace.\;\overline{F_i} \neq \emptyset \implies \text{distinct}(\overline{\ell_i}) \\[2pt]
+  S_i = \begin{cases} \forall \overline{\alpha}.\,(\overline{\ell_i : \tau_i}) \to x\langle \overline{\alpha} \rangle;\,\lbrace\rbrace;\,\lbrace\rbrace & \text{if}~\overline{F_i}~\text{is non-empty (arity} \geq 1\text{)} \\ \forall \overline{\alpha}.\, x\langle \overline{\alpha} \rangle & \text{if}~\overline{F_i}~\text{is empty (nullary)} \end{cases} \\[2pt]
   M_\text{defining}~\text{is the module in whose source}~D~\text{appears} \\[2pt]
   \mathcal{T}_\text{update} = \begin{cases} \mathcal{T}\!\begin{bmatrix} \Gamma & \mathrel{:=} & \Gamma,\, \overline{c_i :^{\omega} S_i} \\ \text{typedef}(x) & \mathrel{:=} & \forall \overline{\alpha}.\, x\langle \overline{\alpha} \rangle \\ \text{variants}(x) & \mathrel{:=} & \lbrace c_1, \ldots, c_n \rbrace \end{bmatrix} & \text{if}~M_\text{now} = M_\text{defining} \\[12pt] \mathcal{T}[\text{typedef}(x) \mathrel{:=} \forall \overline{\alpha}.\, x\langle \overline{\alpha} \rangle] & \text{otherwise} \end{cases}
   \end{array}
@@ -1657,7 +1659,7 @@ $$\dfrac{
   M_\text{now} \vdash \mathcal{T} \;\vdash_d\; D \;\Rightarrow\; \mathcal{T}_\text{update}
 } \;\textsc{D-Type-Sum-Opaque}$$
 
-D-Type-Sum-Opaque restricts the visibility of the constructor entries and the $\text{variants}$ set to the *defining module* $M_\text{defining}$: when $M_\text{now} = M_\text{defining}$, the rule fires the full sum-type effects (constructors in $\Gamma$, variant set populated, typedef registered); when $M_\text{now} \neq M_\text{defining}$ (the rule is processed during another module's typing, e.g.\ via an `import` that brought the projected $\mathcal{T}^{\text{export}}_{M_\text{defining}}$ in), only $\text{typedef}(x)$ enters — the constructor schemes and variant set are withheld. Importing code therefore cannot apply $c_i$ as a constructor ([T-App](#T-App) looks $c_i$ up in $\Gamma$ and fails) or write a $c_i(\overline{\ell : p})$ pattern ([P-Ctor](#P-Ctor) also fails the lookup); construction and destructuring are only possible through the module's exported functions. The opaque modifier is accepted only on sum-type definitions in the surface grammar; record types and aliases have no opaque variant (`src/frontend/parse_topdef.nx::parse_type_def` reads `is_opaque` only for the enum branch).
+D-Type-Sum-Opaque restricts the visibility of the constructor entries and the $\text{variants}$ set to the *defining module* $M_\text{defining}$: when $M_\text{now} = M_\text{defining}$, the rule fires the full sum-type effects (constructors in $\Gamma$, variant set populated, typedef registered); when $M_\text{now} \neq M_\text{defining}$ (the rule is processed during another module's typing, e.g.\ via an `import` that brought the projected $\mathcal{T}^{\text{export}}_{M_\text{defining}}$ in), only $\text{typedef}(x)$ enters — the constructor schemes and variant set are withheld. Importing code therefore cannot apply $c_i$ as a constructor ([T-App](#T-App) looks $c_i$ up in $\Gamma$ and fails) or write a $c_i(\overline{\ell : p})$ pattern ([P-Ctor](#P-Ctor) also fails the lookup); construction and destructuring are only possible through the module's exported functions. The opaque modifier is accepted only on sum-type definitions in the surface grammar; record types and aliases have no opaque variant (`src/frontend/parse_topdef.nx::parse_type_def` reads `is_opaque` only for the enum branch). The nullary-variant case (e.g.\ $\textbf{opaque type}~\texttt{Set} = \texttt{Empty} \mathbin{\vert} \texttt{NonEmpty}(\textit{id}: \texttt{i64})$) follows the same two-branch $S_i$ split as [D-Type-Sum](#D-Type-Sum): $\texttt{Empty}$ is installed at value scheme $\forall\overline{\alpha}.\, x\langle\overline{\alpha}\rangle$, matching the surface form where nullary constructors appear without parentheses and are used via [T-Var](#T-Var) / [P-CtorNullary](#P-CtorNullary).
 
 <a id="D-External"></a>
 
