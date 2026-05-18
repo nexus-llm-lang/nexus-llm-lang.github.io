@@ -120,7 +120,7 @@ Supported LSP features:
 | Diagnostics | `publishDiagnostics` | Parse errors, type errors, warnings on open/change |
 | Hover | `textDocument/hover` | Type info for variables, functions, types, enums |
 | Go to Definition | `textDocument/definition` | Jump to definition (same file) |
-| Document Symbols | `textDocument/documentSymbol` | List functions, types, enums, ports, exceptions |
+| Document Symbols | `textDocument/documentSymbol` | List functions, types, enums, caps, exceptions |
 | References | `textDocument/references` | Find all occurrences of an identifier |
 | Rename | `textDocument/rename` | Rename an identifier across the file |
 | Completion | `textDocument/completion` | Keywords, env symbols, module members |

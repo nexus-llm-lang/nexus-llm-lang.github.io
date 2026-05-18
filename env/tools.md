@@ -24,7 +24,7 @@ Configure your editor to run `nexus lsp` as the language server for `.nx` files.
 | Diagnostics | Parse errors, type errors, and warnings published on open/change |
 | Hover | Type information for variables, functions, type definitions, enums |
 | Go to Definition | Jump to the definition site of a symbol (same file) |
-| Document Symbols | Outline of functions, types, enums, ports, exceptions |
+| Document Symbols | Outline of functions, types, enums, caps, exceptions |
 | References | Find all occurrences of an identifier |
 | Rename | Rename an identifier across the file |
 | Completion | Keywords, symbols from the type environment, module members |
@@ -95,10 +95,10 @@ The skill activates automatically when Claude Code works with `.nx` files.
 | `SKILL.md` | Quick reference: syntax rules, effect system, type summary, anti-patterns |
 | `references/syntax.md` | Complete EBNF grammar and operator precedence |
 | `references/types.md` | Type system: primitives, records, ADTs, linear types, borrowing, mutability |
-| `references/effects.md` | Ports, handlers, inject, runtime permissions, checked exceptions |
+| `references/effects.md` | Caps, handlers, inject, runtime permissions, checked exceptions |
 | `references/stdlib.md` | Full standard library API (all modules and function signatures) |
 | `references/patterns.md` | Idiomatic code patterns: list recursion, error handling, concurrency, web servers |
-| `templates/*.nx` | Starter templates for hello-world, web server, CLI app, port/handler DI |
+| `templates/*.nx` | Starter templates for hello-world, web server, CLI app, cap/handler DI |
 
 ### What the skill teaches agents
 

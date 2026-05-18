@@ -24,7 +24,7 @@ Nexus compiles to the WebAssembly Component Model with WASI for system interface
 ### Static Verification
 
 The type checker ensures:
-1. Any function calling a capability-requiring port must itself `require` that capability or have it satisfied via `inject`
+1. Any function calling a capability-requiring cap must itself `require` that capability or have it satisfied via `inject`
 2. `main`'s `require` clause is the source of truth for the entire program's capability surface
 
 ### Binary Encoding
@@ -242,7 +242,7 @@ If the program uses closures or function references, a funcref table is emitted:
 
 For HTTP networking, Nexus includes a host bridge component (`nexus_host_bridge`) that translates Nexus FFI calls (prefixed with `__nx_http`) into WASI HTTP component calls.
 
-When a program requires `PermNet`, the compiler automatically composes this bridge into the final WASM component. This ensures the `Net` port works on any WASI-compliant host.
+When a program requires `PermNet`, the compiler automatically composes this bridge into the final WASM component. This ensures the `Net` cap works on any WASI-compliant host.
 
 ## Building and Running
 

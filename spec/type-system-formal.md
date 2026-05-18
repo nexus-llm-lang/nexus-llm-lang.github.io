@@ -8,8 +8,6 @@ title: Type System — Formal Rules
 
 This document defines the typing rules of Nexus as inference rules. It serves as a specification for property-based testing and as a reference for future mechanization.
 
-> **Terminology — port ≡ cap.** This document uses **port** as the abstract name for a capability interface (e.g. $\textbf{port}\;\texttt{Logger}$, $\text{methods}(x)$, [T-PortCall](#T-PortCall)). The corresponding surface keyword is `cap` — see [effects.md](./effects) and [syntax.md](./syntax). The two names refer to the same construct: a top-level declaration that introduces a row-entry symbol and a method signature table. The formal rules use "port" uniformly; readers should treat any `cap X do ... end` declaration in surface code as a `port X` introduction in $\Gamma$.
-
 ## 1. Syntax
 
 The abstract syntax of the core calculus. See [Syntax](../syntax) for the full surface syntax.
@@ -50,8 +48,8 @@ Bare identifiers in pattern position are disambiguated **by $\Gamma$-lookup**: i
 The core calculus omits several surface language features that are either desugared or handled as environment preconditions:
 
 - **Constructors** ($c$) — assumed predefined in $\Gamma$ with a function type (n-ary) or a value type (nullary). Application $f(\overline{\ell : e})$ covers both function calls and constructor application. In patterns, $c$ is syntactically distinguished from variable patterns $x$.
-- **Port declarations** — top-level declarations that populate $\Gamma$ with method signatures. Not terms; they are preconditions on $\Gamma$.
-- **Exception / exception group declarations** — extend the $\texttt{Exn}$ sum type in $\Gamma$. Same status as port declarations.
+- **Cap declarations** — top-level declarations that populate $\Gamma$ with method signatures. Not terms; they are preconditions on $\Gamma$.
+- **Exception / exception group declarations** — extend the $\texttt{Exn}$ sum type in $\Gamma$. Same status as cap declarations.
 - **For loops** — present in the surface syntax but desugared to a $\textbf{while}$ with an explicit index counter and bound; the formal rule covers only $\textbf{while}$ (see [T-While](#T-While)).
 - **Import statements** — resolved before type checking; not modeled here.
 - **List literals and the $\mathord{::}$ cons operator** — desugared to the prelude $\texttt{List}$ enum: $[\,]$ becomes $\texttt{Nil}$, $e_h :: e_t$ becomes $\texttt{Cons}(v: e_h,\, \text{rest}: e_t)$, $[e_1, \ldots, e_n]$ becomes a right-associated chain of $\texttt{Cons}$ ending in $\texttt{Nil}$. The list type $[\tau]$ is an alias for $\texttt{List}\langle\tau\rangle$. List patterns desugar identically. Typing and exhaustiveness are then handled by [T-App](#T-App) (constructor application), [P-Ctor](#P-Ctor), and [Exh-Sum](#Exh-Sum) — no list-specific rules are needed.
@@ -67,7 +65,7 @@ $$\begin{array}{rcll}
     & \mid & x\langle \overline{\tau} \rangle & \text{named type (e.g.\ } \texttt{Option}\langle\texttt{i64}\rangle\text{)} \\
     & \mid & [\tau] \mid [\lvert\,\tau\,\rvert] & \text{list / array (array is always linear)} \\
     & \mid & \%\tau \mid \mathord{\sim}\tau \mid \&\tau \mid @\tau & \text{linear / mutable ref / borrow / lazy} \\
-    & \mid & \textbf{handler}\;x\;\rho & \text{handler for port } x \\[6pt]
+    & \mid & \textbf{handler}\;x\;\rho & \text{handler for cap } x \\[6pt]
 b & ::= & \texttt{i32} \mid \texttt{i64} \mid \texttt{f32} \mid \texttt{f64} \mid {} & \\
   &     & \texttt{bool} \mid \texttt{char} \mid \texttt{string} \mid \texttt{unit} & \\[6pt]
 \eta & ::= & X \mid \texttt{Exn} & \text{row entry (an identifier or the catch-all sentinel)} \\[6pt]
@@ -88,7 +86,7 @@ In expression position, $\mu\,x$ with $\mu \in \{\varepsilon, \%, \mathord{\sim}
 
 ### Row Types
 
-The row type $\rho$ is used for both the effect position ($\rho_e$, in $\textbf{throws}$) and the capability position ($\rho_q$, in $\textbf{require}$) of function types. Both positions share the same structure — row extension, unification, row variable instantiation — so no separate syntactic category is needed. The distinction is semantic: $\rho_e$ ranges over exception types, $\rho_q$ ranges over a **mixed alphabet** of system capabilities and user-declared port names (defined immediately below). No kind system enforces the row-position invariant; it is maintained by the introduction rules (T-Throw adds to $\rho_e$; [T-Inject](#T-Inject) and port/cap declarations add to $\rho_q$).
+The row type $\rho$ is used for both the effect position ($\rho_e$, in $\textbf{throws}$) and the capability position ($\rho_q$, in $\textbf{require}$) of function types. Both positions share the same structure — row extension, unification, row variable instantiation — so no separate syntactic category is needed. The distinction is semantic: $\rho_e$ ranges over exception types, $\rho_q$ ranges over a **mixed alphabet** of system capabilities and user-declared cap names (defined immediately below). No kind system enforces the row-position invariant; it is maintained by the introduction rules (T-Throw adds to $\rho_e$; [T-Inject](#T-Inject) and cap declarations add to $\rho_q$).
 
 In the current language, the only effect is checked exceptions. $\rho_e$ is a row of **exception-constructor names**: each user `exception C(...)` declaration extends the global $\texttt{Exn}$ sum with constructor $C$ and simultaneously introduces $C$ as a row-entry symbol usable in $\textbf{throws}$ rows. So $\rho_e$ may be $\lbrace\rbrace$ (pure), a closed set of specific variants $\lbrace C_1, \ldots, C_n \rbrace$, an open variant row $\lbrace C_1, \ldots, C_n \mid {?}r \rbrace$, or contain the catch-all sentinel $\texttt{Exn}$ (see below).
 
@@ -99,17 +97,17 @@ Exception groups (`exception group G = C_1 | C_2 | \ldots`, see [Exception Group
 The capability row $\rho_q$ admits two disjoint sources of entries:
 
 1. **System capabilities** — the closed set $\lbrace \texttt{PermFs}, \texttt{PermNet}, \texttt{PermConsole}, \texttt{PermRandom}, \texttt{PermClock}, \texttt{PermProc}, \texttt{PermEnv} \rbrace$ — corresponding to WASI interface grants at runtime. See [WASM and WASI](../../env/wasm) for the complete mapping.
-2. **User-declared port names** — each $\textbf{port}\;X\;\textbf{do}\;\ldots\;\textbf{end}$ (also written $\textbf{cap}\;X$ in [effects.md](../effects)/[syntax.md](../syntax); the two surface keywords name the same construct) introduces $X$ as a row-entry symbol usable in $\textbf{require}$ rows. [T-Inject](#T-Inject) extends $\rho_q$ with $X$ when an $X$-implementing handler is injected; [T-PortCall](#T-PortCall) reads $x \in \rho_q$ off this row to authorize the call.
+2. **User-declared cap names** — each $\textbf{cap}\;X\;\textbf{do}\;\ldots\;\textbf{end}$ introduces $X$ as a row-entry symbol usable in $\textbf{require}$ rows. [T-Inject](#T-Inject) extends $\rho_q$ with $X$ when an $X$-implementing handler is injected; [T-CapCall](#T-CapCall) reads $x \in \rho_q$ off this row to authorize the call.
 
-These two sources share the row vocabulary because $\rho_q$ unification, weakening, and `require` checking treat both kinds of entries uniformly. The disjointness is by declaration site: system-capability names are reserved (parser rejects redeclaration); port/cap names are user-defined and live in the same namespace as type/term identifiers.
+These two sources share the row vocabulary because $\rho_q$ unification, weakening, and `require` checking treat both kinds of entries uniformly. The disjointness is by declaration site: system-capability names are reserved (parser rejects redeclaration); cap names are user-defined and live in the same namespace as type/term identifiers.
 
 Let $\texttt{SysCaps} = \lbrace \texttt{PermFs}, \texttt{PermNet}, \texttt{PermConsole}, \texttt{PermRandom}, \texttt{PermClock}, \texttt{PermProc}, \texttt{PermEnv} \rbrace$. The well-formedness predicate
 
 $$\text{wfCap}(\rho_q) \;\Longleftrightarrow\; \forall X \in \overline{\eta}.\;X \in \texttt{SysCaps} \cup \text{dom}(\text{methods}) \quad\text{where}~\rho_q = \lbrace \overline{\eta} \rbrace~\text{or}~\lbrace \overline{\eta} \mid {?}r \rbrace$$
 
-requires every named entry of a capability row to be either a system capability or a port previously declared by [D-Port](#D-Port) (which populates $\text{methods}$). Row tail variables ${?}r$ are unconstrained — they stand for "any further entries" and are pinned by unification against a closed-row context, where the pinned content is itself well-formed by transitivity.
+requires every named entry of a capability row to be either a system capability or a cap previously declared by [D-Cap](#D-Cap) (which populates $\text{methods}$). Row tail variables ${?}r$ are unconstrained — they stand for "any further entries" and are pinned by unification against a closed-row context, where the pinned content is itself well-formed by transitivity.
 
-$\text{wfCap}$ is checked at every **introduction site** of a $\rho_q$ row: the require clause on a $\textbf{fn}$ arrow ([T-Lambda](#T-Lambda)), the optional require annotation on a $\textbf{handler}$ ([T-Handler](#T-Handler)), and the per-method declared require row inside [D-Port](#D-Port). Use sites ([T-App](#T-App), [T-PortCall](#T-PortCall), [T-Inject](#T-Inject)) operate on already-well-formed rows and need not re-check. Without $\text{wfCap}$ at the introduction sites, a typo such as `require { Logr }` (intended `Logger`) would propagate as an uninhabitable row entry and surface only at a use site that happens to look it up — moving the diagnostic far from the source of the typo.
+$\text{wfCap}$ is checked at every **introduction site** of a $\rho_q$ row: the require clause on a $\textbf{fn}$ arrow ([T-Lambda](#T-Lambda)), the optional require annotation on a $\textbf{handler}$ ([T-Handler](#T-Handler)), and the per-method declared require row inside [D-Cap](#D-Cap). Use sites ([T-App](#T-App), [T-CapCall](#T-CapCall), [T-Inject](#T-Inject)) operate on already-well-formed rows and need not re-check. Without $\text{wfCap}$ at the introduction sites, a typo such as `require { Logr }` (intended `Logger`) would propagate as an uninhabitable row entry and surface only at a use site that happens to look it up — moving the diagnostic far from the source of the typo.
 
 **Notation note.** Earlier sections (and most rules below) write row entries as $\overline{\tau}$ rather than the precise $\overline{\eta}$. The two conventions are interchangeable: $\eta$ is the metavariable for "row entry" (an identifier or the $\texttt{Exn}$ sentinel), and the $\tau$ notation is a legacy from when rows were typed at the outer-syntactic level. Wherever a row appears, the entries are semantically constrained to be identifiers; type-grammar productions like $\%\sigma$ or $(\overline{\ell:\tau}) \to \tau_r$ never appear as row entries and are rejected by the parser. The wf-checks above pin this constraint formally.
 
@@ -146,7 +144,7 @@ x \in \lbrace \overline{\tau} \rbrace & \Longleftrightarrow & x \in \overline{\t
 x \in \lbrace \overline{\tau} \mid {?}r \rbrace & \Longleftrightarrow & x \in \overline{\tau} \quad\text{or}\quad {?}r \mathrel{:=} \lbrace x \mid {?}r' \rbrace~(\text{fresh}~{?}r')
 \end{array}$$
 
-The open-row branch may pin ${?}r$ to expose the missing entry; this matches the way [T-PortCall](#T-PortCall)'s $x \in \rho_q$ premise admits a call whose port is not yet visible in the ambient row but can be introduced by refining the row tail.
+The open-row branch may pin ${?}r$ to expose the missing entry; this matches the way [T-CapCall](#T-CapCall)'s $x \in \rho_q$ premise admits a call whose cap is not yet visible in the ambient row but can be introduced by refining the row tail.
 
 These three definitions all reduce to row unification at base; their separate names exist only because the typing rules read more naturally when "is in / is contained / minus" appear instead of bare $\text{unify}$.
 
@@ -349,7 +347,7 @@ The last clause is load-bearing for unification termination: when [U-Var](#U-Var
 
 $\text{linear}(\tau)$ is a structural (recursive) predicate: holds if $\tau$ is $\%\sigma$, $@\sigma$, or $[\lvert\,\sigma\,\rvert]$ at the outermost level, or if any transitive component of $\tau$ is linear. Components inspected by the recursion: fields of records, type arguments of named types, element types of lists, elements of rows, and **the payload of $\mathord{\sim}\sigma$** ($\text{linear}(\mathord{\sim}\sigma) \Longleftrightarrow \text{linear}(\sigma)$). Borrows $\&\sigma$ are *not* recursed into: a borrow is always reusable ($q = \omega$), so the borrow itself is non-linear regardless of $\sigma$; the underlying owner's linearity is tracked at the owner's binding, not at the borrow. Function arrows $(\overline{\ell:\tau}) \to \tau_r$ and handlers $\textbf{handler}\;x\;\rho$ are values whose own linearity is governed by capture-linearisation in [T-Lambda](#T-Lambda) / [T-Handler](#T-Handler) rather than by transitive recursion; $\text{linear}$ does not look inside them. Example: $\text{linear}(\text{Pair}\langle\%\texttt{i64}, \texttt{i64}\rangle)$ holds; $\text{linear}(\mathord{\sim}\%\texttt{i64})$ holds (caught by the new $\mathord{\sim}$-recursion clause — but see [§Mutable Reference Well-Formedness](#mutable-reference-well-formedness) below, which makes the type itself unrepresentable).
 
-$\text{autoDrop}(\tau)$ holds if the innermost non-modality type of $\tau$ (recursively stripping $\%$, $\&$, $\mathord{\sim}$ — but **not** $@$) is in $\lbrace b, \texttt{intlit}, \texttt{floatlit} \rbrace$. Types whose linear wrapper can be silently discarded. Thunks $@\sigma$ are explicitly **not** auto-droppable: an unforced thunk holds a suspended computation (with potentially-captured linear state, ports, or other resources) that the runtime never runs if the binding is silently dropped — exactly the *one-shot lazy continuation* hazard called out in [drop.md](../drop). Likewise arrays $[\lvert\,\sigma\,\rvert]$ are not auto-droppable: their linear contents (allocated cells, captured handles) must be released explicitly. The narrow auto-drop set is intentional — only structurally trivial values (scalars, intlit/floatlit, base types) qualify; anything else must reach an explicit consumption channel.
+$\text{autoDrop}(\tau)$ holds if the innermost non-modality type of $\tau$ (recursively stripping $\%$, $\&$, $\mathord{\sim}$ — but **not** $@$) is in $\lbrace b, \texttt{intlit}, \texttt{floatlit} \rbrace$. Types whose linear wrapper can be silently discarded. Thunks $@\sigma$ are explicitly **not** auto-droppable: an unforced thunk holds a suspended computation (with potentially-captured linear state, caps, or other resources) that the runtime never runs if the binding is silently dropped — exactly the *one-shot lazy continuation* hazard called out in [drop.md](../drop). Likewise arrays $[\lvert\,\sigma\,\rvert]$ are not auto-droppable: their linear contents (allocated cells, captured handles) must be released explicitly. The narrow auto-drop set is intentional — only structurally trivial values (scalars, intlit/floatlit, base types) qualify; anything else must reach an explicit consumption channel.
 
 **Variable cases.** Both predicates take the *conservative* answer on unresolved unification variables and on rigid type/row quantifiers:
 
@@ -393,13 +391,13 @@ $$\text{wfRef}(\mathord{\sim}\sigma) \;\Longleftrightarrow\; \neg\text{linear}(\
 | Site | Rule |
 |------|------|
 | Parameter and return slots of a $\textbf{fn}$ literal | [T-Lambda](#T-Lambda), [T-Let-PolyFn](#T-Let-PolyFn) |
-| Method signature in a port declaration | [D-Port](#D-Port) |
+| Method signature in a cap declaration | [D-Cap](#D-Cap) |
 | Type annotation of an external binding | [D-External](#D-External) |
 | Field types of a record type declaration | [D-Type-Record](#D-Type-Record) |
 | Field types of a sum-type variant | [D-Type-Sum](#D-Type-Sum) |
 | Explicit type annotation on a let-binding | [T-Let](#T-Let) |
 
-$\text{wfRef}$ is checked at every **type-formation site** that can introduce a $\mathord{\sim}\sigma$: parameter and return slots of $\textbf{fn}$ literals ([T-Lambda](#T-Lambda) / [T-Let-PolyFn](#T-Let-PolyFn)), the signature of a method declared by [D-Port](#D-Port), the type annotation of [D-External](#D-External), the field types of [D-Type-Record](#D-Type-Record) / [D-Type-Sum](#D-Type-Sum), and any explicit type annotation on [T-Let](#T-Let). The check fails fast at declaration time rather than letting a $\mathord{\sim}\%T$-shaped value smuggle in through e.g.\ an externally-declared signature, then duplicate the inner linear via successive $\mathord{\sim}x$ reads. T-Let itself also carries the rule-local guard $\mu = \mathord{\sim} \implies \neg\text{linear}(\tau')$ (see [T-Let](#T-Let)); $\text{wfRef}$ is the global counterpart that catches the same hazard when the type sneaks in through a non-sigil channel.
+$\text{wfRef}$ is checked at every **type-formation site** that can introduce a $\mathord{\sim}\sigma$: parameter and return slots of $\textbf{fn}$ literals ([T-Lambda](#T-Lambda) / [T-Let-PolyFn](#T-Let-PolyFn)), the signature of a method declared by [D-Cap](#D-Cap), the type annotation of [D-External](#D-External), the field types of [D-Type-Record](#D-Type-Record) / [D-Type-Sum](#D-Type-Sum), and any explicit type annotation on [T-Let](#T-Let). The check fails fast at declaration time rather than letting a $\mathord{\sim}\%T$-shaped value smuggle in through e.g.\ an externally-declared signature, then duplicate the inner linear via successive $\mathord{\sim}x$ reads. T-Let itself also carries the rule-local guard $\mu = \mathord{\sim} \implies \neg\text{linear}(\tau')$ (see [T-Let](#T-Let)); $\text{wfRef}$ is the global counterpart that catches the same hazard when the type sneaks in through a non-sigil channel.
 
 Two additional behaviors are embedded in specific rules rather than stated as standalone inference rules:
 
@@ -417,7 +415,7 @@ The occurrence-position constraint is enforced at the following sites:
 | Site | Premise added | Rule |
 |------|---------------|------|
 | Return type of a $\textbf{fn}$ declaration | $\neg\text{escapesRef}(\tau_r)$ | [T-Lambda](#T-Lambda), [T-Let-PolyFn](#T-Let-PolyFn) |
-| Method return type in a port declaration | $\neg\text{escapesRef}(\kappa_j)$ | [D-Port](#D-Port) |
+| Method return type in a cap declaration | $\neg\text{escapesRef}(\kappa_j)$ | [D-Cap](#D-Cap) |
 | Return type of an external binding | $\neg\text{escapesRef}(\tau_r)$ | [D-External](#D-External) |
 | Field types of a record type declaration | $\forall \ell.\;\neg\text{escapesRef}(\tau_\ell)$ | [D-Type-Record](#D-Type-Record) |
 | Field types of a sum-type variant | $\forall i.\;\neg\text{escapesRef}(\tau_i)$ | [D-Type-Sum](#D-Type-Sum), [D-Type-Sum-Opaque](#D-Type-Sum-Opaque) |
@@ -1164,11 +1162,11 @@ The split records variant identity in the effect row. **T-Throw-Ctor** fires whe
 
 The disambiguation between T-Throw-CtorNullary and T-Throw-Val on a bare identifier follows [P-CtorNullary](#P-CtorNullary)'s convention: $\Gamma$-lookup decides. If $\Gamma(c)$ is a value scheme rooted at $\texttt{Exn}$ (i.e.\ $c$ was declared by the nullary clause of D-Exception), T-Throw-CtorNullary fires and preserves variant precision; otherwise (a catch-bound $e : \texttt{Exn}$, a record-field projection, etc.), T-Throw-Val fires and assigns the catch-all sentinel.
 
-[T-Handler](#T-Handler) types $\textbf{handler}~x~[\textbf{require}~\rho]~\textbf{do}~\overline{\ell = e}~\textbf{end}$ — a record-of-lambdas implementing the methods of port $x$. We assume a global lookup $\text{methods}(x)$ returning the method signatures declared for port $x$ (populated by port declarations, see §1):
+[T-Handler](#T-Handler) types $\textbf{handler}~x~[\textbf{require}~\rho]~\textbf{do}~\overline{\ell = e}~\textbf{end}$ — a record-of-lambdas implementing the methods of cap $x$. We assume a global lookup $\text{methods}(x)$ returning the method signatures declared for cap $x$ (populated by cap declarations, see §1):
 
 $$\text{methods}(x) = \lbrace\; \ell_j : (\overline{\pi_j}) \to \kappa_j;\, \alpha_j;\, \beta_j \;\mid\; j \in J \;\rbrace$$
 
-where $\alpha_j$ and $\beta_j$ are the require row and throw row declared for method $\ell_j$ on port $x$. The handler's arms must be in 1-1 correspondence with $\text{methods}(x)$.
+where $\alpha_j$ and $\beta_j$ are the require row and throw row declared for method $\ell_j$ on cap $x$. The handler's arms must be in 1-1 correspondence with $\text{methods}(x)$.
 
 <a id="T-Handler"></a>
 
@@ -1190,11 +1188,11 @@ $$\dfrac{
 
 $$\tau_h^\star = \begin{cases} \%\tau_h & \text{if } \Gamma_\text{cap} \neq \emptyset \\ \tau_h & \text{otherwise} \end{cases}$$
 
-The handler is pure ($\mathbin{!} \lbrace\rbrace$) — its construction has no effect; effects are deferred until the handler is injected and a method is invoked. Each arm $e_j$ must be a lambda whose function type matches the port's declared signature for method $\ell_j$. The handler's require row $\rho_\text{req}$ aggregates each arm's declared require row $\alpha_j$ (carried on the lambda's arrow type and validated against the lambda body in [T-Lambda](#T-Lambda)/[T-App](#T-App)) and the optional surface annotation $\rho_\text{annot}$ (defaulting to $\lbrace\rbrace$ if absent). [T-Inject](#T-Inject) checks that $\rho_\text{req}$ is satisfied by the surrounding ambient row at the inject site. Closure linearization mirrors [T-Lambda](#T-Lambda): if any arm captures a linear binding, the entire handler value becomes $\%\tau_h$ — only one $\textbf{inject}$ may consume it.
+The handler is pure ($\mathbin{!} \lbrace\rbrace$) — its construction has no effect; effects are deferred until the handler is injected and a method is invoked. Each arm $e_j$ must be a lambda whose function type matches the cap's declared signature for method $\ell_j$. The handler's require row $\rho_\text{req}$ aggregates each arm's declared require row $\alpha_j$ (carried on the lambda's arrow type and validated against the lambda body in [T-Lambda](#T-Lambda)/[T-App](#T-App)) and the optional surface annotation $\rho_\text{annot}$ (defaulting to $\lbrace\rbrace$ if absent). [T-Inject](#T-Inject) checks that $\rho_\text{req}$ is satisfied by the surrounding ambient row at the inject site. Closure linearization mirrors [T-Lambda](#T-Lambda): if any arm captures a linear binding, the entire handler value becomes $\%\tau_h$ — only one $\textbf{inject}$ may consume it.
 
 As with [T-Lambda](#T-Lambda), the conclusion's ambient $\rho_q'$ is universally quantified — handler construction is ambient-independent (the per-arm $\alpha_j$ are validated against the arms' own bodies, not the surrounding ambient). The connection between $\rho_q'$ and $\rho_\text{req}$ is enforced at the [T-Inject](#T-Inject) site.
 
-**Arm/method 1-1 correspondence.** The premise $\lbrace \ell_j \mid j \in J \rbrace = \lbrace \ell \mid (\ell = e) \in \overline{\ell_j = e_j} \rbrace$ enforces that the handler literal supplies exactly the methods declared on port $x$ — no missing arm (which would leave a port-method invocation through [T-PortCall](#T-PortCall) with no implementation at runtime) and no extra arm (which would silently introduce a name unreachable by any method-dispatch path). Earlier formulations indexed the per-arm typing premise by $j \in J$ alone, which left the case of an extra user arm $\ell_\text{extra} = e_\text{extra}$ never type-checked and the case of a missing arm vacuously satisfied; this premise makes both failure modes a rule-level rejection. The same shape mirrors how [T-Record](#T-Record)'s $\text{distinct}(\overline{\ell})$ + [T-App](#T-App)'s label-permutation premises pin record-construction field sets to declared shapes. The impl in `src/typecheck/check.nx::validate_handler_arm_sets` performs the same set-equality, invoked from `check_program` before any arm signature/body work — a structurally incomplete handler is rejected before `register_handler_bindings` would have admitted it.
+**Arm/method 1-1 correspondence.** The premise $\lbrace \ell_j \mid j \in J \rbrace = \lbrace \ell \mid (\ell = e) \in \overline{\ell_j = e_j} \rbrace$ enforces that the handler literal supplies exactly the methods declared on cap $x$ — no missing arm (which would leave a cap-method invocation through [T-CapCall](#T-CapCall) with no implementation at runtime) and no extra arm (which would silently introduce a name unreachable by any method-dispatch path). Earlier formulations indexed the per-arm typing premise by $j \in J$ alone, which left the case of an extra user arm $\ell_\text{extra} = e_\text{extra}$ never type-checked and the case of a missing arm vacuously satisfied; this premise makes both failure modes a rule-level rejection. The same shape mirrors how [T-Record](#T-Record)'s $\text{distinct}(\overline{\ell})$ + [T-App](#T-App)'s label-permutation premises pin record-construction field sets to declared shapes. The impl in `src/typecheck/check.nx::validate_handler_arm_sets` performs the same set-equality, invoked from `check_program` before any arm signature/body work — a structurally incomplete handler is rejected before `register_handler_bindings` would have admitted it.
 
 $$\dfrac{
   x :^{\omega} \forall\overline{\alpha}.\,\tau \in \Gamma \qquad
@@ -1358,7 +1356,7 @@ $$\dfrac{
   \Gamma;\, \rho_q;\, \tau_r \vdash_s \mathord{\sim}x \leftarrow e : \Gamma \mathbin{!} \rho_0
 } \;\textsc{T-Assign}$$
 
-[T-Inject](#T-Inject) extends the ambient capability row with the ports each injected handler provides, after checking that the ambient row already satisfies what each handler requires. $\text{merge}$ unions two rows:
+[T-Inject](#T-Inject) extends the ambient capability row with the caps each injected handler provides, after checking that the ambient row already satisfies what each handler requires. $\text{merge}$ unions two rows:
 
 $$\text{merge}(\rho_1, \rho_2) = \rho_1 \cup \rho_2 \quad\text{(row union, deduplicating by type identity)}$$
 
@@ -1386,7 +1384,7 @@ $$\dfrac{
   \Gamma = \Gamma_h \otimes \Gamma_\text{body} \\[2pt]
   \forall i.\;{?}P_i,\,{?}\rho_i~\text{fresh} \qquad
   \forall i.\;\text{unify}(\text{strip}(\text{inst}(\Gamma_h(h_i))),\, \textbf{handler}\;{?}P_i\;{?}\rho_i) \\[2pt]
-  \forall i \neq j.\;P_i \neq P_j \quad\text{(injection uniqueness: no two handlers may target the same port)} \\[2pt]
+  \forall i \neq j.\;P_i \neq P_j \quad\text{(injection uniqueness: no two handlers may target the same cap)} \\[2pt]
   \forall i.\;\rho_i \subseteq \rho_q \quad\text{(handler requires are satisfied by the ambient row)} \\[2pt]
   \rho_q' = \text{merge}(\rho_q,\, \lbrace \overline{P} \rbrace) \\[2pt]
   \Gamma_\text{body};\, \rho_q';\, \tau_r \vdash_s \overline{s} : \Gamma' \mathbin{!} \rho_0 \\[2pt]
@@ -1396,20 +1394,20 @@ $$\dfrac{
   \Gamma;\, \rho_q;\, \tau_r \vdash_s \textbf{inject}~\overline{h}~\textbf{do}~\overline{s}~\textbf{end} : \text{closeBlock}(\Gamma',\, \Gamma_\text{body}) \mathbin{!} \rho_0
 } \;\textsc{T-Inject}$$
 
-The handler's require row $\rho_i$ is a *precondition* on the inject site, not a grant to the body. The body sees only $\rho_q' = \rho_q \cup \lbrace \overline{P} \rbrace$ — the original ambient plus the ports each handler implements. The earlier formulation merged $\text{ports}(\overline{\rho_i})$ into $\rho_q'$ as well, which would let the body access capabilities the surrounding context never granted, breaking capability containment. With requires moved to a containment premise instead, the inject site fails to type-check unless the surrounding scope already provides every capability each handler needs.
+The handler's require row $\rho_i$ is a *precondition* on the inject site, not a grant to the body. The body sees only $\rho_q' = \rho_q \cup \lbrace \overline{P} \rbrace$ — the original ambient plus the caps each handler implements. The earlier formulation merged $\text{caps}(\overline{\rho_i})$ into $\rho_q'$ as well, which would let the body access capabilities the surrounding context never granted, breaking capability containment. With requires moved to a containment premise instead, the inject site fails to type-check unless the surrounding scope already provides every capability each handler needs.
 
-**Injection uniqueness.** The premise $\forall i \neq j.\;P_i \neq P_j$ rejects an $\textbf{inject}$ clause that lists two handlers targeting the same port (e.g. $\textbf{inject}\;h_1, h_2\;\textbf{do}\;\ldots\;\textbf{end}$ with both $h_i : \textbf{handler}\;\texttt{Logger}\;\rho$). Without it, $\text{merge}$ would collapse the row entry to a single $\texttt{Logger}$ but $\Gamma_h$ would still bind both handlers — leaving runtime method dispatch under $x.\ell(\ldots)$ (via [T-PortCall](#T-PortCall)) ambiguous between the two arms. Disallowing the overlap statically removes the ambiguity at the rule level; programs that need to swap handlers should nest two single-handler $\textbf{inject}$s instead, where the inner one shadows the outer for the duration of its body. The impl in `src/typecheck/check.nx::check_inject` performs the same duplicate-port rejection.
+**Injection uniqueness.** The premise $\forall i \neq j.\;P_i \neq P_j$ rejects an $\textbf{inject}$ clause that lists two handlers targeting the same cap (e.g. $\textbf{inject}\;h_1, h_2\;\textbf{do}\;\ldots\;\textbf{end}$ with both $h_i : \textbf{handler}\;\texttt{Logger}\;\rho$). Without it, $\text{merge}$ would collapse the row entry to a single $\texttt{Logger}$ but $\Gamma_h$ would still bind both handlers — leaving runtime method dispatch under $x.\ell(\ldots)$ (via [T-CapCall](#T-CapCall)) ambiguous between the two arms. Disallowing the overlap statically removes the ambiguity at the rule level; programs that need to swap handlers should nest two single-handler $\textbf{inject}$s instead, where the inner one shadows the outer for the duration of its body. The impl in `src/typecheck/check.nx::check_inject` performs the same duplicate-cap rejection.
 
-**Unification-based handler shape match.** The premise uses $\text{unify}(\cdots, \textbf{handler}\;{?}P_i\;{?}\rho_i)$ with fresh metavariables $({?}P_i, {?}\rho_i)$ rather than a structural pattern $\text{strip}(\cdots) = \textbf{handler}\;P_i\;\rho_i$ on the right-hand side. The two forms agree on already-concrete handler types ($\text{unify}$ pins ${?}P_i, {?}\rho_i$ to the concrete components); they diverge on the unresolved-inference-variable case (e.g.\ a generic-typed handler parameter whose inst yields ${?}\alpha$) — only the unification form makes the derivation tree mechanically constructible. This mirrors [T-Force](#T-Force)'s pattern of $\text{unify}(\tau, @\sigma)$ over a literal structural match, keeping the rule applicable when the inferred handler type is still a meta-variable. Note: $P_i$ ranges over port names — a row-entry symbol — so ${?}P_i$ stands for a port-name unification variable, distinct from the type/row meta-variable categories used elsewhere; the current surface does not allow port-polymorphic functions, so ${?}P_i$ remains resolvable to a concrete port name in every well-typed program (any open ${?}P_i$ remaining after generalisation is a defect rather than a feature). The same shape applies to ${?}\rho_i$, which is a row meta-variable in the existing row-unification machinery.
+**Unification-based handler shape match.** The premise uses $\text{unify}(\cdots, \textbf{handler}\;{?}P_i\;{?}\rho_i)$ with fresh metavariables $({?}P_i, {?}\rho_i)$ rather than a structural pattern $\text{strip}(\cdots) = \textbf{handler}\;P_i\;\rho_i$ on the right-hand side. The two forms agree on already-concrete handler types ($\text{unify}$ pins ${?}P_i, {?}\rho_i$ to the concrete components); they diverge on the unresolved-inference-variable case (e.g.\ a generic-typed handler parameter whose inst yields ${?}\alpha$) — only the unification form makes the derivation tree mechanically constructible. This mirrors [T-Force](#T-Force)'s pattern of $\text{unify}(\tau, @\sigma)$ over a literal structural match, keeping the rule applicable when the inferred handler type is still a meta-variable. Note: $P_i$ ranges over cap names — a row-entry symbol — so ${?}P_i$ stands for a cap-name unification variable, distinct from the type/row meta-variable categories used elsewhere; the current surface does not allow cap-polymorphic functions, so ${?}P_i$ remains resolvable to a concrete cap name in every well-typed program (any open ${?}P_i$ remaining after generalisation is a defect rather than a feature). The same shape applies to ${?}\rho_i$, which is a row meta-variable in the existing row-unification machinery.
 
 Two linearity-related details:
 
 - **Strip on handler-pattern match.** [T-Handler](#T-Handler) wraps the handler's type with $\%$ when any arm captures a linear binding, producing $\%(\textbf{handler}\;P\;\rho)$. Without $\text{strip}$, the structural pattern $\textbf{handler}\;P_i\;\rho_i$ in this premise would not match a $\%$-wrapped handler — every captured-linear handler would be unusable. $\text{strip}$ peels the $\%$ wrapper before the structural match, mirroring its use on match scrutinees in [T-Match](#T-Match). Note that $\text{strip}$ does **not** peel $@$: a handler of type $@(\textbf{handler}\;P\;\rho)$ fails this premise, requiring the user to force it explicitly (e.g. $\textbf{inject}\;@h\;\textbf{do}\;\ldots\;\textbf{end}$) so the thunk's linear consumption goes through [T-Force](#T-Force).
 - **$\otimes$-split between handler lookup and body.** $\Gamma$ is split into $\Gamma_h$ (used to look up the handler bindings $h_i$) and $\Gamma_\text{body}$ (which flows into $\overline{s}$). For unrestricted handlers ($q = \omega$), $\otimes$ assigns the binding to both partitions, so the body can still call methods on the same handler. For linear handlers ($q = 1$, e.g. $\%h$), $\otimes$ assigns the binding to exactly one partition: when used at the inject site it is *not* available in the body, preventing the documented "only one inject may consume it" promise from being silently violated by an in-body re-use.
 
-[T-PortCall](#T-PortCall) types a port-method invocation $x.\ell(\overline{\ell':e})$ inside a scope where a handler for port $x$ has been injected. Method signatures are read from the global $\text{methods}(x)$ environment populated by port declarations:
+[T-CapCall](#T-CapCall) types a cap-method invocation $x.\ell(\overline{\ell':e})$ inside a scope where a handler for cap $x$ has been injected. Method signatures are read from the global $\text{methods}(x)$ environment populated by cap declarations:
 
-<a id="T-PortCall"></a>
+<a id="T-CapCall"></a>
 
 $$\dfrac{
   \begin{array}{c}
@@ -1424,12 +1422,12 @@ $$\dfrac{
   \end{array}
 }{
   \Gamma;\, \rho_q \vdash_e x.\ell(\overline{\ell' : e}) : \kappa \mathbin{!} \beta \cup \textstyle\bigcup_i \rho_i
-} \;\textsc{T-PortCall}$$
+} \;\textsc{T-CapCall}$$
 
-T-PortCall is the missing link between handler declarations and call sites. Three premises wire the rows:
+T-CapCall is the missing link between handler declarations and call sites. Three premises wire the rows:
 
 - $\alpha \subseteq \rho_q$ — the method's declared **require** row must be a subset of the ambient capability row, so the caller already holds whatever capabilities this method invocation transitively needs (delegated to the handler's body).
-- $x \in \rho_q$ — the port $x$ itself must be in the ambient row, meaning a handler for $x$ has been brought into scope by an enclosing [T-Inject](#T-Inject) (or by the function's own require annotation).
+- $x \in \rho_q$ — the cap $x$ itself must be in the ambient row, meaning a handler for $x$ has been brought into scope by an enclosing [T-Inject](#T-Inject) (or by the function's own require annotation).
 - $\beta$ joins the call's effect row — exceptions a method may throw propagate to the caller's $\rho_e$.
 
 The argument premises mirror [T-App](#T-App) exactly — three fixes that landed in T-App are ported here for consistency (nexus-q52x.2 / nexus-2z0b.2 / nexus-t9cl.18):
@@ -1440,9 +1438,9 @@ The argument premises mirror [T-App](#T-App) exactly — three fixes that landed
 
 3. **Borrow-to-ownership smuggling rejection $\tau_i \neq \&\sigma'$ (nexus-t9cl.18).** The $\%$-weakening case additionally requires $\tau_i \neq \&\sigma'$ to exclude borrow types from the weakening path. Without this carve-out, $\text{linear}(\&\sigma') = \text{false}$ would make a $\&\texttt{T}$ argument appear non-linear and thus eligible to satisfy a $\%\texttt{T}$ parameter slot via weakening — silently converting a borrow into an ownership claim. The fix matches T-App's identical side condition.
 
-The result type $\kappa$ is the method's declared return type; no instantiation step is needed because **port declarations are monomorphic at every level** — port names $X$ take no type parameters in the surface grammar (`cap X do ... end`, never `cap X<T> do ... end`), and method signatures inside a port are not generalised by [D-Port](#D-Port). The parser rejects the polymorphic-port form at the declaration site; the spec therefore needs no rule for "instantiating a port's type parameters at the call site".
+The result type $\kappa$ is the method's declared return type; no instantiation step is needed because **cap declarations are monomorphic at every level** — cap names $X$ take no type parameters in the surface grammar (`cap X do ... end`, never `cap X<T> do ... end`), and method signatures inside a cap are not generalised by [D-Cap](#D-Cap). The parser rejects the polymorphic-cap form at the declaration site; the spec therefore needs no rule for "instantiating a cap's type parameters at the call site".
 
-If polymorphic ports become a surface feature in the future (e.g.\ for a collection-style cap `Vec<T>`), D-Port would have to store a scheme $\forall \overline{\alpha}.\,\text{methods}$ and T-PortCall would read the concrete instantiation $\overline{\sigma}$ off the injected handler's type (extending $\textbf{handler}\;X\;\rho$ to $\textbf{handler}\;X\langle \overline{\sigma}\rangle\;\rho$). This is recorded here as a forward-pointer, not a current rule.
+If polymorphic caps become a surface feature in the future (e.g.\ for a collection-style cap `Vec<T>`), D-Cap would have to store a scheme $\forall \overline{\alpha}.\,\text{methods}$ and T-CapCall would read the concrete instantiation $\overline{\sigma}$ off the injected handler's type (extending $\textbf{handler}\;X\;\rho$ to $\textbf{handler}\;X\langle \overline{\sigma}\rangle\;\rho$). This is recorded here as a forward-pointer, not a current rule.
 
 <a id="T-TryCatch"></a>
 
@@ -1583,7 +1581,7 @@ $$\textbf{P3}~\text{(Linear consumption)}.\quad \text{For any closing scope disc
 
 $$\quad \text{(}\textbf{inject}/\textbf{try}\text{), or [P-Loop](#T-While) (}\textbf{while}\text{), every linear binding introduced inside the scope is consumed exactly once before the scope closes.}$$
 
-$$\textbf{P4}~\text{(Capability containment)}.\quad \text{For any well-typed function body typed under declared}~\rho_q,~\text{every [T-PortCall](#T-PortCall)}$$
+$$\textbf{P4}~\text{(Capability containment)}.\quad \text{For any well-typed function body typed under declared}~\rho_q,~\text{every [T-CapCall](#T-CapCall)}$$
 
 $$\quad \text{and [T-App](#T-App) inside the body satisfies its respective}~\alpha \subseteq \rho_q~\text{premise.}$$
 
@@ -1591,7 +1589,7 @@ $$\textbf{P5}~\text{(Exception containment)}.\quad \text{For any well-typed func
 
 $$\quad \text{/ [T-Throw-CtorNullary](#T-Throw-CtorNullary) / [T-Throw-Val](#T-Throw-Val) inside the body produces a row entry that is in}~\rho_e~\text{or subsumed by}~\texttt{Exn} \in \rho_e~\text{via [U-Row-Exn](#U-Row-Exn).}$$
 
-P1 and P2 are stated relative to an operational semantics — the spec does not give small-step rules in this document; the reduction relation $\longrightarrow$ is defined narratively in [semantics.md](../semantics) and is the obligation of the runtime/codegen pipeline. The other three properties (P3–P5) are *structural*: every $\text{check}$ pass on a term derives them by induction over the relevant rules' premises, with [P-FnEnd](#T-Lambda)/[P-Block](#environment-and-usage)/[P-Loop](#T-While) discharging P3, the $\subseteq$ premises of T-App / T-PortCall discharging P4, and the row-entry constructions in T-Throw-* discharging P5. In this sense P3–P5 are *intrinsic* to the rules' shape — any conformant implementation that admits a rule's conclusion has already established the corresponding fragment of the property.
+P1 and P2 are stated relative to an operational semantics — the spec does not give small-step rules in this document; the reduction relation $\longrightarrow$ is defined narratively in [semantics.md](../semantics) and is the obligation of the runtime/codegen pipeline. The other three properties (P3–P5) are *structural*: every $\text{check}$ pass on a term derives them by induction over the relevant rules' premises, with [P-FnEnd](#T-Lambda)/[P-Block](#environment-and-usage)/[P-Loop](#T-While) discharging P3, the $\subseteq$ premises of T-App / T-CapCall discharging P4, and the row-entry constructions in T-Throw-* discharging P5. In this sense P3–P5 are *intrinsic* to the rules' shape — any conformant implementation that admits a rule's conclusion has already established the corresponding fragment of the property.
 
 The numbering reserves P1–P5 for these global properties so the rule-local P6–P8 (which are convenient where they're stated, but not architectural) can stay in their natural sections without renumbering. A future revision may add P9, P10 etc.\ for new local properties.
 
@@ -1599,7 +1597,7 @@ The numbering reserves P1–P5 for these global properties so the rule-local P6�
 
 ## 3. Top-Level Declarations
 
-A program is a sequence of top-level declarations followed by zero or more top-level $\textbf{let}$ bindings. Declarations populate the global tables — $\Gamma$ (term bindings), $\text{typedef}$ (named type schemes), $\text{variants}$ (sum-type constructor sets), $\text{methods}$ (port method signatures), and $\text{members}$ (exception-group expansion) — that the per-expression rules in §2 read as preconditions. §1 described these declarations as "not terms; preconditions on $\Gamma$"; the judgments in this section spell out exactly how the preconditions are produced.
+A program is a sequence of top-level declarations followed by zero or more top-level $\textbf{let}$ bindings. Declarations populate the global tables — $\Gamma$ (term bindings), $\text{typedef}$ (named type schemes), $\text{variants}$ (sum-type constructor sets), $\text{methods}$ (cap method signatures), and $\text{members}$ (exception-group expansion) — that the per-expression rules in §2 read as preconditions. §1 described these declarations as "not terms; preconditions on $\Gamma$"; the judgments in this section spell out exactly how the preconditions are produced.
 
 We write $\mathcal{T} = \langle \Gamma,\, \text{typedef},\, \text{variants},\, \text{methods},\, \text{members},\, \text{exports} \rangle$ for the six-tuple of tables. $\text{exports}$ is the set of binder names declared with the `export` prefix in the current module; the field is populated incrementally as the per-rule folds run (each $\textbf{export}~\text{decl}$ adds the bound name(s) to $\text{exports}$ in addition to whatever effect the underlying $\text{decl}$ has on the other tables — see [§Visibility](#visibility-export)). $\text{exports}$ is the only $\mathcal{T}$-component that distinguishes `export` from non-`export` declarations within a single module; the others are populated identically by both forms. The declaration judgment
 
@@ -1630,7 +1628,7 @@ $$\dfrac{
   \mathcal{T} \;\vdash_d^{\text{pre}}\; D \;\Rightarrow\; \mathcal{T}[\Gamma \mathrel{:=} \Gamma,\, x :^{\omega} S_{\text{pre}}]
 } \;\textsc{D-Let-Forward}$$
 
-D-Type-Forward and D-Let-Forward are the only $\vdash_d^{\text{pre}}$ rules; every other declaration form ($\textbf{port}$, $\textbf{exception}$, $\textbf{exception group}$, $\textbf{external}$, top-level $\textbf{let}$ whose RHS is *not* a $\textbf{fn}$ literal, destructuring $\textbf{let}~p = e$) is a no-op under $\vdash_d^{\text{pre}}$ — they introduce no forward-referenceable name. File-level processing is then the composition
+D-Type-Forward and D-Let-Forward are the only $\vdash_d^{\text{pre}}$ rules; every other declaration form ($\textbf{cap}$, $\textbf{exception}$, $\textbf{exception group}$, $\textbf{external}$, top-level $\textbf{let}$ whose RHS is *not* a $\textbf{fn}$ literal, destructuring $\textbf{let}~p = e$) is a no-op under $\vdash_d^{\text{pre}}$ — they introduce no forward-referenceable name. File-level processing is then the composition
 
 $$\text{processFile}(\overline{D}) \;=\; (\text{fold}_{\vdash_d}\; \overline{D}) \;\circ\; (\text{fold}_{\vdash_d^{\text{pre}}}\; \overline{D})$$
 
@@ -1694,20 +1692,20 @@ $$\dfrac{
 
 External declarations bind a name $x$ to a fixed Wasm export $w$ at a stated arrow type. The type-parameter list $\langle \overline{\alpha} \rangle$ may be empty (monomorphic external) or non-empty (polymorphic in the same predicative System-F sense as [T-Let-PolyFn](#T-Let-PolyFn)): the parser accepts both forms (`parse_external_sig`'s `type_params` field). The require and throw rows are forced to empty because the Wasm side has no Nexus-level effects to track; capability access through an external is mediated by the surrounding `inject` if the external takes capability-shaped parameters. The mapping between $x$ and the Wasm symbol $w$ is consumed by the backend codegen — the type system observes only $S$.
 
-<a id="D-Port"></a>
+<a id="D-Cap"></a>
 
 $$\dfrac{
   \begin{array}{l}
-  D = \textbf{port}~X~\textbf{do}~\overline{\textbf{fn}~\ell_j(\overline{\pi_j}) \to \kappa_j;\,\alpha_j;\,\beta_j}~\textbf{end} \\[2pt]
-  \text{distinct}(\overline{\ell_j \mid j \in J}) \quad\text{(method names are distinct across the port)} \\[2pt]
+  D = \textbf{cap}~X~\textbf{do}~\overline{\textbf{fn}~\ell_j(\overline{\pi_j}) \to \kappa_j;\,\alpha_j;\,\beta_j}~\textbf{end} \\[2pt]
+  \text{distinct}(\overline{\ell_j \mid j \in J}) \quad\text{(method names are distinct across the cap)} \\[2pt]
   \forall j \in J.\;\text{distinct}(\text{labels}(\overline{\pi_j})) \quad\text{(each method's parameter labels are distinct)} \\[2pt]
   \forall j \in J.\;\text{wfCap}(\alpha_j) \wedge \text{wfThrow}(\beta_j) \quad\text{(per-method declared rows reference known caps / variants)}
   \end{array}
 }{
   \mathcal{T} \;\vdash_d\; D \;\Rightarrow\; \mathcal{T}[\text{methods}(X) \mathrel{:=} \lbrace \ell_j : (\overline{\pi_j}) \to \kappa_j;\,\alpha_j;\,\beta_j \mid j \in J \rbrace]
-} \;\textsc{D-Port}$$
+} \;\textsc{D-Cap}$$
 
-Port declarations populate $\text{methods}$ alone; they do not enter a value-level binding in $\Gamma$ for $X$. $X$ becomes available as a row-entry symbol in $\rho_q$ via the *user-declared port names* source described in §Row Types, and as a method-lookup namespace via [T-PortCall](#T-PortCall).
+Cap declarations populate $\text{methods}$ alone; they do not enter a value-level binding in $\Gamma$ for $X$. $X$ becomes available as a row-entry symbol in $\rho_q$ via the *user-declared cap names* source described in §Row Types, and as a method-lookup namespace via [T-CapCall](#T-CapCall).
 
 <a id="D-Exception"></a>
 
@@ -1780,7 +1778,7 @@ $$\begin{array}{rcl}
 \text{declNames}(\textbf{opaque type}~X\langle \overline{\alpha} \rangle = c_1\,\overline{F_1} \mathbin{\vert} \ldots) & = & \lbrace X \rbrace \quad (\text{opaque sum: constructors withheld}) \\
 \text{declNames}(\textbf{exception}~C\,\overline{F}) & = & \lbrace C \rbrace \\
 \text{declNames}(\textbf{exception group}~G = \ldots) & = & \lbrace G \rbrace \\
-\text{declNames}(\textbf{port}~X~\textbf{do}~\ldots~\textbf{end}) & = & \lbrace X \rbrace \quad (\text{port methods are accessed via}~X.\ell\text{, not as standalone names}) \\
+\text{declNames}(\textbf{cap}~X~\textbf{do}~\ldots~\textbf{end}) & = & \lbrace X \rbrace \quad (\text{cap methods are accessed via}~X.\ell\text{, not as standalone names}) \\
 \text{declNames}(\textbf{external}~x = w : \ldots) & = & \lbrace x \rbrace
 \end{array}$$
 
@@ -1800,7 +1798,7 @@ The four conjuncts encode the constraints stated narratively in [semantics.md](.
 
 - **Signature** — $(\,) \to \texttt{unit}$ with no arguments and a $\texttt{unit}$ return.
 - **Empty throws row** — `main`'s declared $\rho_e$ is $\lbrace\rbrace$. Every exception that the program may throw must be handled by an inner $\textbf{try}$ before propagating out of `main`; the runtime has no exception consumer outside of `main`.
-- **Require subset of SysCaps** — `main` may declare any subset of system capabilities ($\texttt{PermFs}$, $\texttt{PermNet}$, etc.) which the runtime grants from the WASI environment. User-declared port names may **not** appear in `main`'s $\rho_q$ — there is no enclosing $\textbf{inject}$ to provide them.
+- **Require subset of SysCaps** — `main` may declare any subset of system capabilities ($\texttt{PermFs}$, $\texttt{PermNet}$, etc.) which the runtime grants from the WASI environment. User-declared cap names may **not** appear in `main`'s $\rho_q$ — there is no enclosing $\textbf{inject}$ to provide them.
 - **Non-exported** — `main` is not in $\text{exports}(\mathcal{T})$. Other modules cannot import `main`; it is a runtime-side hook, not part of any module's API.
 
 A program is **well-formed** iff $\text{wfMain}(\mathcal{T})$ holds for the root module's resolved $\mathcal{T}$. If the property fails — `main` is missing, has the wrong signature, declares a non-empty throws row, requires a non-system capability, or is exported — the type-checker rejects the program at the program-entry check after the per-module folds complete. This is the only program-global property in §3; every other rule and property is module-local.

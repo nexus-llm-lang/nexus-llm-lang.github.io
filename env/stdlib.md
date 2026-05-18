@@ -71,7 +71,7 @@ fn handle_path(handle: %Handle) -> { path: string, handle: %Handle } require { P
 fn close(handle: %Handle) -> unit require { PermFs }
 ```
 
-**Port methods** (for DI / testing):
+**Cap methods** (for DI / testing):
 
 ```nexus
 cap Fs do
@@ -138,7 +138,7 @@ fn respond_with_headers(req: Request, status: i64, headers: [ Header ], body: st
 fn stop(server: %Server) -> unit require { PermNet }
 ```
 
-**Port methods** (for DI / testing):
+**Cap methods** (for DI / testing):
 
 ```nexus
 cap Net do
@@ -206,7 +206,7 @@ type ExecResult = ExecResult(exit_code: i64, stdout: string, stderr: string)
 fn argv() -> [ string ] require { PermProc }
 ```
 
-**Port methods:**
+**Cap methods:**
 
 ```nexus
 cap Proc do

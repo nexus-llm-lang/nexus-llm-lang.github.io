@@ -148,7 +148,7 @@ Console.println(val: "hello")
 list.map(xs: items, f: transform)
 ```
 
-All arguments are labeled. Argument order at the call site does not matter -- `add(b: 2, a: 1)` is equivalent to `add(a: 1, b: 2)`. Port method calls use `Port.method(...)` syntax.
+All arguments are labeled. Argument order at the call site does not matter -- `add(b: 2, a: 1)` is equivalent to `add(a: 1, b: 2)`. Cap method calls use `Cap.method(...)` syntax.
 
 **Punning.** When the argument is a bare variable whose name equals the label, the label may be omitted. The parser desugars `f(x)` to `f(x: x)`. Sigils ride along: `f(%v)` desugars to `f(v: %v)`, `f(&v)` to `f(v: &v)`, `f(~v)` to `f(v: ~v)`, `f(@v)` to `f(v: @v)`, and `f(&%v)` (borrow of a linear) to `f(v: &%v)`. The same rule applies to constructor calls and constructor patterns. Punning does **not** apply to record literals or record patterns, which still require `name: value`.
 

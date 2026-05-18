@@ -13,7 +13,7 @@ Garbage collection, implicit conversions, ambient I/O, continuation-based contro
 
 ### Capabilities -- Hello world
 
-Capability requirements declared in function signatures. Dependency injection via ports and handlers.
+Capability requirements declared in function signatures. Dependency injection via caps and handlers.
 
 ```nexus
 import { Console }, * as stdio from "std:stdio"
@@ -82,7 +82,7 @@ nexus check example.nx  # typecheck only
     <ul>
       <li><a href="spec/syntax">Syntax</a> — Grammar and EBNF</li>
       <li><a href="spec/types">Types</a> — Type system, linear types, borrowing</li>
-      <li><a href="spec/effects">Effects and Capabilities</a> — Ports, handlers, inject</li>
+      <li><a href="spec/effects">Effects and Capabilities</a> — Caps, handlers, inject</li>
       <li><a href="spec/exception-groups">Exception Groups</a> — Structured exceptions, multi-arm catch</li>
       <li><a href="spec/lazy">Lazy, Concurrency, Parallelism</a> — <code>@</code> sigil, DAG parallel evaluation, linearity</li>
       <li><a href="spec/semantics">Semantics</a> — Evaluation model</li>
