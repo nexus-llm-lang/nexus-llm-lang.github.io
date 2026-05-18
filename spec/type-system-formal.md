@@ -1310,6 +1310,7 @@ $$\dfrac{
   \text{unify}(\rho_e^\text{body},\, \rho_e) \quad\text{(declared throw row absorbs body's inferred row; uses [U-Row-Exn](#U-Row-Exn) for variant subsumption)} \\[2pt]
   \tau_r \neq \texttt{unit} \implies \text{tail}(\overline{s}^\dagger) = \bot \quad\text{(non-unit returns require explicit termination)} \\[2pt]
   \forall y :^1 S \in \Gamma'.\;y \in \lbrace\overline{x_i}\rbrace \wedge \text{autoDrop}(S) \quad\text{(P-FnEnd: no leaked linear at body end)} \\[2pt]
+  \forall i.\;\text{wfRef}(\tau_i) \qquad \text{wfRef}(\tau_r) \qquad \neg\text{escapesRef}(\tau_r) \quad\text{(gravity rule at param + return slots)} \\[2pt]
   \text{wfCap}(\rho_q) \quad \text{wfThrow}(\rho_e) \quad\text{(declared rows reference known caps / variants)} \\[2pt]
   \tau_\to = (\overline{\ell : \tau}) \to \tau_r;\, \rho_q;\, \rho_e \\[2pt]
   \tau_\to^\star = \begin{cases} \%\tau_\to & \text{if } \Gamma_\text{cap} \neq \emptyset \\ \tau_\to & \text{otherwise} \end{cases}
@@ -1543,6 +1544,7 @@ $$\dfrac{
   \Gamma;\, \rho_q \vdash_e e : \tau \mathbin{!} \rho_0 \\[2pt]
   \tau' = \begin{cases} \sigma & \text{if annotation } \sigma \text{ present and } \text{unify}(\tau, \sigma) \\ \text{default}(\tau) & \text{otherwise} \end{cases} \\[2pt]
   \mu = \mathord{\sim} \implies \neg\text{linear}(\tau') \\[2pt]
+  \text{annotation } \sigma \text{ present} \implies \text{wfRef}(\sigma) \\[2pt]
   \tau_f = \text{wrapSigil}(\mu, \tau') \qquad
   S = \text{mono}(\tau_f) \\[2pt]
   q = \begin{cases} 1 & \text{if } \text{linear}(\tau_f) \\ \omega & \text{otherwise} \end{cases}
@@ -1971,7 +1973,8 @@ The implementation realises this in `src/typecheck/check.nx`'s declaration-walk 
 <div markdown="0">
 $$\dfrac{
   D = \textbf{type}~x\langle \overline{\alpha} \rangle = \lbrace \overline{\ell : \tau} \rbrace \qquad
-  \text{distinct}(\overline{\ell})
+  \text{distinct}(\overline{\ell}) \qquad
+  \forall \ell.\;\text{wfRef}(\tau_\ell) \wedge \neg\text{escapesRef}(\tau_\ell)
 }{
   \mathcal{T} \;\vdash_d\; D \;\Rightarrow\; \mathcal{T}[\text{typedef}(x) \mathrel{:=} \forall \overline{\alpha}.\, \lbrace \overline{\ell : \tau} \rbrace]
 } \;\textsc{D-Type-Record}$$
@@ -1985,6 +1988,7 @@ $$\dfrac{
   D = \textbf{type}~x\langle \overline{\alpha} \rangle = c_1\,\overline{F_1} \mathbin{\vert} \ldots \mathbin{\vert} c_n\,\overline{F_n} \quad\text{where each}~\overline{F_i}~\text{is either}~(\overline{\ell_i : \tau_i})~\text{or empty} \\[2pt]
   \text{distinct}(c_1, \ldots, c_n) \qquad
   \forall i \in \lbrace 1,\ldots,n \rbrace.\;\overline{F_i} \neq \emptyset \implies \text{distinct}(\overline{\ell_i}) \\[2pt]
+  \forall i.\;\forall \ell \in \overline{\ell_i}.\;\text{wfRef}(\tau_{i,\ell}) \wedge \neg\text{escapesRef}(\tau_{i,\ell}) \\[2pt]
   S_i = \begin{cases} \forall \overline{\alpha}.\,(\overline{\ell_i : \tau_i}) \to x\langle \overline{\alpha} \rangle;\,\lbrace\rbrace;\,\lbrace\rbrace & \text{if}~\overline{F_i}~\text{is non-empty (arity} \geq 1\text{)} \\ \forall \overline{\alpha}.\, x\langle \overline{\alpha} \rangle & \text{if}~\overline{F_i}~\text{is empty (nullary)} \end{cases}
   \end{array}
 }{
@@ -2004,6 +2008,7 @@ $$\dfrac{
   D = \textbf{opaque type}~x\langle \overline{\alpha} \rangle = c_1\,\overline{F_1} \mathbin{\vert} \ldots \mathbin{\vert} c_n\,\overline{F_n} \quad\text{where each}~\overline{F_i}~\text{is either}~(\overline{\ell_i : \tau_i})~\text{or empty} \\[2pt]
   \text{distinct}(c_1, \ldots, c_n) \qquad
   \forall i \in \lbrace 1,\ldots,n \rbrace.\;\overline{F_i} \neq \emptyset \implies \text{distinct}(\overline{\ell_i}) \\[2pt]
+  \forall i.\;\forall \ell \in \overline{\ell_i}.\;\text{wfRef}(\tau_{i,\ell}) \wedge \neg\text{escapesRef}(\tau_{i,\ell}) \\[2pt]
   S_i = \begin{cases} \forall \overline{\alpha}.\,(\overline{\ell_i : \tau_i}) \to x\langle \overline{\alpha} \rangle;\,\lbrace\rbrace;\,\lbrace\rbrace & \text{if}~\overline{F_i}~\text{is non-empty (arity} \geq 1\text{)} \\ \forall \overline{\alpha}.\, x\langle \overline{\alpha} \rangle & \text{if}~\overline{F_i}~\text{is empty (nullary)} \end{cases} \\[2pt]
   M_\text{defining}~\text{is the module in whose source}~D~\text{appears} \\[2pt]
   \mathcal{T}_\text{update} = \begin{cases} \mathcal{T}\!\begin{bmatrix} \Gamma & \mathrel{:=} & \Gamma,\, \overline{c_i :^{\omega} S_i} \\ \text{typedef}(x) & \mathrel{:=} & \forall \overline{\alpha}.\, x\langle \overline{\alpha} \rangle \\ \text{variants}(x) & \mathrel{:=} & \lbrace c_1, \ldots, c_n \rbrace \end{bmatrix} & \text{if}~M_\text{now} = M_\text{defining} \\[12pt] \mathcal{T}[\text{typedef}(x) \mathrel{:=} \forall \overline{\alpha}.\, x\langle \overline{\alpha} \rangle] & \text{otherwise} \end{cases}
@@ -2021,6 +2026,7 @@ D-Type-Sum-Opaque restricts the visibility of the constructor entries and the `v
 $$\dfrac{
   \begin{array}{l}
   D = \textbf{external}~x = \texttt{"} w \texttt{"} : \langle \overline{\alpha} \rangle (\overline{\ell : \tau}) \to \tau_r \\[2pt]
+  \forall \ell.\;\text{wfRef}(\tau_\ell) \qquad \text{wfRef}(\tau_r) \qquad \neg\text{escapesRef}(\tau_r) \\[2pt]
   S = \forall \overline{\alpha}.\,(\overline{\ell : \tau}) \to \tau_r;\,\lbrace\rbrace;\,\lbrace\rbrace \quad\text{(empty require / throws)}
   \end{array}
 }{
@@ -2038,6 +2044,7 @@ $$\dfrac{
   D = \textbf{cap}~X~\textbf{do}~\overline{\textbf{fn}~\ell_j(\overline{\pi_j}) \to \kappa_j;\,\alpha_j;\,\beta_j}~\textbf{end} \\[2pt]
   \text{distinct}(\overline{\ell_j \mid j \in J}) \quad\text{(method names are distinct across the cap)} \\[2pt]
   \forall j \in J.\;\text{distinct}(\text{labels}(\overline{\pi_j})) \quad\text{(each method's parameter labels are distinct)} \\[2pt]
+  \forall j \in J.\;\forall i.\;\text{wfRef}(\pi_{j,i}) \quad \forall j \in J.\;\text{wfRef}(\kappa_j) \wedge \neg\text{escapesRef}(\kappa_j) \\[2pt]
   \forall j \in J.\;\text{wfCap}(\alpha_j) \wedge \text{wfThrow}(\beta_j) \quad\text{(per-method declared rows reference known caps / variants)}
   \end{array}
 }{
