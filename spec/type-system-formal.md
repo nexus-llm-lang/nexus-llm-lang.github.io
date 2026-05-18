@@ -502,6 +502,16 @@ $$\dfrac{\neg\text{occurs}(\alpha, \tau)}{\text{unify}({?}\alpha, \tau) = \lbrac
 \dfrac{\text{occurs}(\alpha, \tau)}{\text{unify}({?}\alpha, \tau) = \text{error}} \;\textsc{U-Occurs}$$
 </div>
 
+<a id="U-RowVar"></a>
+
+<div markdown="0">
+$$\dfrac{\neg\text{occurs}(r, \rho)}{\text{unify}({?}r, \rho) = \lbrace {?}r := \rho \rbrace} \;\textsc{U-RowVar}
+\qquad
+\dfrac{\text{occurs}(r, \rho)}{\text{unify}({?}r, \rho) = \text{error}} \;\textsc{U-RowOccurs}$$
+</div>
+
+U-RowVar mirrors U-Var for the **row** sort: a bare row unification variable ${?}r$ refines to any row ρ that does not mention $r$. The occurs check uses $\text{fv}(\rho)$ extended to rows by the open-tail clause $\text{fv}(\lbrace \overline{\tau} \mid {?}r \rbrace) = \text{fv}(\overline{\tau}) \cup \lbrace {?}r \rbrace$ from §Free Variables. U-RowVar applies in both argument orders by the symmetry convention (so $\text{unify}(\rho, {?}r)$ is handled too), and covers in particular the $\text{unify}({?}r_1, {?}r_2)$ case where two fresh row variables are aliased. Row variables arise from [inst](#inst) at every use site whose scheme has a kind-$\texttt{Row}$ quantifier, and from $\text{open}(\rho)$ in [T-App](#T-App)'s capability-row premise. The three [U-Row-*](#U-Row-Open-Open) rules below handle the case where *both* operands have entries (i.e. the rows have the shape $\lbrace \overline{\tau} \mid \cdot \rbrace$ with $\overline{\tau} \neq \emptyset$); U-RowVar covers the residual case where one side is a bare row variable. As with U-Var, refining ${?}r$ produces a non-empty substitution that propagates through the derivation.
+
 <div markdown="0">
 $$\dfrac{}{\text{unify}(\texttt{intlit}, \texttt{i32}) = \lbrace\rbrace} \quad
 \dfrac{}{\text{unify}(\texttt{intlit}, \texttt{i64}) = \lbrace\rbrace} \;\textsc{U-IntLit}$$
