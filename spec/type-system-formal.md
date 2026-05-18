@@ -406,6 +406,25 @@ Two additional behaviors are embedded in specific rules rather than stated as st
 - **Weakening** (in [T-App](#T-App)): when a parameter has type $\%\tau$ and the argument has type $\sigma$ with $\neg\text{linear}(\sigma)$, $\text{unify}(\sigma, \tau)$ is used instead of $\text{unify}(\sigma, \%\tau)$. This applies only to the linear modality $\%$, not to $@$ or other linear-producing forms.
 - **Closure linearization** (in [T-Lambda](#T-Lambda)): when a lambda captures any linear binding from $\Gamma$, its closure type is wrapped with $\%$ (making the closure itself linear).
 
+<a id="gravity-rule-occurrence-position"></a>
+
+**Gravity rule — occurrence-position constraint ($\neg\text{escapesRef}$).** `wfRef` above only checks that the *inner* type of a reference cell is non-linear. It does not prevent the reference cell type $\mathord{\sim}\sigma$ itself from appearing in positions that would let the cell outlive its defining function. The *gravity rule* (documented in [types.md §Gravity Rule](../types)) additionally prohibits $\mathord{\sim}\sigma$ from appearing in **escape positions**: the return type of a function, the field type of a heap-allocated record or sum-type variant, and — via closure linearization plus the no-ref-capture premise in [T-Lambda](#T-Lambda) — closure captures. The formal predicate is:
+
+$$\text{escapesRef}(\tau) \;\Longleftrightarrow\; \tau~\text{contains}~\mathord{\sim}\sigma~\text{at any structurally reachable position (record fields, ADT fields, list element type, or as the type itself)}$$
+
+The occurrence-position constraint is enforced at the following sites:
+
+| Site | Premise added | Rule |
+|------|---------------|------|
+| Return type of a $\textbf{fn}$ declaration | $\neg\text{escapesRef}(\tau_r)$ | [T-Lambda](#T-Lambda), [T-Let-PolyFn](#T-Let-PolyFn) |
+| Method return type in a port declaration | $\neg\text{escapesRef}(\kappa_j)$ | [D-Port](#D-Port) |
+| Return type of an external binding | $\neg\text{escapesRef}(\tau_r)$ | [D-External](#D-External) |
+| Field types of a record type declaration | $\forall \ell.\;\neg\text{escapesRef}(\tau_\ell)$ | [D-Type-Record](#D-Type-Record) |
+| Field types of a sum-type variant | $\forall i.\;\neg\text{escapesRef}(\tau_i)$ | [D-Type-Sum](#D-Type-Sum), [D-Type-Sum-Opaque](#D-Type-Sum-Opaque) |
+| Explicit $\textbf{return}$ statement | $\neg\text{escapesRef}(\tau)$ | [T-Return](#T-Return) |
+
+The T-Return premise is the last-resort catch for any reference type that reaches a return statement without being screened at a declaration site. The declaration-site premises (T-Lambda/T-Let-PolyFn return-type annotation, D-Type-Record/D-Type-Sum fields) provide early rejection at the type-formation point and are the primary enforcement layer; T-Return is a secondary guard for annotated-return-type mismatches. Closure capture of $\mathord{\sim}\sigma$ is already ruled out by T-Lambda's `no ref capture` premise ($\forall x \in \text{fv}(\overline{s}) \cap \text{dom}(\Gamma).\;\Gamma(x) \neq \mathord{\sim}\sigma$) and does not require a separate $\neg\text{escapesRef}$ premise there.
+
 ### Unification
 
 Unification is symmetric: $\text{unify}(\tau_1, \tau_2) = \text{unify}(\tau_2, \tau_1)$ unless otherwise noted. The rules below are written with the "interesting" argument on the left; the symmetric case is implied. U-Borrow is intentionally asymmetric (no symmetric counterpart); U-Expand is asymmetric in form but applies in both argument orders by the symmetry convention.
@@ -1321,12 +1340,13 @@ Together with T-Let-Alias, these two rules exhaust the entry-points for polymorp
 $$\dfrac{
   \tau_r \neq \bot \qquad
   \Gamma;\, \rho_q \vdash_e e : \tau \mathbin{!} \rho_0 \qquad
-  \text{unify}(\tau, \tau_r)
+  \text{unify}(\tau, \tau_r) \qquad
+  \neg\text{escapesRef}(\tau)
 }{
   \Gamma;\, \rho_q;\, \tau_r \vdash_s \textbf{return}~e : \Gamma \mathbin{!} \rho_0
 } \;\textsc{T-Return}$$
 
-The premise $\tau_r \neq \bot$ rejects $\textbf{return}~e$ outside any enclosing function. $\bot$ is the **return-context sentinel** used to mark the absence of an enclosing function (see §1.2 below); a top-level $\textbf{let}$ via [D-Let-Top](#D-Let-Top) types its body under $\tau_r = \bot$, so a $\textbf{return}$ statement at module scope is statically rejected.
+The premise $\tau_r \neq \bot$ rejects $\textbf{return}~e$ outside any enclosing function. The premise $\neg\text{escapesRef}(\tau)$ enforces the gravity rule (see [§Gravity Rule](#gravity-rule-occurrence-position)): a $\mathord{\sim}\sigma$-typed expression may not be returned from a function because that would let the reference cell outlive the stack frame that owns it. The check fires on $\tau$ (the inferred type of $e$) rather than on $\tau_r$ (the declared return type) so that it catches cases where $\tau_r$ is a unification variable that happened to unify with a reference type. $\bot$ is the **return-context sentinel** used to mark the absence of an enclosing function (see §1.2 below); a top-level $\textbf{let}$ via [D-Let-Top](#D-Let-Top) types its body under $\tau_r = \bot$, so a $\textbf{return}$ statement at module scope is statically rejected.
 
 <a id="T-Assign"></a>
 
