@@ -1493,11 +1493,13 @@ Surface `for x in start..end do s̄ end` desugars to `while` with an explicit co
 $$\dfrac{
   \neg\text{diverges}(e) \qquad
   \Gamma;\, \rho_q \vdash_e e : \tau \mathbin{!} \rho_0 \qquad
-  \text{exhaustive}(\tau, [p]) \qquad
-  (\Gamma \setminus\!\!\setminus e) \vdash p : \tau \Rightarrow \Gamma'
+  \text{exhaustive}(\text{strip}(\tau), [p]) \qquad
+  (\Gamma \setminus\!\!\setminus e) \vdash p : \text{strip}(\tau) \Rightarrow \Gamma'
 }{
   \Gamma;\, \rho_q;\, \tau_r \vdash_s \textbf{let}~p = e : \Gamma' \mathbin{!} \rho_0
 } \;\textsc{T-LetPat}$$
+
+$\text{strip}(\tau)$ peels any $\%$ sigil wrapper before exhaustiveness and pattern-typing, mirroring [T-Match](#T-Match)'s use of $\text{strip}$. Without this, a linear scrutinee $e : \%\sigma$ would require the pattern to match $\%\sigma$ directly — but the Maranget rules and pattern premises operate on the inner $\sigma$, not on the sigil-wrapped type. The asymmetry between T-LetPat and T-Match would have made linear destructuring via `let` formally non-derivable even when the equivalent `match e { p -> ... }` succeeds. The $\setminus\!\!\setminus$ consumption of the scrutinee's linear resources still fires through the $e$ premise.
 
 <a id="T-LetPat-Diverge"></a>
 
