@@ -9,15 +9,19 @@ Nexus compiles to the WebAssembly Component Model with WASI for system interface
 
 ## Permission-to-Capability Mapping
 
-| Nexus Permission | WASI Capability | CLI Flag | Enforcement |
-|---|---|---|---|
-| `PermConsole` | `stdin`, `stdout`, `stderr` | `--allow-console` | Enforced |
-| `PermFs` | `wasi:filesystem/preopens` | `--allow-fs` | Enforced |
-| `PermNet` | `wasi:http/outgoing-handler`, `wasi:sockets/*` | `--allow-net` | Enforced |
-| `PermRandom` | `wasi:random/random` | `--allow-random` | Statically checked |
-| `PermClock` | `wasi:clocks/wall-clock`, `monotonic-clock` | `--allow-clock` | Statically checked |
-| `PermProc` | `wasi:cli/exit`, `environment` | `--allow-proc` | Statically checked |
-| `PermEnv` | `wasi:cli/environment` | `--allow-env` | Statically checked |
+A program's required permissions are declared in `main`'s `require` clause and emitted into the `nexus:capabilities` custom section. When `nexus run` invokes `wasmtime`, it translates each present permission into the matching `wasmtime` flag — only `Fs` and `Net` need a runtime flag today; the rest are statically checked only (the underlying WASI calls always succeed under the default `-Scli` profile).
+
+| Nexus Permission | Runtime mapping (`nexus run` → wasmtime) |
+|---|---|
+| `PermConsole` | (none — stdio is available under `-Scli`) |
+| `PermFs` | `--dir .` (preopen the current directory) |
+| `PermNet` | `--wasi inherit-network` (preview1 sockets; HTTP is currently stub-only) |
+| `PermRandom` | (none — statically checked) |
+| `PermClock` | (none — statically checked) |
+| `PermProc` | (none — statically checked) |
+| `PermEnv` | (none — statically checked) |
+
+The mapping is defined by `cap_wasmtime_flags` in `src/cli/format.nx`.
 
 ## Capability Enforcement
 
