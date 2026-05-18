@@ -1503,13 +1503,12 @@ $$\dfrac{
 
 $$\dfrac{
   \text{diverges}(e) \qquad
-  \Gamma;\, \rho_q \vdash_e e : \tau \mathbin{!} \rho_0 \qquad
-  (\Gamma \setminus\!\!\setminus e) \vdash p : \tau \Rightarrow \Gamma'
+  \Gamma;\, \rho_q \vdash_e e : \tau \mathbin{!} \rho_0
 }{
-  \Gamma;\, \rho_q;\, \tau_r \vdash_s \textbf{let}~p = e : \Gamma' \mathbin{!} \rho_0
+  \Gamma;\, \rho_q;\, \tau_r \vdash_s \textbf{let}~p = e : \Gamma \mathbin{!} \rho_0
 } \;\textsc{T-LetPat-Diverge}$$
 
-$\text{diverges}(e)$ holds iff $e$ is syntactically $\textbf{throw}~e'$ (for any $e'$) — the only expression form that produces no value. The split rules avoid the ill-defined case $\text{exhaustive}(?\alpha, [p])$ that would otherwise arise: T-Throw gives $\textbf{throw}$ the type $?\alpha$ (a fresh unification variable), against which the Maranget head-shape rules (Exh-Bool, Exh-Sum, Exh-Record) cannot fire — a non-wildcard pattern like $\texttt{Some}(y)$ would leave the check stuck. T-LetPat-Diverge bypasses exhaustiveness because divergence semantically *short-circuits* the binding: the pattern is never actually destructured at runtime. The pattern is still typed via $\Gamma \vdash p : \tau$ so the body's $\Gamma'$ contains the right bindings (their types are $?\alpha$-instantiations, but they are unreachable). This carve-out mirrors the $\text{tail}(\overline{s})$ classification of $\textbf{let}~\mu\,x = \textbf{throw}~e'$ as $\bot$ (§Expressions, T-If/T-Match).
+$\text{diverges}(e)$ holds iff $e$ is syntactically $\textbf{throw}~e'$ (for any $e'$) — the only expression form that produces no value. The split rules avoid the ill-defined case $\text{exhaustive}(?\alpha, [p])$ that would otherwise arise: T-Throw gives $\textbf{throw}$ the type $?\alpha$ (a fresh unification variable), against which the Maranget head-shape rules (Exh-Bool, Exh-Sum, Exh-Record) cannot fire — a non-wildcard pattern like $\texttt{Some}(y)$ would leave the check stuck. T-LetPat-Diverge bypasses exhaustiveness because divergence semantically *short-circuits* the binding: the pattern is never actually destructured at runtime. Since the statement diverges, the residual environment is $\Gamma$ (unchanged — no pattern binders are introduced into the post-statement env): any names $p$ would have bound are unreachable, and exposing them in $\Gamma'$ would cause P-FnEnd / P-Block to falsely report them as linearity leaks. The pattern typing premise is therefore dropped entirely in this rule; only the throw expression is typed to establish the effect row $\rho_0$. This carve-out mirrors the $\text{tail}(\overline{s})$ classification of $\textbf{let}~\mu\,x = \textbf{throw}~e'$ as $\bot$ (§Expressions, T-If/T-Match), and is consistent with T-Seq-Cons's requirement that no statement follows a diverging one.
 
 ### Statement Sequences
 
