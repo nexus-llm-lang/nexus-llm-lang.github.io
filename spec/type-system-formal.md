@@ -980,15 +980,16 @@ $$\dfrac{\text{pure}(\Gamma)}{\Gamma;\, \rho_q \vdash_e s : \texttt{string} \mat
 
 <div markdown="0">
 $$\dfrac{
+  \mu \in \lbrace \varepsilon,\, \% \rbrace \qquad
   x :^{q} \forall\overline{\alpha}.\,\tau \in \Gamma \qquad
   \tau' = \text{inst}(\forall\overline{\alpha}.\,\tau) \qquad
   \text{pure}(\Gamma \setminus \lbrace x \rbrace)
 }{
-  \Gamma;\, \rho_q \vdash_e x : \tau' \mathbin{!} \lbrace\rbrace
+  \Gamma;\, \rho_q \vdash_e \mu\,x : \tau' \mathbin{!} \lbrace\rbrace
 } \;\textsc{T-Var}$$
 </div>
 
-If $q = 1$, the binding $x$ is consumed by this use. T-Var applies to the bare variable form $x$ ($\mu = \varepsilon$). Sigil-prefixed variable forms have dedicated rules: [T-Borrow](#T-Borrow) for $\&x$, [T-Force](#T-Force) for $@x$ (which subsumes $@e$ for any expression), and [T-Deref](#T-Deref) below for $\mathord{\sim}x$.
+If $q = 1$, the binding $x$ is consumed by this use. T-Var applies to both the bare form $x$ ($\mu = \varepsilon$) and the linear-decorated form $\%x$ ($\mu = \%$): the modality is *binding-side* metadata (the $\%$ sigil is what the binding site of $x$ used to assert linearity), not an additional type constructor on the use side. The resulting type $\tau'$ is whatever the binding has — if $x$ was bound at a $\%\sigma$ scheme then $\tau' = \%\sigma$; the use-site sigil is dropped because re-wrapping would produce $\%\%\sigma$. The §Modalities narrative at line 89 explicitly admits $\mu \in \lbrace \varepsilon, \%, \mathord{\sim} \rbrace$ for expression-position variable references; the $\mathord{\sim}$ case goes through [T-Deref](#T-Deref) (with its own deref-read semantics), the $\%$ and $\varepsilon$ cases are folded into T-Var. Other sigil-prefixed variable forms have dedicated rules: [T-Borrow](#T-Borrow) for $\&x$, [T-Force](#T-Force) for $@x$ (which subsumes $@e$ for any expression), and [T-Deref](#T-Deref) below for $\mathord{\sim}x$.
 
 <a id="T-Deref"></a>
 
