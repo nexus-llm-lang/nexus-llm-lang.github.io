@@ -11,7 +11,7 @@ The standard library is the `std` package, rooted at `nxlib/stdlib/`. Import its
 import { Console }, * as stdio from "std:stdio"
 ```
 
-Bare paths (no colon) remain relative file imports. Each `std:<name>` resolves to `nxlib/stdlib/<name>.nx`; the WIT interface name is `nexus:std/<name>` (with `_` rewritten to `-`, e.g. `std:string_ops` ↔ `nexus:std/string-ops`).
+Bare paths (no colon) remain relative file imports. Each `std:<name>` resolves to `nxlib/stdlib/<name>.nx`; the WIT interface name is `nexus:std/<name>` (with `_` rewritten to `-`, e.g. `std:str` ↔ `nexus:std/string-ops`).
 
 ## I/O Caps
 
@@ -19,7 +19,7 @@ I/O is capability-gated via caps. Each cap has a `system_handler` that declares 
 
 ### Console (`std:stdio`)
 
-Requires `PermConsole`. CLI flag: `--allow-console`.
+Requires `PermConsole`.
 
 ```nexus
 cap Console do
@@ -29,6 +29,7 @@ cap Console do
   fn eprintln(val: string) -> unit
   fn read_line() -> string
   fn getchar() -> string
+  fn read_bytes(n: i64) -> %ByteBuffer
 end
 ```
 
@@ -41,58 +42,52 @@ let main = fn () -> unit require { PermConsole } do
 end
 ```
 
-### File System (`std:filesystem`)
+### File System (`std:fs`)
 
-Requires `PermFs`. CLI flag: `--allow-fs`.
+Requires `PermFs`.
 
-**Types:**
+**Exception types:** `FileNotFound(path)`, `WriteError(path)`, `RemoveError(path)`. Exception group: `FsThrow = FileNotFound | WriteError | RemoveError`.
 
-```nexus
-type Handle = Handle(id: i64)   // linear file handle
-```
-
-**Direct-call API** (no `inject` required):
+**Value types:**
 
 ```nexus
-fn exists(path: string) -> bool require { PermFs }
-fn is_file(path: string) -> bool require { PermFs }
-fn read_to_string(path: string) -> string require { PermFs } throws { Exn }
-fn write_string(path: string, content: string) -> unit require { PermFs } throws { Exn }
-fn append_string(path: string, content: string) -> unit require { PermFs } throws { Exn }
-fn remove_file(path: string) -> unit require { PermFs } throws { Exn }
-fn create_dir_all(path: string) -> unit require { PermFs } throws { Exn }
-fn list_dir(path: string) -> [ string ] require { PermFs } throws { Exn }
-fn open_read(path: string) -> %Handle require { PermFs } throws { Exn }
-fn open_write(path: string) -> %Handle require { PermFs } throws { Exn }
-fn open_append(path: string) -> %Handle require { PermFs } throws { Exn }
-fn read(handle: %Handle) -> { content: string, handle: %Handle } require { PermFs }
-fn write(handle: %Handle, content: string) -> { ok: bool, handle: %Handle } require { PermFs }
-fn handle_path(handle: %Handle) -> { path: string, handle: %Handle } require { PermFs }
-fn close(handle: %Handle) -> unit require { PermFs }
+type Handle      = Handle(id: i64)                                   // linear file handle
+type ReadResult  = ReadResult(content: string, handle: %Handle)
+type WriteResult = WriteResult(ok: bool, handle: %Handle)
+type PathResult  = PathResult(path: string, handle: %Handle)
 ```
 
-**Cap methods** (for DI / testing):
+**Direct-call helpers** (the two operations exported as plain functions; the rest live on the `Fs` cap):
+
+```nexus
+fn list_dir(path: string) -> [ string ] throws { FileNotFound }
+fn is_file(path: string) -> bool
+```
+
+**Cap methods** (every other operation; reached via `inject`):
 
 ```nexus
 cap Fs do
   // Query
   fn exists(path: string) -> bool
-  fn read_to_string(path: string) -> string throws { Exn }
+  fn is_file(path: string) -> bool
+  fn list_dir(path: string) -> [ string ] throws { FileNotFound }
+  fn read_to_string(path: string) -> string throws { FileNotFound }
 
-  // Mutating (throw on failure)
-  fn write_string(path: string, content: string) -> unit throws { Exn }
-  fn append_string(path: string, content: string) -> unit throws { Exn }
-  fn remove_file(path: string) -> unit throws { Exn }
-  fn create_dir_all(path: string) -> unit throws { Exn }
-  fn read_dir(path: string) -> %[ Handle ] throws { Exn }
+  // Mutating
+  fn write_string(path: string, content: string) -> unit throws { WriteError }
+  fn append_string(path: string, content: string) -> unit throws { WriteError }
+  fn remove_file(path: string) -> unit throws { RemoveError }
+  fn create_dir_all(path: string) -> unit throws { WriteError }
+  fn read_dir(path: string) -> %[ Handle ] throws { FileNotFound }
 
-  // File descriptor operations (consume-and-return pattern)
-  fn open_read(path: string) -> %Handle throws { Exn }
-  fn open_write(path: string) -> %Handle throws { Exn }
-  fn open_append(path: string) -> %Handle throws { Exn }
-  fn read(handle: %Handle) -> { content: string, handle: %Handle }
-  fn write(handle: %Handle, content: string) -> { ok: bool, handle: %Handle }
-  fn handle_path(handle: %Handle) -> { path: string, handle: %Handle }
+  // File-descriptor operations (consume-and-return pattern)
+  fn open_read(path: string) -> %Handle throws { FileNotFound }
+  fn open_write(path: string) -> %Handle throws { WriteError }
+  fn open_append(path: string) -> %Handle throws { WriteError }
+  fn read(handle: %Handle) -> ReadResult
+  fn write(handle: %Handle, content: string) -> WriteResult
+  fn handle_path(handle: %Handle) -> PathResult
   fn close(handle: %Handle) -> unit
 end
 ```
@@ -101,75 +96,64 @@ The fd operations use a **consume-and-return** pattern: the linear handle is con
 
 ```nexus
 let %h = Fs.open_read(path: "data.txt")
-let %r = Fs.read(handle: %h)
-match %r do
-  | { content: c, handle: %h2 } ->
-    Fs.close(handle: %h2)
-end
+let ReadResult(content: c, handle: %h2) = Fs.read(handle: %h)
+Fs.close(handle: %h2)
 ```
 
 ### Network (`std:network`)
 
-Requires `PermNet`. CLI flag: `--allow-net`.
+Requires `PermNet`.
 
-**Types:**
+**Exception types:** `RequestError(url)`, `BindError(addr)`, `ResponseError(msg)`. Exception group: `NetError = RequestError | BindError | ResponseError`.
+
+**Value types:**
 
 ```nexus
 type Header = Header(name: string, value: string)
 type Response = Response(status: i64, headers: string, body: string)
-opaque type Server = Server(id: i64)   // linear server handle
-type Request = Request(method: string, path: string, headers: string, body: string, req_id: i64)
+opaque type Server = Server(id: i64)               // linear server handle
+opaque type Request = Request(...)                 // linear request handle
+opaque type RespondStream = RespondStream(...)     // linear streaming response handle
 ```
 
-**Direct-call API** (no `inject` required):
+**Helper:**
 
 ```nexus
-// HTTP client (all throw on failure)
-fn get(url: string) -> string require { PermNet } throws { Exn }
-fn post(url: string, body: string) -> string require { PermNet } throws { Exn }
-fn request_raw(method: string, url: string, headers: string, body: string) -> Response require { PermNet } throws { Exn }
-fn request(method: string, url: string, headers: [ Header ], body: string) -> Response require { PermNet } throws { Exn }
-
-// HTTP server
-fn listen(addr: string) -> %Server require { PermNet } throws { Exn }
-fn accept(server: &Server) -> Request require { PermNet }
-fn respond(req: Request, status: i64, body: string) -> unit require { PermNet } throws { Exn }
-fn respond_with_headers(req: Request, status: i64, headers: [ Header ], body: string) -> unit require { PermNet } throws { Exn }
-fn stop(server: %Server) -> unit require { PermNet }
+fn header(name: string, value: string) -> Header
 ```
 
-**Cap methods** (for DI / testing):
+**Cap methods:** all HTTP client and server operations are reached through the `Net` cap (no direct-call API is exported — code must `inject` a handler).
 
 ```nexus
 cap Net do
-  // HTTP client (all throw on failure)
-  fn get(url: string) -> string throws { Exn }
-  fn request(method: string, url: string, headers: [ Header ], body: string) -> Response throws { Exn }
+  // HTTP client
+  fn get(url: string) -> string throws { RequestError }
+  fn request(method: string, url: string, headers: [ Header ], body: string)
+    -> Response throws { RequestError }
+  fn request_with_timeout(method: string, url: string, headers: [ Header ], body: string,
+                          timeout_ms: i64) -> Response throws { RequestError }
 
   // HTTP server
-  fn listen(addr: string) -> %Server throws { Exn }
-  fn accept(server: &Server) -> Request
-  fn respond(req: Request, status: i64, body: string) -> unit throws { Exn }
-  fn respond_with_headers(req: Request, status: i64, headers: [ Header ], body: string) -> unit throws { Exn }
+  fn listen(addr: string) -> %Server throws { BindError }
+  fn accept(server: &Server) -> %Request
+  fn cancel_accept(server: &Server) -> bool
+  fn respond(req: %Request, status: i64, body: string) -> unit throws { ResponseError }
+  fn respond_with_headers(req: %Request, status: i64, headers: [ Header ], body: string)
+    -> unit throws { ResponseError }
+
+  // Streaming response
+  fn respond_streaming_start(req: %Request, status: i64, headers: [ Header ])
+    -> %RespondStream throws { ResponseError }
+  fn respond_streaming_write(stream: &RespondStream, chunk: string) -> bool
+  fn respond_streaming_finish(stream: %RespondStream) -> unit throws { ResponseError }
+
   fn stop(server: %Server) -> unit
 end
 ```
 
-**Helper functions:**
+### Random (`std:rand`)
 
-```nexus
-fn header(name: string, value: string) -> Header
-fn response_status(res: Response) -> i64
-fn response_headers(res: Response) -> string
-fn response_body(res: Response) -> string
-fn request_method(req: &Request) -> string
-fn request_path(req: &Request) -> string
-fn request_body(req: &Request) -> string
-```
-
-### Random (`std:random`)
-
-Requires `PermRandom`. CLI flag: `--allow-random`.
+Requires `PermRandom`.
 
 ```nexus
 cap Random do
@@ -181,7 +165,7 @@ end
 
 ### Clock (`std:clock`)
 
-Requires `PermClock`. CLI flag: `--allow-clock`.
+Requires `PermClock`.
 
 ```nexus
 cap Clock do
@@ -190,9 +174,9 @@ cap Clock do
 end
 ```
 
-### Process (`std:process`)
+### Process (`std:proc`)
 
-Requires `PermProc`. CLI flag: `--allow-proc`.
+Requires `PermProc`.
 
 **Types:**
 
@@ -216,9 +200,9 @@ cap Proc do
 end
 ```
 
-### Environment (`std:environment`)
+### Environment (`std:env`)
 
-Requires `PermEnv`. CLI flag: `--allow-env`.
+Requires `PermEnv`.
 
 ```nexus
 cap Env do
@@ -281,53 +265,11 @@ fn fst<A, B>(p: Pair<A, B>) -> A
 fn snd<A, B>(p: Pair<A, B>) -> B
 ```
 
-### Array (`std:array`)
-
-Linear mutable array: `[| T |]`
-
-```nexus
-fn length<T>(arr: &[| T |]) -> i64
-fn is_empty<T>(arr: &[| T |]) -> bool
-fn get<T>(arr: &[| T |], idx: i64) -> T
-fn set<T>(arr: &[| T |], idx: i64, val: T) -> unit
-fn head<T>(arr: &[| T |]) -> T
-fn last<T>(arr: &[| T |]) -> T
-fn fold_left<T, U>(arr: &[| T |], init: U, f: (acc: U, val: T) -> U) -> U
-fn any<T>(arr: &[| T |], pred: (val: T) -> bool) -> bool
-fn all<T>(arr: &[| T |], pred: (val: T) -> bool) -> bool
-fn find_index<T>(arr: &[| T |], pred: (val: T) -> bool) -> i64
-fn for_each<T>(arr: &[| T |], f: (val: T) -> unit) -> unit
-fn map_in_place<T>(arr: &[| T |], f: (val: T) -> T) -> unit
-fn filter<T>(arr: &[| T |], pred: (val: T) -> bool) -> [ T ]
-fn partition<T>(arr: &[| T |], pred: (val: T) -> bool) -> Partition<T>
-fn zip_with<A, B, C>(left: &[| A |], right: &[| B |], f: (left: A, right: B) -> C) -> [ C ]
-fn zip<A, B>(left: &[| A |], right: &[| B |]) -> [ Pair<A, B> ]
-fn consume<T>(%arr: [| T |], f: (val: %T) -> unit) -> unit
-```
-
-### Set (`std:set`)
-
-FFI-backed hash set of i64 values. Uses opaque linear handles backed by Rust `HashSet<i64>`.
-
-```nexus
-opaque type Set = Set(id: i64)  // linear -- must be freed
-
-fn empty() -> %Set
-fn insert(set: %Set, val: i64) -> %Set
-fn contains(set: &Set, val: i64) -> bool
-fn remove(set: %Set, val: i64) -> %Set
-fn size(set: &Set) -> i64
-fn from_list(xs: [ i64 ]) -> %Set
-fn to_list(set: &Set) -> [ i64 ]
-fn union(left: &Set, right: &Set) -> %Set
-fn intersection(left: &Set, right: &Set) -> %Set
-fn difference(left: &Set, right: &Set) -> %Set
-fn free(set: %Set) -> unit
-```
+Arrays use the built-in linear type `[| T |]`. Construction and indexing are language primitives (`[| e1, e2 |]`, `arr[i]`); there is no `std:array` module.
 
 ### HashMap (`std:hashmap`)
 
-FFI-backed hash map from i64 keys to i64 values. Uses opaque linear handles backed by Rust `HashMap<i64, i64>`.
+Open-addressed (linear-probing) hash map from `i64` keys to `i64` values, implemented over `std:runtime/collection`. The map is an opaque linear handle and must be `free`d.
 
 ```nexus
 opaque type HashMap = HashMap(id: i64)  // linear -- must be freed
@@ -347,7 +289,7 @@ fn free(map: %HashMap) -> unit
 
 ### StringMap (`std:stringmap`)
 
-FFI-backed hash map from string keys to i64 values. Uses opaque linear handles backed by Rust `HashMap<String, i64>`.
+Open-addressed (linear-probing) hash map from `string` keys to `i64` values, implemented over `std:runtime/collection`. The map is an opaque linear handle and must be `free`d.
 
 ```nexus
 opaque type StringMap = StringMap(id: i64)  // linear -- must be freed
@@ -367,7 +309,7 @@ fn free(map: %StringMap) -> unit
 
 ### ByteBuffer (`std:bytebuffer`)
 
-FFI-backed mutable byte buffer for binary data construction. Uses opaque linear handles backed by Rust `Vec<u8>`. Provides LEB128 encoding, little-endian integer writes, and raw byte/string/buffer append operations.
+Mutable byte buffer for binary data construction, implemented over a bump-arena-allocated header in linear memory. Uses opaque linear handles. Provides LEB128 encoding, little-endian integer writes, and raw byte/string/buffer append operations.
 
 ```nexus
 opaque type ByteBuffer = ByteBuffer(id: i64)  // linear -- must be freed
@@ -391,7 +333,7 @@ All mutating operations consume the buffer and return a new handle (consume-and-
 
 ## Utilities
 
-### String (`std:string_ops`)
+### String (`std:str`)
 
 ```nexus
 // Inspection
@@ -490,7 +432,7 @@ fn hex_digit_value(c: char) -> i64
 
 ### Lazy (`std:lazy`)
 
-Combinators for `@` thunk evaluation. Backed by `nexus:runtime/lazy` host functions.
+Combinators for `@` thunk evaluation. Implemented in pure Nexus over `std:runtime/lazy`'s `lazy_spawn` / `lazy_join` dispatch primitives.
 
 ```nexus
 fn race(a: i64, b: i64) -> i64

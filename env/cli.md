@@ -13,19 +13,29 @@ title: CLI
 
 ## Commands
 
-### `nexus run [FILE|-]`
+### `nexus run FILE`
 
-Interpret a Nexus source file:
+Compile a Nexus source file and immediately execute it via wasmtime. Arguments after `--` are forwarded verbatim to the running program.
 
 ```bash
 nexus run program.nx
-nexus run --allow-console --allow-fs program.nx
-echo 'let main = fn () -> unit do return () end' | nexus run -
+nexus run program.nx -- arg1 arg2
 ```
 
-Supports stdin piping and shebang scripts.
+Sandbox flags constrain the execution environment for reproducibility:
 
-### `nexus build [FILE|-]`
+| Flag | Effect |
+|---|---|
+| `--seed N` | Fix the RNG seed for deterministic random output |
+| `--frozen-clock[=EPOCH]` | Pin wall/mono clock to EPOCH (default 0) |
+| `--max-time MS` | Abort the program after MS milliseconds |
+| `--max-mem MB` | Cap wasm linear memory at MB MiB |
+| `--no-net` / `--no-fs` / `--no-clock` / `--no-rand` | Strip the named capability (refuses if the program requires it) |
+| `--tmp-fs DIR` | Rebind the `Fs` root to a scratch directory |
+| `--record FILE` | Record the invocation as a JSONL session |
+| `--replay FILE` | Replay a recorded session and assert byte-equivalence |
+
+### `nexus build FILE`
 
 Compile to a WASM component:
 
@@ -62,18 +72,18 @@ wasmtime run -Scli main.wasm
 wasmtime run -Scli -Shttp -Sinherit-network -Sallow-ip-name-lookup -Stcp main.wasm
 ```
 
-### `nexus check [FILE|-]`
+### `nexus typecheck FILE`
 
 Parse and typecheck only. No execution, no WASM output.
 
 ```bash
-nexus check program.nx
+nexus typecheck program.nx
 ```
 
 Structured JSON output for CI, scripting, and LLM tool use:
 
 ```bash
-nexus check --format json program.nx
+nexus typecheck --format json program.nx
 ```
 
 ```json
@@ -127,33 +137,35 @@ Supported LSP features:
 
 Project root is detected by walking up from the file to the nearest `.git` directory.
 
-### REPL
+### `nexus repl`
 
-Run `nexus` with no arguments to start an interactive session:
+Launch an interactive session:
 
 ```bash
-nexus
+nexus repl
 ```
 
-- Persistent definitions across inputs
-- Multi-line input support (prompt changes to `..`)
-- `PermConsole` auto-enabled
-- `:help` for commands
-- `:exit` / `:quit` or Ctrl-D to quit
-- `:reset` to clear accumulated state
-- `:defs` to list accumulated definitions
+Each input line is parsed, typechecked, and evaluated against a persistent session; bindings established at one prompt are visible at the next. Press Ctrl-D to exit.
 
-## Capability Flags
+## Capabilities
 
-| Flag | Permission | Description |
-|---|---|---|
-| `--allow-fs` | `PermFs` | Filesystem access |
-| `--allow-net` | `PermNet` | Network access |
-| `--allow-console` | `PermConsole` | Standard I/O |
-| `--allow-random` | `PermRandom` | Random number generation |
-| `--allow-clock` | `PermClock` | Clock and timers |
-| `--allow-proc` | `PermProc` | Process control |
-| `--allow-env` | `PermEnv` | Environment variables |
-| `--preopen DIR` | (with `PermFs`) | Preopen a directory for filesystem access |
+Capabilities are **declared in source** via `require { ... }`, not passed on the command line. The compiler embeds the required set into the binary's `nexus:capabilities` custom section. `nexus run` reads that section and forwards the matching `wasmtime` flags for the program — no opt-in flag list is needed.
 
-Capability flags apply to `nexus run`. The compiled WASM binary encodes required capabilities in the `nexus:capabilities` section -- the host runtime (e.g., wasmtime) enforces them at execution time. See [WASM and WASI](../wasm).
+To inspect what a program requires:
+
+```bash
+nexus build program.nx --explain-capabilities           # list capability names
+nexus build program.nx --explain-capabilities=wasmtime  # show wasmtime run command
+nexus build program.nx --explain-capabilities=none      # suppress capability output
+```
+
+To *strip* capabilities at run time (the run aborts if the program declared one of the stripped caps):
+
+| Flag | Effect |
+|---|---|
+| `--no-fs` | Refuse `Fs` |
+| `--no-net` | Refuse `Net` |
+| `--no-clock` | Refuse `Clock` |
+| `--no-rand` | Refuse `Random` |
+
+See [WASM and WASI](../wasm) for the per-capability WASI mapping.

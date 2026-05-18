@@ -42,7 +42,7 @@ Sigils are not annotations -- they impose runtime behavioral constraints.
 ### Linearity (`%`)
 
 - **Exactly-once consumption** (composites): must be consumed via function call, pattern match, or return
-- **Auto-drop** (primitives): `i64`, `f64`, `bool`, `string`, `unit` are released at scope end
+- **Auto-drop** (primitives): `i32`, `i64`, `f32`, `f64`, `bool`, `char`, `string`, `unit` (plus their `%`/`&`/`~` wrappers) are released at scope end. See [drop.md](./drop) §Auto-Droppable Types for the full predicate.
 - **Static enforcement**: the type checker tracks linear bindings and rejects programs that leak or double-use them
 - **No discard**: `_` cannot discard composite linear values
 - **No mutable ref**: `~` cannot hold linear types
@@ -140,18 +140,17 @@ end  // result : i64 (from arm A)
 
 ## Concurrency Model
 
-Nexus expresses parallelism through the `@` (thunk) sigil. Independent thunks within a force expression evaluate in parallel via DAG scheduling; data dependencies determine execution order, not lexical position.
+Nexus expresses deferred computation through the `@` (thunk) sigil. A thunk `let @x = expr` suspends `expr` until forced via `@x`. Parallel forcing of a list of thunks is opt-in via `force_all` from `std:lazy`:
 
 ```nexus
 let @p1 = compute1()
 let @p2 = compute2()
-let r   = @{ r1: p1, r2: p2 }   // both thunks forced in parallel
+let xs  = force_all(tasks: [p1, p2])
 ```
 
-- `@` thunks are unevaluated until forced (`@x`, `@{...}`)
-- A force expression with N independent thunks may evaluate them concurrently
+- `@` thunks are unevaluated until forced (`@x`)
 - Thunks cannot capture mutable (`~`) bindings — the `~` stack-confinement rule rules out cross-thread aliasing
-- Compiled WASM uses OS-thread parallelism via WASI threads; see [lazy.md](./lazy) for the full force / DAG scheduling semantics
+- The current runtime forces each `force_all` task sequentially; parallel execution via WASI threads is tracked as future work. See [lazy.md](./lazy) for the dispatch primitives and the migration plan.
 
 ## Implicit Unit Return
 

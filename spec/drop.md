@@ -21,7 +21,7 @@ The type checker rejects any program that violates rule 2; rule 1 carves out the
 
 ## Auto-Droppable Types
 
-The predicate `is_auto_droppable(τ)` (`src/typecheck/linearity.nx:147`) defines the set of types that may silently fall out of scope. It is the **sole** mechanism by which a binding disappears without an explicit consumption channel.
+The predicate `is_auto_droppable(τ)` (`src/typecheck/linearity.nx`) defines the set of types that may silently fall out of scope. It is the **sole** mechanism by which a binding disappears without an explicit consumption channel.
 
 ```
 auto_droppable(τ) ≡
@@ -33,9 +33,7 @@ auto_droppable(τ) ≡
 ∧ τ ≠ [|σ|]                       — arrays are never auto-droppable
 ```
 
-The recursion clauses imply `%i64`, `&string`, and `~bool` are auto-droppable; `%Handle` (a record) is not. The negative clause for `@σ` holds even when `σ` is itself auto-droppable: `@i64` must still be forced or threaded through an explicit consumption form. Arrays `[|σ|]` are likewise never auto-droppable regardless of element type: their linear contents (allocated cells, captured handles) must be released explicitly — see [type-system-formal.md §Linearity](./type-system-formal#section-1).
-
-> **Spec coverage gap (`nexus-218q`)**: `semantics.md` §Linearity bullet 2 currently lists only `i64, f64, bool, string, unit`. The actual implementation accepts `i32, f32, IntLit, FloatLit, char` plus the three wrapper recursions (`[|σ|]` is the array sigil per [types.md](./types) and [type-system-formal.md](./type-system-formal#section-1) — `[σ]` is the immutable list type and is also **not** auto-droppable).
+The recursion clauses imply `%i64`, `&string`, and `~bool` are auto-droppable; `%Handle` (a record) is not. The negative clause for `@σ` holds even when `σ` is itself auto-droppable: `@i64` must still be forced or threaded through an explicit consumption form. Arrays `[|σ|]` are likewise never auto-droppable regardless of element type: their linear contents (allocated cells, captured handles) must be released explicitly — see [type-system-formal.md §Linearity](./type-system-formal#section-1). The immutable list type `[σ]` is also **not** auto-droppable.
 
 ## Linear Consumption
 
@@ -53,11 +51,11 @@ A value of structurally-linear type must reach exactly one of the following chan
 
 ### Function-end check
 
-`require_empty_or_droppable` (`src/typecheck/linearity.nx:670`) runs at the end of every `EagerBody`. If the live linear set is non-empty and any name is *not* a parameter whose declared inner type is auto-droppable, the checker throws `LinearUnused(name, span)`.
+`require_empty_or_droppable` (`src/typecheck/linearity.nx`) runs at the end of every `EagerBody`. If the live linear set is non-empty and any name is *not* a parameter whose declared inner type is auto-droppable, the checker throws `LinearUnused(name, span)`.
 
 ### Throwable-call leak guard
 
-A call whose `throws` row is non-empty is treated as a potential exit. Any linear binding live at such a call site that is not also re-consumed inside every catch arm is rejected with `LinearLeakAcrossThrowableCall`. The rule is documented in [semantics.md](semantics) §Exception Propagation and implemented at `src/typecheck/linearity.nx:1032-1043`.
+A call whose `throws` row is non-empty is treated as a potential exit. Any linear binding live at such a call site that is not also re-consumed inside every catch arm is rejected with `LinearLeakAcrossThrowableCall`. The rule is documented in [semantics.md](semantics) §Exception Propagation and implemented at `src/typecheck/linearity.nx`.
 
 > **Note**: there is no runtime cleanup on unwind. The leak guard relies on the fact that, by the time `throw` actually executes, no linear obligation can be live in the abandoned scope — the type checker has proven it.
 
@@ -71,9 +69,7 @@ The form `let _ = e` parses as a `Let` with binder name `"_"`. The linearity che
 
 `match %v do | _ -> () end` consumes the scrutinee via the match channel; the wildcard pattern binds nothing, so there is no follow-up obligation.
 
-> **Open bug (`nexus-x5ww`)**: `let_binds_linear` only inspects the *outer* type wrapper. A value whose linearity is *structural* — for example, a record `Handle(fd: %i64)` returned from a function whose declared return type is `Handle` rather than `%Handle` — slips past the predicate, and `let _ = make()` silently discards it. The same hole affects closures whose linearity is induced by capture rather than by an outer `%`.
 
-> **Resolved (`nexus-vqkf`)**: The `[|σ|]` auto-droppable clause above has been removed. `is_auto_droppable` in `src/typecheck/linearity.nx` has never included `TyArray` (it falls through to `_ -> false`); the old spec text was incorrect. Arrays must always reach an explicit consumption channel regardless of element type.
 
 ## Lazy Thunks (`@T`)
 
@@ -91,19 +87,18 @@ export let detach = fn <T>(a: @T) -> unit do
 end
 ```
 
-> **Open bug (`nexus-qhms`)**: [lazy.md](lazy) §Standard Library documents `cancel` as "discard without evaluating" and `race` as "loser is cancelled", but the stdlib implementations of both *force* their arguments (sequential evaluation only). `force_all` is listed in the spec table but does not exist in `nxlib/stdlib/`. Until a parallel runtime with a cooperative-cancel hook ships, the spec must either be rewritten to match the sequential reality or the runtime extended.
 
 ## Memory Reclamation
 
-Nexus does **not** garbage-collect, reference-count, or per-value-`free`. Heap memory is allocated from a bump arena and reclaimed in bulk via the `nexus:runtime/arena` host module:
+Nexus does **not** garbage-collect, reference-count, or per-value-`free`. Heap memory is allocated from a bump arena and reclaimed in bulk via the `nexus:intrinsic` externals in `std:runtime/arena`:
 
 | Intrinsic | Effect |
 |---|---|
-| `__nx_heap_mark()` | Snapshot the arena's bump pointer (and routed-allocator outstanding count, when wired) |
-| `__nx_heap_reset(mark)` | Rewind the bump pointer to `mark`; everything allocated since is gone |
-| `__nx_heap_swap(...)` | Switch between primary and routed allocator |
+| `heap_mark()` | Snapshot the arena's bump pointer |
+| `heap_reset(mark)` | Rewind the bump pointer to `mark`; everything allocated since is gone |
+| `heap_swap(base)` | Atomically install `base` as the new arena head and return the prior value (used to route allocations to a scratch arena) |
 
-Codegen for these is in `src/backend/codegen.nx:357-423` (`emit_heap_mark` / `emit_heap_reset`). The compiler does not emit per-value cleanup; closures, records, and linear handles all become unreachable wholesale at the next reset.
+Codegen for these is in `src/backend/codegen.nx` (`emit_heap_mark` / `emit_heap_reset`). The compiler does not emit per-value cleanup; closures, records, and linear handles all become unreachable wholesale at the next reset.
 
 > **Consequence**: any future destructor-bearing type would need either (a) a new MIR/LIR drop instruction with codegen support, or (b) explicit user-level `dispose(...)` calls protected by linearity. Neither exists today.
 
@@ -116,16 +111,16 @@ The WASM `drop` opcode (`0x1A`) appears in the emitter only as **stack housekeep
 | `src/backend/codegen/atom.nx:119` | After packing a `unit` into i64, drop the pre-pack stack slot |
 | `src/backend/codegen/atom.nx:141`, `:165` | Field store/load for `unit`-typed record fields — drop the placeholder |
 | `src/backend/codegen/atom.nx:205` | Discard `memory.grow` return value (`-1` on failure) |
-| `src/backend/codegen.nx:1959` | Let-binder whose declared type is `unit` — drop a non-unit RHS result |
-| `src/backend/codegen.nx:2226` | `_start` shim drops the `main` return value when non-unit |
+| `src/backend/codegen.nx` | Let-binder whose declared type is `unit` — drop a non-unit RHS result |
+| `src/backend/codegen.nx` | `_start` shim drops the `main` return value when non-unit |
 
 None of these run user-defined cleanup logic. They exist purely to balance the WASM operand stack.
 
 ## Closures and Captures
 
-A closure stores its captures as fields of a heap-allocated object (`emit_closure_captures`, `src/backend/codegen.nx:850`). The closure's *linearity* is induced by capture: if the body references any outer linear binding, the resulting closure is itself linear (`collect_captured_linears`, `src/typecheck/linearity.nx:368`).
+A closure stores its captures as fields of a heap-allocated object (`emit_closure_captures`, `src/backend/codegen.nx`). The closure's *linearity* is induced by capture: if the body references any outer linear binding, the resulting closure is itself linear (`collect_captured_linears`, `src/typecheck/linearity.nx`).
 
-When a linear closure is consumed, the heap object is **not** freed by codegen; it is reclaimed at the next `__nx_heap_reset`. There is no per-closure destructor, so a closure that captures `%h` does not run any "release" logic on `%h` — the capture itself was the consumption channel for `%h`, performed at closure-creation time.
+When a linear closure is consumed, the heap object is **not** freed by codegen; it is reclaimed at the next `heap_reset`. There is no per-closure destructor, so a closure that captures `%h` does not run any "release" logic on `%h` — the capture itself was the consumption channel for `%h`, performed at closure-creation time.
 
 ## Exceptions and Drop
 
@@ -137,19 +132,11 @@ This shape is structural, not aspirational: adding a destructor type later would
 
 | Concern | Authoritative location |
 |---|---|
-| Set of auto-droppable types | `src/typecheck/linearity.nx:147` |
-| Function-end consumption check | `src/typecheck/linearity.nx:670` |
-| Throwable-call leak guard | `src/typecheck/linearity.nx:1032` |
-| `_` wildcard binder semantics | `src/typecheck/linearity.nx:718` |
+| Set of auto-droppable types | `src/typecheck/linearity.nx` |
+| Function-end consumption check | `src/typecheck/linearity.nx` |
+| Throwable-call leak guard | `src/typecheck/linearity.nx` |
+| `_` wildcard binder semantics | `src/typecheck/linearity.nx` |
 | Lazy combinators | `nxlib/stdlib/lazy.nx` |
-| Arena intrinsics | `src/backend/codegen.nx:357-423` |
+| Arena intrinsics | `src/backend/codegen.nx` |
 | Spec rules | [semantics.md](semantics), [types.md](types), [type-system-formal.md](type-system-formal) §T-Proj, §T-Seq-Cons |
 
-## Open Bugs Tracked
-
-| ID | Summary |
-|---|---|
-| `nexus-x5ww` | Wildcard-bind `let _ = e` silently discards structurally-linear values (record/closure carrying linear field) |
-| `nexus-qhms` | `std:lazy` `cancel`/`race`/`force_all` diverge from `lazy.md` (cancel forces, race is sequential, force_all is missing) |
-| `nexus-218q` | `semantics.md` Auto-drop bullet is incomplete vs. implementation (array clause removed; remaining gap: `semantics.md` scalar list still narrower than impl) |
-| `nexus-8tee` | T-Proj `¬linear(τ)` not enforced — interacts with structural-linearity classification |

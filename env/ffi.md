@@ -213,17 +213,17 @@ The WASM module is responsible for managing the actual state behind the handle (
 
 ```
 nxlib/stdlib/                        // root of the `std` package
-  array.nx                           // import external "std:collections" + external __nx_* + typed wrappers
-  string_ops.nx                      // import external "std:string-ops" + external __nx_* + typed wrappers
+  hashmap.nx                         // import external "nexus:intrinsic" + typed wrappers
+  str.nx                             // import external "nexus:intrinsic" + typed wrappers
   ...
 app/
-  main.nx                            // import * as arr from "std:array"  — no `external` here
+  main.nx                            // import * as hm from "std:hashmap"  — no `external` here
 ```
 
 Why this matters:
 
 - **Single source of truth for the ABI.** Parameter order, encoding, and WASM export names are fragile (see [Labeled Argument Reordering](#labeled-argument-reordering)). Declaring the same binding in two files invites them to drift.
-- **Linear/borrow discipline lives in the wrapper.** Raw `external` functions traffic in plain `i64` handles; the wrapper is where `%T` / `&T` / opaque types re-establish safety. Callers should never see the raw `__nx_*` form.
+- **Linear/borrow discipline lives in the wrapper.** Raw `external` functions traffic in plain `i64` handles; the wrapper is where `%T` / `&T` / opaque types re-establish safety. Callers should never see the raw external form.
 - **`wasm-merge` inlining is per-module.** One wrapper file means one place where the `.wasm` blob is linked, avoiding duplicate symbol work at build time.
 
 Rule of thumb: if a non-wrapper `.nx` file contains the keyword `external`, that's a smell — extract the bindings into a dedicated wrapper module.

@@ -220,8 +220,6 @@ Return values use the same types as internal functions (strings return as packed
 |---|---|---|
 | `<module>.wasm` | `<wasm_name>` | Each `external` binding |
 | stdlib module | `allocate` | If objects + stdlib present |
-| `nexus:runtime/backtrace` | `__nx_capture_backtrace` | If `throw`/`try` with backtrace |
-| `nexus:runtime/lazy` | `__nx_lazy_spawn`, `__nx_lazy_join` | If DAG-parallel `@` forces present |
 
 #### Custom Sections
 
@@ -237,12 +235,6 @@ If the program uses closures or function references, a funcref table is emitted:
 - Size: number of unique function references
 - Active initialization at offset 0
 - Used by `call_indirect` for closure dispatch
-
-## Nexus Host Bridge
-
-For HTTP networking, Nexus includes a host bridge component (`nexus_host_bridge`) that translates Nexus FFI calls (prefixed with `__nx_http`) into WASI HTTP component calls.
-
-When a program requires `PermNet`, the compiler automatically composes this bridge into the final WASM component. This ensures the `Net` cap works on any WASI-compliant host.
 
 ## Building and Running
 

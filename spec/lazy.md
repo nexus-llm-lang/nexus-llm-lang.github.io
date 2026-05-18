@@ -38,35 +38,19 @@ let result = @x                    // forces thunk, evaluates now
 let delayed: @string = @("hello" ++ " world")
 ```
 
-## DAG Parallel Evaluation
+## Parallel Evaluation
 
-`@expr` builds a dependency DAG from the expression's AST and evaluates independent nodes in parallel:
-
-```nexus
-@(f(a: x, b: y))
-//     f(a:x, b:y)    ← level 2: apply (after args resolve)
-//       / | \
-//      f   x   y      ← level 1: parallel evaluation
-```
-
-Nested calls create deeper DAGs:
-
-```nexus
-@(f(a: g(b: x)))
-//     f(a: y)         ← level 3: apply
-//       |
-//     g(b: x) → y    ← level 2: apply
-//    / |  \
-//   f   g   x         ← level 1: parallel evaluation
-```
-
-Record force `@{ a: x, b: y }` is a special case — a height-2 tree where fields are leaves evaluated in parallel:
+`@x` forces a single thunk. Parallel evaluation of a *list* of thunks is opt-in via the stdlib helper `force_all` (`std:lazy`):
 
 ```nexus
 let @p1 = compute1()
 let @p2 = compute2()
-let _ = @{ r1: p1, r2: p2 }   // p1 and p2 forced in parallel
+let xs = force_all(tasks: [p1, p2])   // [p1's result, p2's result]
 ```
+
+Each thunk is dispatched as a task (one struct in linear memory) and joined left-to-right. The dispatch primitives `lazy_spawn` / `lazy_join` live in `nxlib/stdlib/runtime/lazy.nx`.
+
+> **Status note.** The current `lazy_spawn` implementation is *sequential* — it forces each thunk inline and stores the result, so `force_all` runs all tasks one after another. A `wasi:threads` worker entry point (`wasi_thread_start`) is exported for compatibility with `wasmtime -S threads` runs, but the sequential `lazy_spawn` does not invoke it. True parallel execution via the component-model `future<T>` migration is tracked as future work.
 
 ## Linearity
 
@@ -134,22 +118,18 @@ catch
 end
 ```
 
-During parallel force (`@{ a: x, b: y }`), if one thunk throws:
-- The exception propagates at the join point
-- The other thunk's continuation is dropped (= cancelled)
-- If already running, it completes but the result is discarded
-- No resource leak — linear types guarantee cleanup
+When `force_all` is used and one of the forced thunks throws, the exception propagates at the join point and the remaining thunks' results are discarded; linear types guarantee no resource leak.
 
 ## Standard Library (`std:lazy`)
 
-Only the `@` sigil is built into the language. Combinators are provided as stdlib functions backed by runtime host functions:
+Only the `@` sigil is built into the language. Combinators are provided as stdlib functions:
 
 | Function | Signature | Description |
 |---|---|---|
-| `race` | `(a: @T, b: @T) -> T` | Returns first to complete; loser is cancelled |
-| `cancel` | `(a: @T) -> unit` | Discard without evaluating |
-| `detach` | `(a: @T) -> unit` | Start evaluation, don't wait for result |
-| `force_all` | `(tasks: [@T]) -> [T]` | Parallel force of a list |
+| `force_all` | `(tasks: [@T]) -> [T]` | Forces every thunk and returns the results in input order (currently sequential; see "Parallel Evaluation" above) |
+| `detach` | `(a: @T) -> unit` | Forces the thunk and discards the result |
+| `cancel` | `(a: @T) -> unit` | Forces the thunk and discards the result (no runtime drop hook exists — `cancel` and `detach` are observationally equivalent) |
+| `race` | `(a: @T, b: @T) -> T` | Forces `a` then `b` sequentially, returns `a`'s result (no first-of-two arbiter — both arguments run) |
 
 ## Current Implementation Status
 
@@ -159,9 +139,7 @@ The `@` sigil is fully implemented:
 - **Type system**: `@T` tracked as linear; unconsumed `@T` is a compile error (including primitives like `@i64`)
 - **Bare-name access**: `x` (without `@`) references the thunk without forcing — enables `cancel(a: x)` / `detach(a: x)`
 - **Closure linearization**: Capturing `@x` in a closure makes the closure linear
-- **DAG parallel evaluation**: Compiler detects 2+ consecutive forces and emits `LazySpawn`/`LazyJoin` for parallel execution via OS threads
-- **Runtime**: `nexus:runtime/lazy` host module with `__nx_lazy_spawn(thunk, num_captures) -> task_id` and `__nx_lazy_join(task_id) -> result`
-- **`std:lazy`**: `race`, `cancel`, `detach`, `force_all` combinators
+- **`std:lazy`**: `race`, `cancel`, `detach`, `force_all` combinators — all currently sequential. See `nxlib/stdlib/runtime/lazy.nx` for the task-struct dispatch primitives (`lazy_spawn` / `lazy_join`).
 
 ---
 
