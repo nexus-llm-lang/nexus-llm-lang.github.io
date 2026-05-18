@@ -70,7 +70,8 @@ $$\begin{array}{rcll}
     & \mid & \%\tau \mid \mathord{\sim}\tau \mid \&\tau \mid @\tau & \text{linear / mutable ref / borrow / lazy} \\
     & \mid & \textbf{handler}\;x\;\rho & \text{handler for cap } x \\[6pt]
 b & ::= & \texttt{i32} \mid \texttt{i64} \mid \texttt{f32} \mid \texttt{f64} \mid {} & \\
-  &     & \texttt{bool} \mid \texttt{char} \mid \texttt{string} \mid \texttt{unit} & \\[6pt]
+  &     & \texttt{bool} \mid \texttt{char} \mid \texttt{string} \mid \texttt{unit} & \\[2pt]
+  & \multicolumn{3}{l}{\text{Surface-level alias: }\texttt{float} \equiv \texttt{f64}~\text{(resolved at parse-time before any rule fires)}} & \\[6pt]
 \eta & ::= & X \mid \texttt{Exn} & \text{row entry (an identifier or the catch-all sentinel)} \\[6pt]
 \rho & ::= & \lbrace \overline{\eta} \rbrace \mid \lbrace \overline{\eta} \mid {?}r \rbrace & \text{row (closed / open with row variable } {?}r\text{)}
 \end{array}$$
