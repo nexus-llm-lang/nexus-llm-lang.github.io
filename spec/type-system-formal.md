@@ -1200,6 +1200,28 @@ As with [T-Lambda](#T-Lambda), the conclusion's ambient $\rho_q'$ is universally
 
 **Arm/method 1-1 correspondence.** The premise $\lbrace \ell_j \mid j \in J \rbrace = \lbrace \ell \mid (\ell = e) \in \overline{\ell_j = e_j} \rbrace$ enforces that the handler literal supplies exactly the methods declared on cap $x$ — no missing arm (which would leave a cap-method invocation through [T-CapCall](#T-CapCall) with no implementation at runtime) and no extra arm (which would silently introduce a name unreachable by any method-dispatch path). Earlier formulations indexed the per-arm typing premise by $j \in J$ alone, which left the case of an extra user arm $\ell_\text{extra} = e_\text{extra}$ never type-checked and the case of a missing arm vacuously satisfied; this premise makes both failure modes a rule-level rejection. The same shape mirrors how [T-Record](#T-Record)'s $\text{distinct}(\overline{\ell})$ + [T-App](#T-App)'s label-permutation premises pin record-construction field sets to declared shapes. The impl in `src/typecheck/check.nx::validate_handler_arm_sets` performs the same set-equality, invoked from `check_program` before any arm signature/body work — a structurally incomplete handler is rejected before `register_handler_bindings` would have admitted it.
 
+**With-continuation arms (`with @k`).** A handler arm may optionally carry a *continuation binder* — a thunk whose body is the rest of the arm's own statement list after the `with @k` point. The surface syntax is:
+
+```
+fn ell_j(...) -> kappa_j with @k do ... end
+```
+
+The binder `k` has type $@\kappa_j$ inside the arm body: forcing it ($@k$) delivers the arm's declared return value of type $\kappa_j$. The binder is linear — it may be forced at most once (a second force would constitute a second return from the arm, which is ill-typed). The formal rule for arm bodies that carry a continuation binder is:
+
+<a id="T-Continuation"></a>
+
+$$\dfrac{
+  \text{methods}(x) \ni \ell_j : (\overline{\pi_j}) \to \kappa_j;\, \alpha_j;\, \beta_j \\[2pt]
+  k \text{ fresh} \qquad k :^{1} @\kappa_j \notin \Gamma_\text{body} \\[2pt]
+  \Gamma_\text{body},\, k :^{1} @\kappa_j;\, \rho_q \vdash_s \overline{s} : \kappa_j \mathbin{!} \beta_j
+}{
+  \Gamma_\text{body};\, \rho_q \vdash_\text{arm} \textbf{fn}~\ell_j(\overline{\pi_j}) \to \kappa_j~\textbf{with}~@k~\textbf{do}~\overline{s}~\textbf{end} \mathbin{!} \beta_j
+} \;\textsc{T-Continuation}$$
+
+Here $\Gamma_\text{body}$ is the arm's body environment (parameters $\overline{\pi_j}$ plus any captured bindings from [T-Handler](#T-Handler)'s $\Gamma_\omega, \Gamma_\text{cap}$ partition). The judgment $\vdash_s \overline{s} : \kappa_j$ is the statement-sequence form of the expression typing judgment; the arm body must ultimately produce a value of type $\kappa_j$ — the same return type as the method's declared signature — whether it does so directly or by forcing $@k$.
+
+T-Continuation is the arm-level refinement of T-Handler's per-arm typing premise $\Gamma_\omega,\, \Gamma_\text{cap};\, \rho_q \vdash_e e_j : (\overline{\pi_j}) \to \kappa_j;\, \alpha_j;\, \beta_j$: when the arm carries `with @k`, the arm lambda's body sees an extra linear binding $k :^{1} @\kappa_j$ in scope, and the arm's function type is the same $(\overline{\pi_j}) \to \kappa_j$ as declared on the port — the presence of `with @k` does not change the visible method signature. The linearity of $k$ means the body may force the continuation at most once; any control path that forces $k$ more than once is rejected by the standard linear-usage check ([P-FnEnd](#T-Lambda)). Implementation: `src/typecheck/check.nx::check_arm_body` and `check_function` insert $k \mapsto \text{mono}(@\kappa_j)$ into the arm's body environment before running the standard statement-sequence check.
+
 $$\dfrac{
   x :^{\omega} \forall\overline{\alpha}.\,\tau \in \Gamma \qquad
   \tau' = \text{inst}(\forall\overline{\alpha}.\,\tau) \qquad
