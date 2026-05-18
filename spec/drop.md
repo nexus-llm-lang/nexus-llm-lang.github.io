@@ -26,16 +26,16 @@ The predicate `is_auto_droppable(τ)` (`src/typecheck/linearity.nx:147`) defines
 ```
 auto_droppable(τ) ≡
   τ ∈ { i32, i64, f32, f64, IntLit, FloatLit, bool, char, string, unit }
-∨ τ = [|σ|]                      — array (any element type, see Bug 1)
 ∨ τ = %σ ∧ auto_droppable(σ)     — linear wrapper around a droppable inner
 ∨ τ = &σ ∧ auto_droppable(σ)     — borrow wrapper
 ∨ τ = ~σ ∧ auto_droppable(σ)     — mutable wrapper
 ∧ τ ≠ @σ                          — lazy thunks are never auto-droppable
+∧ τ ≠ [|σ|]                       — arrays are never auto-droppable
 ```
 
-The recursion clauses imply `%i64`, `&string`, and `~bool` are auto-droppable; `%Handle` (a record) is not. The negative clause for `@σ` holds even when `σ` is itself auto-droppable: `@i64` must still be forced or threaded through an explicit consumption form.
+The recursion clauses imply `%i64`, `&string`, and `~bool` are auto-droppable; `%Handle` (a record) is not. The negative clause for `@σ` holds even when `σ` is itself auto-droppable: `@i64` must still be forced or threaded through an explicit consumption form. Arrays `[|σ|]` are likewise never auto-droppable regardless of element type: their linear contents (allocated cells, captured handles) must be released explicitly — see [type-system-formal.md §Linearity](./type-system-formal#section-1).
 
-> **Spec coverage gap (`nexus-218q`)**: `semantics.md` §Linearity bullet 2 currently lists only `i64, f64, bool, string, unit`. The actual implementation accepts `i32, f32, IntLit, FloatLit, char, [|σ|]` plus the three wrapper recursions (`[|σ|]` is the array sigil per [types.md](./types) and [type-system-formal.md](./type-system-formal#section-1) — `[σ]` is the immutable list type and is **not** auto-droppable). The arrays-of-anything carve-out is also under audit (see Bug 1 below).
+> **Spec coverage gap (`nexus-218q`)**: `semantics.md` §Linearity bullet 2 currently lists only `i64, f64, bool, string, unit`. The actual implementation accepts `i32, f32, IntLit, FloatLit, char` plus the three wrapper recursions (`[|σ|]` is the array sigil per [types.md](./types) and [type-system-formal.md](./type-system-formal#section-1) — `[σ]` is the immutable list type and is also **not** auto-droppable).
 
 ## Linear Consumption
 
@@ -73,7 +73,7 @@ The form `let _ = e` parses as a `Let` with binder name `"_"`. The linearity che
 
 > **Open bug (`nexus-x5ww`)**: `let_binds_linear` only inspects the *outer* type wrapper. A value whose linearity is *structural* — for example, a record `Handle(fd: %i64)` returned from a function whose declared return type is `Handle` rather than `%Handle` — slips past the predicate, and `let _ = make()` silently discards it. The same hole affects closures whose linearity is induced by capture rather than by an outer `%`.
 
-> **Open bug (`nexus-218q`, array clause)**: `is_auto_droppable` returns `true` for `[|σ|]` regardless of whether `σ` is linear. Combined with the wildcard hole above, `let _ = make_handles()` returning `[|%Handle|]` would be silently discarded. (The notation `[|σ|]` is the array sigil — distinct from the immutable list `[σ]`, which is *not* auto-droppable.)
+> **Resolved (`nexus-vqkf`)**: The `[|σ|]` auto-droppable clause above has been removed. `is_auto_droppable` in `src/typecheck/linearity.nx` has never included `TyArray` (it falls through to `_ -> false`); the old spec text was incorrect. Arrays must always reach an explicit consumption channel regardless of element type.
 
 ## Lazy Thunks (`@T`)
 
@@ -151,5 +151,5 @@ This shape is structural, not aspirational: adding a destructor type later would
 |---|---|
 | `nexus-x5ww` | Wildcard-bind `let _ = e` silently discards structurally-linear values (record/closure carrying linear field) |
 | `nexus-qhms` | `std:lazy` `cancel`/`race`/`force_all` diverge from `lazy.md` (cancel forces, race is sequential, force_all is missing) |
-| `nexus-218q` | `semantics.md` Auto-drop bullet is incomplete vs. implementation; arrays-of-linears clause may be over-permissive |
+| `nexus-218q` | `semantics.md` Auto-drop bullet is incomplete vs. implementation (array clause removed; remaining gap: `semantics.md` scalar list still narrower than impl) |
 | `nexus-8tee` | T-Proj `¬linear(τ)` not enforced — interacts with structural-linearity classification |
