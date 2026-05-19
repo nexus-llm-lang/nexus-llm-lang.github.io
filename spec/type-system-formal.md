@@ -1336,6 +1336,7 @@ $$\dfrac{
   \Gamma_\text{cap} = \lbrace x :^{1} S \in \Gamma \mid x \in \text{fv}(\overline{s}) \rbrace \\[2pt]
   \Gamma_\omega = \lbrace x :^{\omega} S \in \Gamma \mid x \in \text{fv}(\overline{s}) \rbrace \\[2pt]
   \forall x \in \text{fv}(\overline{s}) \cap \text{dom}(\Gamma).\;\Gamma(x) \neq \mathord{\sim}\sigma \quad\text{(no ref capture)} \\[2pt]
+  \text{distinct}(\overline{\ell}) \quad\text{(parameter labels are distinct — mirrors [D-Cap](#D-Cap) / [T-Record](#T-Record))} \\[2pt]
   q_i = \begin{cases} 1 & \text{if } \text{linear}(\tau_i) \\ \omega & \text{otherwise} \end{cases} \\[2pt]
   \overline{s}^\dagger = \begin{cases} \overline{s};\,\textbf{return}~() & \text{if}~\tau_r = \texttt{unit}~\wedge~\text{tail}(\overline{s}) \neq \bot \\ \overline{s} & \text{otherwise} \end{cases} \\[2pt]
   \Gamma_\omega,\, \Gamma_\text{cap},\, \overline{x_i :^{q_i} \tau_i};\, \rho_q;\, \tau_r \vdash_s \overline{s}^\dagger : \Gamma' \mathbin{!} \rho_e^\text{body} \\[2pt]
