@@ -282,9 +282,11 @@ $$\begin{array}{rcl}
 \text{linConsumed}(\textbf{return}~e, \Gamma) & = & \text{linConsumed}(e, \Gamma) \\[2pt]
 \text{linConsumed}(\mathord{\sim}x \leftarrow e, \Gamma) & = & \text{linConsumed}(e, \Gamma) \\[2pt]
 \text{linConsumed}(e~\text{(bare expression stmt)}, \Gamma) & = & \text{linConsumed}(e, \Gamma) \\[6pt]
-\text{linConsumed}(\textbf{inject}~\overline{h}~\textbf{do}~\overline{s}~\textbf{end}, \Gamma) & = & \lbrace h_i \in \overline{h} \mid \Gamma(h_i) = (1, S) \rbrace \;\uplus\; \text{linConsumed}(\overline{s}, \Gamma \cup \overline{h}{:}\omega) \\
+\text{linConsumed}(\textbf{inject}~\overline{h}~\textbf{do}~\overline{s}~\textbf{end}, \Gamma) & = & \lbrace h_i \in \overline{h} \mid \Gamma(h_i) = (1, S) \rbrace \;\uplus\; \text{linConsumed}(\overline{s}, \Gamma_\text{body}) \\
+& & \text{where}~\Gamma = \Gamma_h \otimes \Gamma_\text{body},~\Gamma_h~\text{supplies the consumed handlers} \\
 & & \text{(handler bindings whose scheme is linear are consumed by the inject;} \\
-& & \text{the body is typed with the same handlers re-bound at }\omega\text{ inside the block)} \\[6pt]
+& & \text{the body is typed under its }\otimes\text{-split partition} \\
+& & \text{— matching [T-Inject](#T-Inject) §inject linearity)} \\[6pt]
 \text{linConsumed}(\textbf{while}~e~\textbf{do}~\overline{s}~\textbf{end}, \Gamma) & = & \text{linConsumed}(e, \Gamma) \\
 & & \text{([T-While]'s P-Loop requires the body's linear set to round-trip,} \\
 & & \text{so the body adds nothing to the loop's outer consumption)} \\[6pt]
