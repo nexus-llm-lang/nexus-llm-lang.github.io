@@ -108,6 +108,8 @@ The capability row $\rho_q$ admits two disjoint sources of entries:
 
 These two sources share the row vocabulary because $\rho_q$ unification, weakening, and `require` checking treat both kinds of entries uniformly. The disjointness is by declaration site: system-capability names are reserved (parser rejects redeclaration); cap names are user-defined and live in the same namespace as type/term identifiers.
 
+**Reserved names.** `Exn` is reserved across both row positions: it must never appear as a user-declared cap name or as an exception-constructor name, and the freshness premises on [D-Cap](#D-Cap) and [D-Exception](#D-Exception) enforce this at the declaration boundary. The reservation is what keeps [U-Row-Exn](#U-Row-Exn)'s throws-position activation premise ($\texttt{Exn} \in \overline{\tau}$) by-construction unreachable on $\rho_q$ — without it, `cap Exn do … end` would let `Exn` legally enter a require row and U-Row-Exn would mis-fire on a non-throws context. The same reservation applies to `SysCaps` names (`PermFs`, …) by the existing reserved-name handling: redeclaration as a cap, exception, type, or term identifier is rejected.
+
 Let $\texttt{SysCaps} = \lbrace \texttt{PermFs}, \texttt{PermNet}, \texttt{PermConsole}, \texttt{PermRandom}, \texttt{PermClock}, \texttt{PermProc}, \texttt{PermEnv} \rbrace$. The well-formedness predicate
 
 <div markdown="0">
@@ -2080,6 +2082,7 @@ External declarations bind a name $x$ to a fixed Wasm export $w$ at a stated arr
 $$\dfrac{
   \begin{array}{l}
   D = \textbf{cap}~X~\textbf{do}~\overline{\textbf{fn}~\ell_j(\overline{\pi_j}) \to \kappa_j;\,\alpha_j;\,\beta_j}~\textbf{end} \\[2pt]
+  X \notin \lbrace \texttt{Exn} \rbrace \cup \texttt{SysCaps} \cup \text{dom}(\text{methods}) \quad\text{(cap name fresh — Exn and system caps are reserved; see §Row Types)} \\[2pt]
   \text{distinct}(\overline{\ell_j \mid j \in J}) \quad\text{(method names are distinct across the cap)} \\[2pt]
   \forall j \in J.\;\text{distinct}(\text{labels}(\overline{\pi_j})) \quad\text{(each method's parameter labels are distinct)} \\[2pt]
   \forall j \in J.\;\forall i.\;\text{wfRef}(\pi_{j,i}) \quad \forall j \in J.\;\text{wfRef}(\kappa_j) \wedge \neg\text{escapesRef}(\kappa_j) \\[2pt]
@@ -2098,7 +2101,7 @@ Cap declarations populate `methods` alone; they do not enter a value-level bindi
 $$\dfrac{
   \begin{array}{l}
   D = \textbf{exception}~C\,\overline{F} \qquad
-  C \notin \text{variants}(\texttt{Exn}) \quad\text{(no duplicate constructor name)} \\[2pt]
+  C \notin \lbrace \texttt{Exn} \rbrace \cup \texttt{SysCaps} \cup \text{dom}(\text{methods}) \cup \text{variants}(\texttt{Exn}) \quad\text{(constructor name fresh; reserved names rejected)} \\[2pt]
   \overline{F} \neq \emptyset \implies \text{distinct}(\overline{\ell}) \quad\text{(field labels within this constructor are distinct)} \\[2pt]
   S = \begin{cases} (\overline{\ell : \tau}) \to \texttt{Exn};\,\lbrace\rbrace;\,\lbrace\rbrace & \text{if}~\overline{F} = (\overline{\ell : \tau}),~\text{non-empty} \\ \texttt{Exn} & \text{if}~\overline{F}~\text{is omitted (nullary)} \end{cases}
   \end{array}
