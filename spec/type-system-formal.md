@@ -1483,13 +1483,14 @@ The binder `k` has type $@\kappa_j$ inside the arm body: forcing it ($@k$) deliv
 $$\dfrac{
   \text{methods}(x) \ni \ell_j : (\overline{\pi_j}) \to \kappa_j;\, \alpha_j;\, \beta_j \\[2pt]
   k \text{ fresh} \qquad k :^{1} @\kappa_j \notin \Gamma_\text{body} \\[2pt]
-  \Gamma_\text{body},\, k :^{1} @\kappa_j;\, \rho_q \vdash_s \overline{s} : \kappa_j \mathbin{!} \beta_j
+  \Gamma_\text{body},\, k :^{1} @\kappa_j;\, \rho_q;\, \kappa_j \vdash_s \overline{s} : \Gamma' \mathbin{!} \beta_j \\[2pt]
+  \text{tail}(\overline{s}) = \bot \quad\text{(arm body must terminate divergently — every path \textbf{return}s, throws, or loops)}
 }{
   \Gamma_\text{body};\, \rho_q \vdash_\text{arm} \textbf{fn}~\ell_j(\overline{\pi_j}) \to \kappa_j~\textbf{with}~@k~\textbf{do}~\overline{s}~\textbf{end} \mathbin{!} \beta_j
 } \;\textsc{T-Continuation}$$
 </div>
 
-Here $\Gamma_\text{body}$ is the arm's body environment (parameters $\overline{\pi_j}$ plus any captured bindings from [T-Handler](#T-Handler)'s $\Gamma_\omega, \Gamma_\text{cap}$ partition). The judgment $\vdash_s \overline{s} : \kappa_j$ is the statement-sequence form of the expression typing judgment; the arm body must ultimately produce a value of type $\kappa_j$ — the same return type as the method's declared signature — whether it does so directly or by forcing $@k$.
+Here $\Gamma_\text{body}$ is the arm's body environment (parameters $\overline{\pi_j}$ plus any captured bindings from [T-Handler](#T-Handler)'s $\Gamma_\omega, \Gamma_\text{cap}$ partition). The body-typing premise uses the standard statement-sequence judgment $\Gamma; \rho_q; \tau_r \vdash_s \overline{s} : \Gamma' \mathbin{!} \rho_e$ (see §Statements), with the enclosing return slot $\tau_r$ instantiated to $\kappa_j$ — the cap method's declared return type — so a $\textbf{return}~v$ inside the arm body checks $v : \kappa_j$ via [T-Return](#T-Return). The companion $\text{tail}(\overline{s}) = \bot$ premise mirrors [T-Lambda](#T-Lambda)'s non-unit termination guard: every control path through the arm must $\textbf{return}$ a $\kappa_j$ value, $\textbf{throw}$, or otherwise diverge — the arm has no implicit-unit return because $\kappa_j$ may be non-unit and the arm's effect-handler role demands an explicit producer.
 
 T-Continuation is the arm-level refinement of T-Handler's per-arm typing premise $\Gamma_\omega,\, \Gamma_\text{cap};\, \rho_q \vdash_e e_j : (\overline{\pi_j}) \to \kappa_j;\, \alpha_j;\, \beta_j$: when the arm carries `with @k`, the arm lambda's body sees an extra linear binding $k :^{1} @\kappa_j$ in scope, and the arm's function type is the same $(\overline{\pi_j}) \to \kappa_j$ as declared on the cap — the presence of `with @k` does not change the visible method signature. The linearity of $k$ means the body may force the continuation at most once; any control path that forces $k$ more than once is rejected by the standard linear-usage check ([P-FnEnd](#T-Lambda)). Implementation: `src/typecheck/check.nx::check_arm_body` and `check_function` insert $k \mapsto \text{mono}(@\kappa_j)$ into the arm's body environment before running the standard statement-sequence check.
 
