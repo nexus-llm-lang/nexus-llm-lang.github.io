@@ -290,9 +290,13 @@ $$\begin{array}{rcl}
 \text{linConsumed}(\textbf{while}~e~\textbf{do}~\overline{s}~\textbf{end}, \Gamma) & = & \text{linConsumed}(e, \Gamma) \\
 & & \text{([T-While]'s P-Loop requires the body's linear set to round-trip,} \\
 & & \text{so the body adds nothing to the loop's outer consumption)} \\[6pt]
-\text{linConsumed}(\textbf{try}~\overline{s_t}~\overline{\textbf{catch}~p_i \to \overline{s_i}}~\textbf{end}, \Gamma) & = & \text{linConsumed}(\overline{s_t}, \Gamma) \;\uplus\; L_\text{try} \\
-& & \text{where}~L_\text{try}~\text{is selected by arm equality / divergence,} \\
-& & \text{symmetric with the }L_\text{match}~\text{clause above}
+\text{linConsumed}(\textbf{try}~\overline{s_t}~\overline{\textbf{catch}~p_i \to \overline{s_i}}~\textbf{end}, \Gamma) & = & \text{linConsumed}(\overline{s_t}, \Gamma) \\
+& & \text{(the construct consumes the try body's outer linears;} \\
+& & \text{[T-TryCatch](#T-TryCatch)'s catch-arm equality premise forces every} \\
+& & \text{non-divergent catch arm to consume the same set, so the abnormal} \\
+& & \text{path agrees and no separate catch-arm term is added — unlike} \\
+& & L_\text{match}\text{, the catch arm is an alternative to the try body, not}\\
+& & \text{a sequential continuation of it)}
 \end{array}$$
 </div>
 
@@ -1797,9 +1801,10 @@ $$\dfrac{
   \begin{array}{l}
   \Gamma;\, \rho_q;\, \tau_r \vdash_s \overline{s_\text{try}} : \Gamma_1 \mathbin{!} \rho_\text{try} \\[2pt]
   \forall x :^1 S \in \Gamma_1.\;x \in \text{dom}(\Gamma) \wedge x :^1 S \in \Gamma \quad\text{(P-Block: try-body)} \\[4pt]
-  \forall i.\;\Gamma_1 \vdash p_i : \texttt{Exn} \Rightarrow \Gamma_i \\[2pt]
+  \forall i.\;\Gamma \vdash p_i : \texttt{Exn} \Rightarrow \Gamma_i \quad\text{(catch arms measured from the pre-try}~\Gamma\text{ — a catch runs only when the try body did not complete)} \\[2pt]
   \forall i.\;\Gamma_i;\, \rho_q;\, \tau_r \vdash_s \overline{s_i} : \Gamma_i' \mathbin{!} \rho_i \\[2pt]
-  \forall i.\;\forall x :^1 S \in \Gamma_i'.\;x \in \text{dom}(\Gamma) \wedge x :^1 S \in \Gamma \quad\text{(P-Block: catch-arm)} \\[4pt]
+  \forall i.\;\forall x :^1 S \in \Gamma_i'.\;x \in \text{dom}(\Gamma) \wedge x :^1 S \in \Gamma \quad\text{(P-Block: catch-arm)} \\[2pt]
+  \forall i.\;\text{tail}(\overline{s_\text{try}}) \neq \bot \wedge \text{tail}(\overline{s_i}) \neq \bot \implies \text{linConsumed}(\overline{s_\text{try}}, \Gamma) = \text{linConsumed}(\overline{s_i}, \Gamma_i) \setminus \text{bv}(p_i) \quad\text{(catch-arm linear-consumption equality, mirroring [T-Match](#T-Match))} \\[4pt]
   \overline{C}_\text{caught} = \text{caughtVariants}(\overline{p}) \\[2pt]
   \rho_\text{residual} = \begin{cases} \lbrace\rbrace & \text{if } \text{hasCatchAll}(\overline{p}) \\ \rho_\text{try} \setminus \overline{C}_\text{caught} & \text{otherwise} \end{cases}
   \end{array}
@@ -1808,7 +1813,9 @@ $$\dfrac{
 } \;\textsc{T-TryCatch}$$
 </div>
 
-The output environment is $\text{closeBlock}(\Gamma_1, \Gamma)$ — $\Gamma_1$ (the try-block's evolved environment) restricted to the outer scope Γ. Bindings introduced *inside* the try-body — pattern bindings on **let**, locals scoped to the try — are dropped at the construct's end, matching the lexical-scoping rule. The catch-arm output environments $\Gamma_i'$ are not threaded into the construct's output: the conservative choice picks the try-success path's view of Γ, because a catch arm runs only when the try-body thrown before completing, leaving the precise consumption state of outer linears statically indeterminate. Both the try-body and every catch arm carry the P-Block premise, ensuring no linear binding introduced inside either branch leaks past the construct.
+The output environment is $\text{closeBlock}(\Gamma_1, \Gamma)$ — $\Gamma_1$ (the try-block's evolved environment) restricted to the outer scope Γ. Bindings introduced *inside* the try-body — pattern bindings on **let**, locals scoped to the try — are dropped at the construct's end, matching the lexical-scoping rule. The catch-arm output environments $\Gamma_i'$ are not threaded into the construct's output; the output picks the try-success path's view of Γ. This is sound **because** of the catch-arm linear-consumption-equality premise: catch arms are typed from the pre-try Γ (a catch runs only when the try body threw before completing, so the try body's partial consumption is rolled back and the arm sees the same outer linears the try body started with), and every non-divergent catch arm is required to consume exactly the same outer linears as a non-divergent try body. The construct's consumption is therefore determinate — the common set — on every reachable path, so taking the try-success view is not a conservative guess but the unique correct answer. Both the try-body and every catch arm carry the P-Block premise, ensuring no linear binding introduced inside either branch leaks past the construct.
+
+The arm-equality premise reconciles this rule with two other sections that previously disagreed: §"Linear consumption and the env residual"'s `linConsumed` $\text{try}$ clause already asserts "$L_\text{try}$ selected by arm equality / divergence, symmetric with $L_\text{match}$", and the implementation's `src/typecheck/linearity/walk.nx` resets the catch arm to the pre-try linear state and rejects `vars(post-try) ≠ vars(post-catch)` with a `LinearMismatch`. Earlier the formal rule carried no such premise, making it the odd one out against [T-Match](#T-Match) / [T-If](#T-If), which both state the equality explicitly.
 
 Variant-precise residual computation requires two auxiliaries:
 
