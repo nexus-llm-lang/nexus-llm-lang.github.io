@@ -1747,7 +1747,7 @@ Two linearity-related details:
 <div markdown="0">
 $$\dfrac{
   \begin{array}{c}
-  B = \lbrace x \in \text{dom}(\Gamma) \mid \Gamma(x) = (1, \_) \wedge \exists i.\; e_i = \&x \wedge \forall j.\; x \in \text{fv}(e_j) \implies e_j = \&x \rbrace \\[2pt]
+  B = \lbrace y \in \text{dom}(\Gamma) \mid \Gamma(y) = (1, \_) \wedge \exists i.\; e_i = \&y \wedge \forall j.\; y \in \text{fv}(e_j) \implies e_j = \&y \rbrace \\[2pt]
   \Gamma \mid_B~\text{is shared as}~\omega~\text{across}~\Gamma_1, \ldots, \Gamma_k \quad\text{(borrow-only linears coexist; see T-App)} \\[2pt]
   (\Gamma \setminus B) = \Gamma_1 \otimes \ldots \otimes \Gamma_k \\[2pt]
   \text{methods}(x).\ell = (\overline{\ell' : P}) \to \kappa;\, \alpha;\, \beta \\[2pt]
