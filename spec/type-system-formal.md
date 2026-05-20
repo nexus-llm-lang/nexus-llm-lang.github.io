@@ -1157,7 +1157,8 @@ $$\dfrac{
   \Gamma = \Gamma_1 \otimes \Gamma_2 \\[2pt]
   \Gamma_1;\, \rho_q \vdash_e e_1 : \tau_1 \mathbin{!} \rho_1 \qquad
   \Gamma_2;\, \rho_q \vdash_e e_2 : \tau_2 \mathbin{!} \rho_2 \\[2pt]
-  \tau = \text{selectInt}(\tau_1, \tau_2) \qquad
+  \tau_\text{exp} = \text{ambient expected type (}\bot\text{ if none)} \\[2pt]
+  \tau = \text{selectInt}(\tau_1, \tau_2, \tau_\text{exp}) \qquad
   \text{unify}(\tau_1, \tau) \qquad
   \text{unify}(\tau_2, \tau)
   \end{array}
@@ -1174,7 +1175,8 @@ $$\dfrac{
   \Gamma = \Gamma_1 \otimes \Gamma_2 \\[2pt]
   \Gamma_1;\, \rho_q \vdash_e e_1 : \tau_1 \mathbin{!} \rho_1 \qquad
   \Gamma_2;\, \rho_q \vdash_e e_2 : \tau_2 \mathbin{!} \rho_2 \\[2pt]
-  \tau = \text{selectFloat}(\tau_1, \tau_2) \qquad
+  \tau_\text{exp} = \text{ambient expected type (}\bot\text{ if none)} \\[2pt]
+  \tau = \text{selectFloat}(\tau_1, \tau_2, \tau_\text{exp}) \qquad
   \text{unify}(\tau_1, \tau) \qquad
   \text{unify}(\tau_2, \tau)
   \end{array}
@@ -1184,6 +1186,8 @@ $$\dfrac{
 </div>
 
 Unresolved type variables (${?}\alpha$) are treated as `intlit` in `selectInt` and as `floatlit` in `selectFloat`.
+
+**Expected-type narrowing (both-flex cell).** `selectInt` / `selectFloat` take a third argument $\tau_\text{exp}$ — the expected type pushed in from the enclosing checking context (a [T-Let](#T-Let) / [T-Return](#T-Return) annotation, or an argument slot whose declared parameter type is concrete). The 2-D tables above give the $\tau_\text{exp} = \bot$ (no expectation) case. When $\tau_\text{exp}$ is a concrete *same-kind* type it overrides the **both-flex** cell only: $\text{selectInt}(\texttt{intlit}, \texttt{intlit}, \tau_\text{exp}) = \tau_\text{exp}$ if $\tau_\text{exp} \in \lbrace \texttt{i32}, \texttt{i64} \rbrace$ (else `i64`), and symmetrically $\text{selectFloat}(\texttt{floatlit}, \texttt{floatlit}, \tau_\text{exp}) = \tau_\text{exp}$ if $\tau_\text{exp} \in \lbrace \texttt{f32}, \texttt{f64} \rbrace$ (else `f64`). Every cell with an already-concrete operand is unchanged — that operand pins the type and $\tau_\text{exp}$ is consulted only when *both* sides are flex. This is what lets $\textbf{let}~x : \texttt{i32} = 1 + 1$ derive: the annotation `i32` flows in as $\tau_\text{exp}$, so $\tau = \texttt{i32}$ rather than the bare `i64` default, and the enclosing [T-Let](#T-Let) unify against `i32` then succeeds (without it, $\tau = \texttt{i64}$ and $\text{unify}(\texttt{i64}, \texttt{i32})$ would fail though $\textbf{let}~x : \texttt{i32} = 1$ — single literal — is accepted). Mirrors `src/typecheck/infer/operators.nx::select_int_type`'s `expected` parameter and `infer_binop`'s annotation-hint recursion, so a nested $2 * 3 - 1$ under an `i32` annotation also narrows throughout. Unannotated contexts ($\tau_\text{exp} = \bot$) keep the `i64` / `f64` default.
 
 The $\oplus$ in [T-ArithInt](#T-ArithInt) ranges over the integer arithmetic, bitwise, and shift operators: $\oplus \in \lbrace +,\, -,\, *,\, /,\, \%,\, \mathbin{\&},\, \mathbin{\vert},\, \mathbin{\hat{}},\, \ll,\, \gg \rbrace$. Float operators $\oplus_f \in \lbrace +.,\, -.,\, *.,\, /. \rbrace$ use `selectFloat` in [T-ArithFloat](#T-ArithFloat). Integer and float operators are syntactically distinct (`+` vs `+.`) and cannot mix.
 
