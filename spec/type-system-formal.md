@@ -1274,7 +1274,7 @@ $$\dfrac{
   \text{unify}(\tau_2, \texttt{string})
   \end{array}
 }{
-  \Gamma;\, \rho_q \vdash_e e_1 \mathbin{+\\!+} e_2 : \texttt{string} \mathbin{!} \rho_1 \cup \rho_2
+  \Gamma;\, \rho_q \vdash_e e_1 \mathbin{+\!\!+} e_2 : \texttt{string} \mathbin{!} \rho_1 \cup \rho_2
 } \;\textsc{T-Concat}$$
 </div>
 
