@@ -286,13 +286,13 @@ $$\begin{array}{rcl}
 & & \text{where}~\Gamma = \Gamma_h \otimes \Gamma_\text{body},~\Gamma_h~\text{supplies the consumed handlers} \\
 & & \text{(handler bindings whose scheme is linear are consumed by the inject;} \\
 & & \text{the body is typed under its }\otimes\text{-split partition} \\
-& & \text{— matching [T-Inject](#T-Inject) §inject linearity)} \\[6pt]
+& & \text{— matching }\href{#T-Inject}{\text{T-Inject}}\text{ §inject linearity)} \\[6pt]
 \text{linConsumed}(\textbf{while}~e~\textbf{do}~\overline{s}~\textbf{end}, \Gamma) & = & \text{linConsumed}(e, \Gamma) \\
 & & \text{([T-While]'s P-Loop requires the body's linear set to round-trip,} \\
 & & \text{so the body adds nothing to the loop's outer consumption)} \\[6pt]
 \text{linConsumed}(\textbf{try}~\overline{s_t}~\overline{\textbf{catch}~p_i \to \overline{s_i}}~\textbf{end}, \Gamma) & = & \text{linConsumed}(\overline{s_t}, \Gamma) \\
 & & \text{(the construct reports the try body's outer-linear consumption;} \\
-& & \text{[T-TryCatch](#T-TryCatch) types catch arms from the residual} \\
+& & \text{}\href{#T-TryCatch}{\text{T-TryCatch}}\text{ types catch arms from the residual} \\
 & & \Gamma_\text{catch} = \Gamma \setminus\!\!\setminus \overline{s_t}\text{, so a catch arm cannot re-consume what}\\
 & & \text{the try body consumed, and its own residual consumption is not}\\
 & & \text{threaded into this clause — consistent with the try-success output view)}
@@ -389,7 +389,7 @@ $$\begin{array}{rcl}
 \text{bv}(\_) = \text{bv}(n) & = & \emptyset \\
 \text{bv}(c(\overline{\ell : p})) & = & \textstyle\bigcup_i \text{bv}(p_i) \\
 \text{bv}(\lbrace \overline{\ell : p} \rbrace) & = & \textstyle\bigcup_i \text{bv}(p_i) \\
-\text{bv}(p_1 \mathbin{\vert} p_2) & = & \text{bv}(p_1) = \text{bv}(p_2)~\text{(both alternatives must bind the same set; see [P-Or](#pattern-matching))}
+\text{bv}(p_1 \mathbin{\vert} p_2) & = & \text{bv}(p_1) = \text{bv}(p_2)~\text{(both alternatives must bind the same set; see }\href{#pattern-matching}{\text{P-Or}}\text{)}
 \end{array}$$
 </div>
 
@@ -765,7 +765,7 @@ $$\nu_i = \begin{cases} {?}\beta_i & \text{if}~\kappa_i = \texttt{Type},~{?}\bet
 `inst` is used at every variable use site ([T-Var](#T-Var)). When the scheme is monomorphic ($n = 0$), `inst` is the identity and $\tau' = \tau$.
 
 <div markdown="0">
-$$\textbf{P8}~\text{(No implicit generalization).}\quad\text{For any binding}~x :^{q} S~\text{introduced by [T-Let](#T-Let) or [T-LetPat](#T-LetPat)},~S = \text{mono}(\tau)~\text{for some}~\tau.$$
+$$\textbf{P8}~\text{(No implicit generalization).}\quad\text{For any binding}~x :^{q} S~\text{introduced by }\href{#T-Let}{\text{T-Let}}\text{ or }\href{#T-LetPat}{\text{T-LetPat}}\text{},~S = \text{mono}(\tau)~\text{for some}~\tau.$$
 </div>
 
 Polymorphic schemes ($\forall\overline{X{:}\kappa}.\,\tau$ with $\overline{X} \neq \emptyset$) enter Γ only via [T-Let-PolyFn](#T-Let-PolyFn) (top-level **fn** declarations) or [T-Let-Alias](#T-Let-Alias) (bare-variable forwarding).
@@ -1188,7 +1188,7 @@ $$\dfrac{
 
 Unresolved type variables (${?}\alpha$) are treated as `intlit` in `selectInt` and as `floatlit` in `selectFloat`.
 
-The $\oplus$ in [T-ArithInt](#T-ArithInt) ranges over the integer arithmetic, bitwise, and shift operators: $\oplus \in \lbrace +,\, -,\, *,\, /,\, \%,\, \mathbin{\\&},\, \mathbin{\vert},\, \mathbin{\hat{}},\, \ll,\, \gg \rbrace$. Float operators $\oplus_f \in \lbrace +.,\, -.,\, *.,\, /. \rbrace$ use `selectFloat` in [T-ArithFloat](#T-ArithFloat). Integer and float operators are syntactically distinct (`+` vs `+.`) and cannot mix.
+The $\oplus$ in [T-ArithInt](#T-ArithInt) ranges over the integer arithmetic, bitwise, and shift operators: $\oplus \in \lbrace +,\, -,\, *,\, /,\, \%,\, \mathbin{\&},\, \mathbin{\vert},\, \mathbin{\hat{}},\, \ll,\, \gg \rbrace$. Float operators $\oplus_f \in \lbrace +.,\, -.,\, *.,\, /. \rbrace$ use `selectFloat` in [T-ArithFloat](#T-ArithFloat). Integer and float operators are syntactically distinct (`+` vs `+.`) and cannot mix.
 
 <a id="T-Cmp"></a>
 
@@ -1263,7 +1263,7 @@ $$\dfrac{
 } \;\textsc{T-Logic}$$
 </div>
 
-$\boxdot \in \lbrace \mathbin{\\&\\&},\, \mathbin{\vert\vert} \rbrace$. Note that the right-hand row $\rho_2$ joins unconditionally — this is **not** short-circuit-aware effect tracking; if you need pure short-circuit semantics, write the equivalent **if**.
+$\boxdot \in \lbrace \mathbin{\&\&},\, \mathbin{\vert\vert} \rbrace$. Note that the right-hand row $\rho_2$ joins unconditionally — this is **not** short-circuit-aware effect tracking; if you need pure short-circuit semantics, write the equivalent **if**.
 
 <a id="T-Concat"></a>
 
@@ -1351,11 +1351,11 @@ $$\dfrac{
   \Gamma_\text{cap} = \lbrace x :^{1} S \in \Gamma \mid x \in \text{fv}(\overline{s}) \rbrace \\[2pt]
   \Gamma_\omega = \lbrace x :^{\omega} S \in \Gamma \mid x \in \text{fv}(\overline{s}) \rbrace \\[2pt]
   \forall x \in \text{fv}(\overline{s}) \cap \text{dom}(\Gamma).\;\Gamma(x) \neq \mathord{\sim}\sigma \quad\text{(no ref capture)} \\[2pt]
-  \text{distinct}(\overline{\ell}) \quad\text{(parameter labels are distinct — mirrors [D-Cap](#D-Cap) / [T-Record](#T-Record))} \\[2pt]
+  \text{distinct}(\overline{\ell}) \quad\text{(parameter labels are distinct — mirrors }\href{#D-Cap}{\text{D-Cap}}\text{ / }\href{#T-Record}{\text{T-Record}}\text{)} \\[2pt]
   q_i = \begin{cases} 1 & \text{if } \text{linear}(\tau_i) \\ \omega & \text{otherwise} \end{cases} \\[2pt]
   \overline{s}^\dagger = \begin{cases} \overline{s};\,\textbf{return}~() & \text{if}~\tau_r = \texttt{unit}~\wedge~\text{tail}(\overline{s}) \neq \bot \\ \overline{s} & \text{otherwise} \end{cases} \\[2pt]
   \Gamma_\omega,\, \Gamma_\text{cap},\, \overline{x_i :^{q_i} \tau_i};\, \rho_q;\, \tau_r \vdash_s \overline{s}^\dagger : \Gamma' \mathbin{!} \rho_e^\text{body} \\[2pt]
-  \text{unify}(\rho_e^\text{body},\, \rho_e) \quad\text{(declared throw row absorbs body's inferred row; uses [U-Row-Exn](#U-Row-Exn) for variant subsumption)} \\[2pt]
+  \text{unify}(\rho_e^\text{body},\, \rho_e) \quad\text{(declared throw row absorbs body's inferred row; uses }\href{#U-Row-Exn}{\text{U-Row-Exn}}\text{ for variant subsumption)} \\[2pt]
   \tau_r \neq \texttt{unit} \implies \text{tail}(\overline{s}^\dagger) = \bot \quad\text{(non-unit returns require explicit termination)} \\[2pt]
   \forall y :^1 S \in \Gamma'.\;y \in \lbrace\overline{x_i}\rbrace \wedge \text{autoDrop}(S) \quad\text{(P-FnEnd: no leaked linear at body end)} \\[2pt]
   \forall i.\;\text{wfRef}(\tau_i) \qquad \text{wfRef}(\tau_r) \qquad \neg\text{escapesRef}(\tau_r) \quad\text{(gravity rule at param + return slots)} \\[2pt]
@@ -1449,9 +1449,9 @@ $$\dfrac{
   \forall y \in \textstyle\bigcup_j \text{fv}(e_j) \cap \text{dom}(\Gamma).\;\Gamma(y) \neq \mathord{\sim}\sigma \\[2pt]
   \forall j \in J.\;\begin{cases}
     \Gamma_\omega, \Gamma_\text{cap};\, \rho_q \vdash_e e_j : \tau_j \mathbin{!} \lbrace\rbrace \;\wedge\; \text{unify}(\text{strip}(\tau_j),\, (\overline{\pi_j}) \to \kappa_j;\, \alpha_j;\, \beta_j) & \text{if } e_j~\text{has no continuation binder} \\[4pt]
-    \Gamma_\omega, \Gamma_\text{cap};\, \rho_q \vdash_\text{arm} e_j \mathbin{!} \beta_j \quad\text{(via [T-Continuation](#T-Continuation))} & \text{if } e_j = \textbf{fn}~\ell_j(\overline{\pi_j}) \to \kappa_j~\textbf{with}~@k~\textbf{do}~\overline{s}~\textbf{end}
+    \Gamma_\omega, \Gamma_\text{cap};\, \rho_q \vdash_\text{arm} e_j \mathbin{!} \beta_j \quad\text{(via }\href{#T-Continuation}{\text{T-Continuation}}\text{)} & \text{if } e_j = \textbf{fn}~\ell_j(\overline{\pi_j}) \to \kappa_j~\textbf{with}~@k~\textbf{do}~\overline{s}~\textbf{end}
   \end{cases} \\[2pt]
-  \text{(arm absorbs declared method type; \text{strip} peels closure-linearization \%; row premises invoke [U-Row-Exn](#U-Row-Exn) as needed)} \\[2pt]
+  \text{(arm absorbs declared method type; strip peels closure-linearization \%; row premises invoke }\href{#U-Row-Exn}{\text{U-Row-Exn}}\text{ as needed)} \\[2pt]
   \text{wfCap}(\rho_\text{annot}) \quad\text{(handler's optional require annotation references known caps)} \\[2pt]
   \rho_\text{req} = \textstyle\bigcup_j \alpha_j \cup \rho_\text{annot} \\[2pt]
   \tau_h = \textbf{handler}\;x\;\rho_\text{req}
@@ -1651,7 +1651,7 @@ $$\dfrac{
   e = \textbf{fn}~\langle X_1, \ldots, X_n\rangle\,(\overline{\ell : \tau}) \to \tau_r;\, \rho_q;\, \rho_e~\textbf{do}~\overline{s}~\textbf{end} \qquad n \geq 1 \\[2pt]
   \forall i.\;\kappa_i~\text{is the inferred kind of}~X_i~\text{(see §Polymorphism Introduction)} \\[2pt]
   \Gamma,\, \overline{X_i{:}\kappa_i};\, \rho_q' \vdash_e \textbf{fn}~(\overline{\ell : \tau}) \to \tau_r;\, \rho_q;\, \rho_e~\textbf{do}~\overline{s}~\textbf{end} : \tau_\to \mathbin{!} \lbrace\rbrace \\[2pt]
-  \quad\text{(typed as in [T-Lambda](#T-Lambda) with}~\overline{X_i}~\text{treated as rigid type/row symbols in}~\Gamma; \rho_q'~\text{universally quantified per T-Lambda)} \\[2pt]
+  \quad\text{(typed as in }\href{#T-Lambda}{\text{T-Lambda}}\text{ with}~\overline{X_i}~\text{treated as rigid type/row symbols in}~\Gamma; \rho_q'~\text{universally quantified per T-Lambda)} \\[2pt]
   \tau_\to~\text{is not}~\%\sigma \qquad
   S = \forall X_1{:}\kappa_1 \ldots X_n{:}\kappa_n.\,\tau_\to
   \end{array}
@@ -1804,7 +1804,7 @@ $$\dfrac{
   \forall i.\;\Gamma_\text{catch} \vdash p_i : \texttt{Exn} \Rightarrow \Gamma_i \\[2pt]
   \forall i.\;\Gamma_i;\, \rho_q;\, \tau_r \vdash_s \overline{s_i} : \Gamma_i' \mathbin{!} \rho_i \\[2pt]
   \forall i.\;\forall x :^1 S \in \Gamma_i'.\;x \in \text{dom}(\Gamma_\text{catch}) \wedge x :^1 S \in \Gamma_\text{catch} \quad\text{(P-Block: catch-arm, against the residual)} \\[2pt]
-  \forall i, j.\;\text{tail}(\overline{s_i}) \neq \bot \wedge \text{tail}(\overline{s_j}) \neq \bot \implies (\text{linConsumed}(\overline{s_i}, \Gamma_i) \setminus \text{bv}(p_i)) = (\text{linConsumed}(\overline{s_j}, \Gamma_j) \setminus \text{bv}(p_j)) \quad\text{(non-divergent catch arms agree on residual-linear consumption, mirroring [T-Match](#T-Match))} \\[4pt]
+  \forall i, j.\;\text{tail}(\overline{s_i}) \neq \bot \wedge \text{tail}(\overline{s_j}) \neq \bot \implies (\text{linConsumed}(\overline{s_i}, \Gamma_i) \setminus \text{bv}(p_i)) = (\text{linConsumed}(\overline{s_j}, \Gamma_j) \setminus \text{bv}(p_j)) \quad\text{(non-divergent catch arms agree on residual-linear consumption, mirroring }\href{#T-Match}{\text{T-Match}}\text{)} \\[4pt]
   \overline{C}_\text{caught} = \text{caughtVariants}(\overline{p}) \\[2pt]
   \rho_\text{residual} = \begin{cases} \lbrace\rbrace & \text{if } \text{hasCatchAll}(\overline{p}) \\ \rho_\text{try} \setminus \overline{C}_\text{caught} & \text{otherwise} \end{cases}
   \end{array}
@@ -1963,29 +1963,29 @@ where $\theta$ is a substitution of unification variables in $\Gamma'$ accumulat
 The condition $\rho_e' \subseteq \rho_e$ is plain row subset (no row-tail refinement; the reduction never *introduces* new effect variants beyond those the typed source declared).
 
 <div markdown="0">
-$$\textbf{P3}~\text{(Linear consumption)}.\quad \text{For any closing scope discharged by [P-FnEnd](#T-Lambda) (function body), [P-Block](#environment-and-usage)}$$
+$$\textbf{P3}~\text{(Linear consumption)}.\quad \text{For any closing scope discharged by }\href{#T-Lambda}{\text{P-FnEnd}}\text{ (function body), }\href{#environment-and-usage}{\text{P-Block}}\text{}$$
 </div>
 
 <div markdown="0">
-$$\quad \text{(}\textbf{inject}/\textbf{try}\text{), or [P-Loop](#T-While) (}\textbf{while}\text{), every linear binding introduced inside the scope is consumed exactly once before the scope closes.}$$
+$$\quad \text{(}\textbf{inject}/\textbf{try}\text{), or }\href{#T-While}{\text{P-Loop}}\text{ (}\textbf{while}\text{), every linear binding introduced inside the scope is consumed exactly once before the scope closes.}$$
 </div>
 
 <div markdown="0">
-$$\textbf{P4}~\text{(Capability containment)}.\quad \text{For any well-typed function body typed under declared}~\rho_q,~\text{every [T-CapCall](#T-CapCall)}$$
+$$\textbf{P4}~\text{(Capability containment)}.\quad \text{For any well-typed function body typed under declared}~\rho_q,~\text{every }\href{#T-CapCall}{\text{T-CapCall}}\text{}$$
 </div>
 
 <div markdown="0">
-$$\quad \text{and [T-App](#T-App) inside the body satisfies its respective}~\alpha \subseteq \rho_q~\text{premise.}$$
+$$\quad \text{and }\href{#T-App}{\text{T-App}}\text{ inside the body satisfies its respective}~\alpha \subseteq \rho_q~\text{premise.}$$
 </div>
 
 **Capability-row deferral (T-App fragment of P4).** P4 holds *modulo* the capability-row deferral noted at [T-App](#T-App): the self-host typechecker constructs lambda arrows with empty $\rho_q'$ and discards the callee's $\rho_q'$ at call sites (`src/typecheck/infer/call.nx` destructures the arrow as `requires: _`, checking only `throw_row`), so admitting T-App's conclusion does **not** by itself discharge T-App's $\text{unify}(\rho_q, \text{open}(\rho_q'))$ premise. The T-App fragment of P4 is therefore currently established by a downstream pass on MIR, not by typecheck; closing the gap (wiring the $\rho_q$ premise into `check`) is tracked by nexus-mqin.14. T-CapCall's $\alpha \subseteq \rho_q$ / $x \in \rho_q$ premises are unaffected — they are discharged at typecheck — so the T-CapCall fragment of P4 holds intrinsically.
 
 <div markdown="0">
-$$\textbf{P5}~\text{(Exception containment)}.\quad \text{For any well-typed function body typed under declared}~\rho_e,~\text{every [T-Throw-Ctor](#T-Throw-Ctor)}$$
+$$\textbf{P5}~\text{(Exception containment)}.\quad \text{For any well-typed function body typed under declared}~\rho_e,~\text{every }\href{#T-Throw-Ctor}{\text{T-Throw-Ctor}}\text{}$$
 </div>
 
 <div markdown="0">
-$$\quad \text{/ [T-Throw-CtorNullary](#T-Throw-CtorNullary) / [T-Throw-Val](#T-Throw-Val) inside the body produces a row entry that is in}~\rho_e~\text{or subsumed by}~\texttt{Exn} \in \rho_e~\text{via [U-Row-Exn](#U-Row-Exn).}$$
+$$\quad \text{/ }\href{#T-Throw-CtorNullary}{\text{T-Throw-CtorNullary}}\text{ / }\href{#T-Throw-Val}{\text{T-Throw-Val}}\text{ inside the body produces a row entry that is in}~\rho_e~\text{or subsumed by}~\texttt{Exn} \in \rho_e~\text{via }\href{#U-Row-Exn}{\text{U-Row-Exn}}\text{.}$$
 </div>
 
 P1 and P2 are stated relative to an operational semantics — the spec does not give small-step rules in this document; the reduction relation $\longrightarrow$ is defined narratively in [semantics.md](../semantics) and is the obligation of the runtime/codegen pipeline. The other three properties (P3–P5) are *structural*: every `check` pass on a term derives them by induction over the relevant rules' premises, with [P-FnEnd](#T-Lambda)/[P-Block](#environment-and-usage)/[P-Loop](#T-While) discharging P3, the $\subseteq$ premises of T-CapCall (and T-App, *except* its capability-row premise — see the P4 capability-row deferral above) discharging P4, and the row-entry constructions in T-Throw-* discharging P5. In this sense P3–P5 are *intrinsic* to the rules' shape — any conformant implementation that admits a rule's conclusion has already established the corresponding fragment of the property, **with the one carve-out** that T-App's capability-row premise is enforced downstream on MIR rather than at typecheck (nexus-mqin.14), so admitting a T-App conclusion does not yet establish that fragment of P4.
