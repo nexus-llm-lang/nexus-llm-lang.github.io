@@ -158,7 +158,7 @@ $$\rho \setminus S = \begin{cases}
 \end{cases}$$
 </div>
 
-Reading: a catch arm subtracts caught-variant names from the *known* part of the try-body's throws row; whatever the tail ${?}r$ stands for (variants the body could throw that the typer hasn't pinned yet) is forwarded unchanged into the residual. [T-TryCatch](#T-TryCatch)'s $\rho_\text{residual}$ uses exactly this operation; the catch-all carve-out additionally subtracts `Exn`.
+Reading: a catch arm subtracts caught-variant names from the *known* part of the try-body's throws row; whatever the tail ${?}r$ stands for (variants the body could throw that the typer hasn't pinned yet) is forwarded unchanged into the residual. [T-TryCatch](#T-TryCatch)'s $\rho_\text{residual}$ uses exactly this operation in the *selective* (non-catch-all) case; a syntactic catch-all instead collapses the residual to the empty closed row $\lbrace\rbrace$ — it catches every named variant **and** any unresolved tail ${?}r$, so nothing survives via set difference.
 
 **Membership** ($x \in \rho$).
 
@@ -1801,7 +1801,7 @@ $$\dfrac{
   \forall i.\;\Gamma_i;\, \rho_q;\, \tau_r \vdash_s \overline{s_i} : \Gamma_i' \mathbin{!} \rho_i \\[2pt]
   \forall i.\;\forall x :^1 S \in \Gamma_i'.\;x \in \text{dom}(\Gamma) \wedge x :^1 S \in \Gamma \quad\text{(P-Block: catch-arm)} \\[4pt]
   \overline{C}_\text{caught} = \text{caughtVariants}(\overline{p}) \\[2pt]
-  \rho_\text{residual} = \begin{cases} \rho_\text{try} \setminus (\lbrace\texttt{Exn}\rbrace \cup \overline{C}_\text{caught}) & \text{if } \text{hasCatchAll}(\overline{p}) \\ \rho_\text{try} \setminus \overline{C}_\text{caught} & \text{otherwise} \end{cases}
+  \rho_\text{residual} = \begin{cases} \lbrace\rbrace & \text{if } \text{hasCatchAll}(\overline{p}) \\ \rho_\text{try} \setminus \overline{C}_\text{caught} & \text{otherwise} \end{cases}
   \end{array}
 }{
   \Gamma;\, \rho_q;\, \tau_r \vdash_s \textbf{try}~\overline{s_\text{try}}~\textbf{catch}~\overline{p_i \to s_i}~\textbf{end} : \text{closeBlock}(\Gamma_1,\, \Gamma) \mathbin{!} \rho_\text{residual} \cup \textstyle\bigcup_i \rho_i
@@ -1831,7 +1831,7 @@ Group members must be individual exception constructors, not other group names. 
 $$\text{hasCatchAll}(\overline{p}) = \exists i.\;p_i = \_ \;\vee\; p_i~\text{is a variable pattern}~x$$
 </div>
 
-The catch-all condition `hasCatchAll` is *syntactic*: only an explicit wildcard arm $\_ \to \ldots$ or a single-variable arm $e \to \ldots$ (binding the exception value at type `Exn`) clears the catch-all sentinel and any remaining declared-variant entries. A *closed enumeration* of currently-declared `Exn` variants does **not** count — because `Exn` is extensible across modules, a closed enumeration that is exhaustive at the catch site can become inexhaustive when a downstream module declares a new variant, silently corrupting the throws-row of any function whose body contains the now-stale catch. Requiring a syntactic catch-all closes that cross-module hole.
+The catch-all condition `hasCatchAll` is *syntactic*: only an explicit wildcard arm $\_ \to \ldots$ or a single-variable arm $e \to \ldots$ (binding the exception value at type `Exn`) empties the residual row — a catch-all handles every variant **and** any unresolved open tail, so $\rho_\text{residual} = \lbrace\rbrace$ regardless of what $\rho_\text{try}$ contained. (The earlier formula $\rho_\text{try} \setminus (\lbrace\texttt{Exn}\rbrace \cup \overline{C}_\text{caught})$ was wrong: `caughtVariants` returns $\emptyset$ for a wildcard arm, and `Exn` is rarely a literal member of $\rho_\text{try}$, so set difference left the declared variants — e.g. $\lbrace\texttt{NotFound}, \texttt{PermDenied}\rbrace$ — apparently still throwable past a `_` arm that caught them, contradicting this paragraph's own claim.) A *closed enumeration* of currently-declared `Exn` variants does **not** count — because `Exn` is extensible across modules, a closed enumeration that is exhaustive at the catch site can become inexhaustive when a downstream module declares a new variant, silently corrupting the throws-row of any function whose body contains the now-stale catch. Requiring a syntactic catch-all closes that cross-module hole.
 
 Variant subtraction enables partial catches: catching only `NotFound` from a try-row of $\lbrace \texttt{NotFound}, \texttt{PermDenied} \rbrace$ leaves $\lbrace \texttt{PermDenied} \rbrace$ in the residual. Group catches (e.g. $\textbf{catch}~\vert~\texttt{IOError} \to \ldots$) expand to their member set via $\text{members}(G)$ at parse time; the formal rule sees only the expanded constructor list (see [Exception Groups](../exception-groups)). Arms may add new effects $\rho_i$ (if an arm itself throws), which always join the residual row regardless of catch-all status.
 
