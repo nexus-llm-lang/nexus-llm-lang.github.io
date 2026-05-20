@@ -143,7 +143,7 @@ $$\begin{array}{rcl}
 \lbrace \overline{\tau_1} \rbrace \subseteq \lbrace \overline{\tau_2} \rbrace & \Longleftrightarrow & \overline{\tau_1} \subseteq \overline{\tau_2}~\text{(multiset inclusion)} \\
 \lbrace \overline{\tau_1} \rbrace \subseteq \lbrace \overline{\tau_2} \mid {?}r \rbrace & \Longleftrightarrow & \exists \overline{\tau'}.\;{?}r \mathrel{:=} \overline{\tau'},\;\overline{\tau_1} \subseteq \overline{\tau_2} \cup \overline{\tau'} \\
 \lbrace \overline{\tau_1} \mid {?}r \rbrace \subseteq \lbrace \overline{\tau_2} \rbrace & \Longleftrightarrow & {?}r \mathrel{:=} \lbrace\rbrace,\;\overline{\tau_1} \subseteq \overline{\tau_2} \\
-\lbrace \overline{\tau_1} \mid {?}r_1 \rbrace \subseteq \lbrace \overline{\tau_2} \mid {?}r_2 \rbrace & \Longleftrightarrow & \overline{\tau_1} \subseteq \overline{\tau_2} \cup \overline{\tau'},\;{?}r_1 \mathrel{:=} \lbrace \overline{\tau''} \mid {?}r_2 \rbrace
+\lbrace \overline{\tau_1} \mid {?}r_1 \rbrace \subseteq \lbrace \overline{\tau_2} \mid {?}r_2 \rbrace & \Longleftrightarrow & \exists \overline{\tau'}, \overline{\tau''}.\;\overline{\tau_1} \subseteq \overline{\tau_2} \cup \overline{\tau'},\;\overline{\tau''} = \overline{\tau_1} \setminus \overline{\tau_2},\;{?}r_1 \mathrel{:=} \lbrace \overline{\tau''} \mid {?}r_2 \rbrace
 \end{array}$$
 </div>
 
