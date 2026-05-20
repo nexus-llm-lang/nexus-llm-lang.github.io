@@ -291,12 +291,11 @@ $$\begin{array}{rcl}
 & & \text{([T-While]'s P-Loop requires the body's linear set to round-trip,} \\
 & & \text{so the body adds nothing to the loop's outer consumption)} \\[6pt]
 \text{linConsumed}(\textbf{try}~\overline{s_t}~\overline{\textbf{catch}~p_i \to \overline{s_i}}~\textbf{end}, \Gamma) & = & \text{linConsumed}(\overline{s_t}, \Gamma) \\
-& & \text{(the construct consumes the try body's outer linears;} \\
-& & \text{[T-TryCatch](#T-TryCatch)'s catch-arm equality premise forces every} \\
-& & \text{non-divergent catch arm to consume the same set, so the abnormal} \\
-& & \text{path agrees and no separate catch-arm term is added — unlike} \\
-& & L_\text{match}\text{, the catch arm is an alternative to the try body, not}\\
-& & \text{a sequential continuation of it)}
+& & \text{(the construct reports the try body's outer-linear consumption;} \\
+& & \text{[T-TryCatch](#T-TryCatch) types catch arms from the residual} \\
+& & \Gamma_\text{catch} = \Gamma \setminus\!\!\setminus \overline{s_t}\text{, so a catch arm cannot re-consume what}\\
+& & \text{the try body consumed, and its own residual consumption is not}\\
+& & \text{threaded into this clause — consistent with the try-success output view)}
 \end{array}$$
 </div>
 
@@ -1801,10 +1800,11 @@ $$\dfrac{
   \begin{array}{l}
   \Gamma;\, \rho_q;\, \tau_r \vdash_s \overline{s_\text{try}} : \Gamma_1 \mathbin{!} \rho_\text{try} \\[2pt]
   \forall x :^1 S \in \Gamma_1.\;x \in \text{dom}(\Gamma) \wedge x :^1 S \in \Gamma \quad\text{(P-Block: try-body)} \\[4pt]
-  \forall i.\;\Gamma \vdash p_i : \texttt{Exn} \Rightarrow \Gamma_i \quad\text{(catch arms measured from the pre-try}~\Gamma\text{ — a catch runs only when the try body did not complete)} \\[2pt]
+  \Gamma_\text{catch} = \Gamma \setminus\!\!\setminus \overline{s_\text{try}} \quad\text{(catch-arm input is the try-body residual: every outer linear the try body may consume is already gone — runtime consumption is not transactional)} \\[2pt]
+  \forall i.\;\Gamma_\text{catch} \vdash p_i : \texttt{Exn} \Rightarrow \Gamma_i \\[2pt]
   \forall i.\;\Gamma_i;\, \rho_q;\, \tau_r \vdash_s \overline{s_i} : \Gamma_i' \mathbin{!} \rho_i \\[2pt]
-  \forall i.\;\forall x :^1 S \in \Gamma_i'.\;x \in \text{dom}(\Gamma) \wedge x :^1 S \in \Gamma \quad\text{(P-Block: catch-arm)} \\[2pt]
-  \forall i.\;\text{tail}(\overline{s_\text{try}}) \neq \bot \wedge \text{tail}(\overline{s_i}) \neq \bot \implies \text{linConsumed}(\overline{s_\text{try}}, \Gamma) = \text{linConsumed}(\overline{s_i}, \Gamma_i) \setminus \text{bv}(p_i) \quad\text{(catch-arm linear-consumption equality, mirroring [T-Match](#T-Match))} \\[4pt]
+  \forall i.\;\forall x :^1 S \in \Gamma_i'.\;x \in \text{dom}(\Gamma_\text{catch}) \wedge x :^1 S \in \Gamma_\text{catch} \quad\text{(P-Block: catch-arm, against the residual)} \\[2pt]
+  \forall i, j.\;\text{tail}(\overline{s_i}) \neq \bot \wedge \text{tail}(\overline{s_j}) \neq \bot \implies (\text{linConsumed}(\overline{s_i}, \Gamma_i) \setminus \text{bv}(p_i)) = (\text{linConsumed}(\overline{s_j}, \Gamma_j) \setminus \text{bv}(p_j)) \quad\text{(non-divergent catch arms agree on residual-linear consumption, mirroring [T-Match](#T-Match))} \\[4pt]
   \overline{C}_\text{caught} = \text{caughtVariants}(\overline{p}) \\[2pt]
   \rho_\text{residual} = \begin{cases} \lbrace\rbrace & \text{if } \text{hasCatchAll}(\overline{p}) \\ \rho_\text{try} \setminus \overline{C}_\text{caught} & \text{otherwise} \end{cases}
   \end{array}
@@ -1813,9 +1813,11 @@ $$\dfrac{
 } \;\textsc{T-TryCatch}$$
 </div>
 
-The output environment is $\text{closeBlock}(\Gamma_1, \Gamma)$ — $\Gamma_1$ (the try-block's evolved environment) restricted to the outer scope Γ. Bindings introduced *inside* the try-body — pattern bindings on **let**, locals scoped to the try — are dropped at the construct's end, matching the lexical-scoping rule. The catch-arm output environments $\Gamma_i'$ are not threaded into the construct's output; the output picks the try-success path's view of Γ. This is sound **because** of the catch-arm linear-consumption-equality premise: catch arms are typed from the pre-try Γ (a catch runs only when the try body threw before completing, so the try body's partial consumption is rolled back and the arm sees the same outer linears the try body started with), and every non-divergent catch arm is required to consume exactly the same outer linears as a non-divergent try body. The construct's consumption is therefore determinate — the common set — on every reachable path, so taking the try-success view is not a conservative guess but the unique correct answer. Both the try-body and every catch arm carry the P-Block premise, ensuring no linear binding introduced inside either branch leaks past the construct.
+The output environment is $\text{closeBlock}(\Gamma_1, \Gamma)$ — $\Gamma_1$ (the try-block's evolved environment) restricted to the outer scope Γ. Bindings introduced *inside* the try-body — pattern bindings on **let**, locals scoped to the try — are dropped at the construct's end, matching the lexical-scoping rule. The catch-arm output environments $\Gamma_i'$ are not threaded into the construct's output; the output picks the try-success path's view of Γ.
 
-The arm-equality premise reconciles this rule with two other sections that previously disagreed: §"Linear consumption and the env residual"'s `linConsumed` $\text{try}$ clause already asserts "$L_\text{try}$ selected by arm equality / divergence, symmetric with $L_\text{match}$", and the implementation's `src/typecheck/linearity/walk.nx` resets the catch arm to the pre-try linear state and rejects `vars(post-try) ≠ vars(post-catch)` with a `LinearMismatch`. Earlier the formal rule carried no such premise, making it the odd one out against [T-Match](#T-Match) / [T-If](#T-If), which both state the equality explicitly.
+**Catch arms see the try-body residual, not pre-try Γ.** Runtime linear consumption is **not** transactional: when a statement like $\text{consume}(\%a)$ runs and the try body subsequently $\textbf{throw}$s, the resource backing $\%a$ is already freed/moved — the $\textbf{throw}$ does not un-consume it. Typing the catch arm from the pre-try Γ would therefore be unsound: it would present $\%a$ as still available and let the catch arm consume it a second time (a double-free of a linear resource on the only reachable path `consume(%a)` → `throw` → catch `consume(%a)`). The fix is the residual base $\Gamma_\text{catch} = \Gamma \setminus\!\!\setminus \overline{s_\text{try}}$: every outer linear the try body may consume is removed before the catch arm is typed, so a linear consumed on any throwing prefix is unavailable to the catch arm. This is sound-but-conservative — it treats *every* linear the try body consumes (on any path) as gone, even though a throw before the consumption point would in fact leave it live; pinning the precise throwing-prefix set would require per-statement throw-point analysis. Both the try-body and every catch arm carry the P-Block premise (the catch arm's against $\Gamma_\text{catch}$), ensuring no linear binding introduced inside either branch leaks past the construct.
+
+The construct's reported consumption is the try-success view (`linConsumed`'s $\text{try}$ clause is $\text{linConsumed}(\overline{s_\text{try}}, \Gamma)$); the catch arms' own residual consumption is not threaded into the output, consistent with the $\Gamma_i'$-not-threaded choice above. The remaining per-arm premise requires non-divergent catch arms to agree among themselves (mirroring [T-Match](#T-Match) / [T-If](#T-If) arm-equality) so the choice of which catch arm fires does not change the residual consumption. This replaces the earlier *try-body-vs-catch-arm* equality, which was both unsound (it rested on the pre-try-Γ "rollback" fiction) and vacuous whenever the try body ends in `throw` (its $\text{tail} = \bot$ disabled the guard) — the soundness hole tracked by nexus-hjh2. **Spec ↔ impl note:** the self-host typechecker (`src/typecheck/linearity/walk.nx`) still resets the catch arm to the pre-try linear state, so it does **not** yet enforce the residual base; closing that gap is the implementation half of nexus-hjh2.
 
 Variant-precise residual computation requires two auxiliaries:
 
