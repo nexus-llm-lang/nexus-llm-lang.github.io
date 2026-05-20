@@ -543,10 +543,14 @@ $$\dfrac{\neg\text{occurs}(r, \rho)}{\text{unify}({?}r, \rho) = \lbrace {?}r := 
 
 U-RowVar mirrors U-Var for the **row** sort: a bare row unification variable ${?}r$ refines to any row ρ that does not mention $r$. The occurs check uses $\text{fv}(\rho)$ extended to rows by the open-tail clause $\text{fv}(\lbrace \overline{\tau} \mid {?}r \rbrace) = \text{fv}(\overline{\tau}) \cup \lbrace {?}r \rbrace$ from §Free Variables. U-RowVar applies in both argument orders by the symmetry convention (so $\text{unify}(\rho, {?}r)$ is handled too), and covers in particular the $\text{unify}({?}r_1, {?}r_2)$ case where two fresh row variables are aliased. Row variables arise from [inst](#inst) at every use site whose scheme has a kind-$\texttt{Row}$ quantifier, and from $\text{open}(\rho)$ in [T-App](#T-App)'s capability-row premise. The three [U-Row-*](#U-Row-Open-Open) rules below handle the case where *both* operands have entries (i.e. the rows have the shape $\lbrace \overline{\tau} \mid \cdot \rbrace$ with $\overline{\tau} \neq \emptyset$); U-RowVar covers the residual case where one side is a bare row variable. As with U-Var, refining ${?}r$ produces a non-empty substitution that propagates through the derivation.
 
+<a id="U-IntLit"></a>
+
 <div markdown="0">
 $$\dfrac{}{\text{unify}(\texttt{intlit}, \texttt{i32}) = \lbrace\rbrace} \quad
 \dfrac{}{\text{unify}(\texttt{intlit}, \texttt{i64}) = \lbrace\rbrace} \;\textsc{U-IntLit}$$
 </div>
+
+<a id="U-FloatLit"></a>
 
 <div markdown="0">
 $$\dfrac{}{\text{unify}(\texttt{floatlit}, \texttt{f32}) = \lbrace\rbrace} \quad
@@ -679,7 +683,7 @@ $$\dfrac{
 } \;\textsc{U-Expand}$$
 </div>
 
-U-Expand is what makes a value constructed via a record literal (whose inferred type is the structural $\lbrace \overline{\ell : \tau} \rbrace$) unify with a slot annotated using the named-record alias $x\langle\overline{\sigma}\rangle$ — e.g.\ `let p = Pair(fst: 1, snd: 2)` (structural) flowing into `let q: Pair<i64, i64> = p` (named). The premise $\text{fields}(x\langle\overline{\tau}\rangle) = \lbrace \overline{\ell : \sigma} \rbrace$ looks up the record-typedef body $\forall\overline{\alpha}.\,\lbrace \overline{\ell : F} \rbrace$ and substitutes the type arguments to obtain $\sigma_i = F_i[\overline{\alpha := \tau}]$. U-Expand applies **only** to record typedefs; sum typedefs ($\text{type}~x\langle\overline{\alpha}\rangle = c_1 \mid \ldots \mid c_n$) have no structural counterpart and therefore no analogous rule — sum values reach unification already wearing their $x\langle\overline{\tau}\rangle$ skin via the constructor's typing rule [T-Ctor](#T-Ctor). This is also the only place in unification where typedef-unfolding occurs; the related `comparable` predicate (§T-Cmp) has its own `unfold` helper that does the same job for equality-checking but extends to sums.
+U-Expand is what makes a value constructed via a record literal (whose inferred type is the structural $\lbrace \overline{\ell : \tau} \rbrace$) unify with a slot annotated using the named-record alias $x\langle\overline{\sigma}\rangle$ — e.g.\ `let p = Pair(fst: 1, snd: 2)` (structural) flowing into `let q: Pair<i64, i64> = p` (named). The premise $\text{fields}(x\langle\overline{\tau}\rangle) = \lbrace \overline{\ell : \sigma} \rbrace$ looks up the record-typedef body $\forall\overline{\alpha}.\,\lbrace \overline{\ell : F} \rbrace$ and substitutes the type arguments to obtain $\sigma_i = F_i[\overline{\alpha := \tau}]$. U-Expand applies **only** to record typedefs; sum typedefs ($\text{type}~x\langle\overline{\alpha}\rangle = c_1 \mid \ldots \mid c_n$) have no structural counterpart and therefore no analogous rule — sum values reach unification already wearing their $x\langle\overline{\tau}\rangle$ skin via the constructor's typing rule [T-App](#T-App) (constructors are ω-bound schemes installed in Γ by [D-Type-Sum](#D-Type-Sum); a nullary constructor is read via [T-Var](#T-Var)). This is also the only place in unification where typedef-unfolding occurs; the related `comparable` predicate (§T-Cmp) has its own `unfold` helper that does the same job for equality-checking but extends to sums.
 
 <a id="U-ListSugar"></a>
 
@@ -998,32 +1002,23 @@ The redundancy scan operates on the same `spec`/$D$ machinery as exhaustiveness,
 $$\Gamma;\, \rho_q \vdash_e e : \tau \mathbin{!} \rho_e$$
 </div>
 
-All linear bindings in Γ must be consumed by the derivation; $\otimes$ distributes them among sub-expressions. $\rho_e$ ($\mathbin{!}$) is the effect produced. Literal rules carry the side-condition $\text{pure}(\Gamma)$, defined below, to make "no unspent linears at a leaf" a checkable premise rather than a narrative obligation:
+All linear bindings in Γ must be consumed by the derivation; $\otimes$ distributes them among sub-expressions. $\rho_e$ ($\mathbin{!}$) is the effect produced. The literal rule [T-Const](#T-Const) carries the side-condition $\text{pure}(\Gamma)$, defined below, to make "no unspent linears at a leaf" a checkable premise rather than a narrative obligation:
 
 <div markdown="0">
 $$\text{pure}(\Gamma) = \forall x :^{q} S \in \Gamma.\;q = \omega$$
 </div>
 
-<a id="T-IntLit"></a>
-<a id="T-FloatLit"></a>
+<a id="T-Const"></a>
 
 <div markdown="0">
-$$\dfrac{\text{pure}(\Gamma)}{\Gamma;\, \rho_q \vdash_e n : \texttt{intlit} \mathbin{!} \lbrace\rbrace} \;\textsc{T-IntLit}
-\qquad
-\dfrac{\text{pure}(\Gamma)}{\Gamma;\, \rho_q \vdash_e f : \texttt{floatlit} \mathbin{!} \lbrace\rbrace} \;\textsc{T-FloatLit}$$
+$$\dfrac{
+  v \in \lbrace n,\, f,\, b,\, ch,\, s,\, () \rbrace \qquad \text{pure}(\Gamma)
+}{
+  \Gamma;\, \rho_q \vdash_e v : \text{typeof}(v) \mathbin{!} \lbrace\rbrace
+} \;\textsc{T-Const}$$
 </div>
 
-<div markdown="0">
-$$\dfrac{\text{pure}(\Gamma)}{\Gamma;\, \rho_q \vdash_e b : \texttt{bool} \mathbin{!} \lbrace\rbrace} \;\textsc{T-Bool}
-\qquad
-\dfrac{\text{pure}(\Gamma)}{\Gamma;\, \rho_q \vdash_e ch : \texttt{char} \mathbin{!} \lbrace\rbrace} \;\textsc{T-Char}$$
-</div>
-
-<div markdown="0">
-$$\dfrac{\text{pure}(\Gamma)}{\Gamma;\, \rho_q \vdash_e s : \texttt{string} \mathbin{!} \lbrace\rbrace} \;\textsc{T-Str}
-\qquad
-\dfrac{\text{pure}(\Gamma)}{\Gamma;\, \rho_q \vdash_e () : \texttt{unit} \mathbin{!} \lbrace\rbrace} \;\textsc{T-Unit}$$
-</div>
+T-Const types every literal form uniformly through $\text{typeof}(v)$ (§Auxiliary Functions), which maps each surface literal to the type the rule assigns: an integer literal $n$ to `intlit`, a float literal $f$ to `floatlit`, a boolean $b$ to `bool`, a character $ch$ to `char`, a string $s$ to `string`, and $()$ to `unit`. The numeric placeholders `intlit` / `floatlit` are resolved later — at a unification site by [U-IntLit](#U-IntLit) / [U-FloatLit](#U-FloatLit), or at a binding site by `default` ([T-Let](#T-Let)).
 
 <a id="T-Var"></a>
 
