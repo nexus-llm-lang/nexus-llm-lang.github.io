@@ -71,7 +71,7 @@ $$\begin{array}{rcll}
     & \mid & \textbf{handler}\;x\;\rho & \text{handler for cap } x \\[6pt]
 b & ::= & \texttt{i32} \mid \texttt{i64} \mid \texttt{f32} \mid \texttt{f64} \mid {} & \\
   &     & \texttt{bool} \mid \texttt{char} \mid \texttt{string} \mid \texttt{unit} & \\[2pt]
-  & \multicolumn{3}{l}{\text{Surface-level alias: }\texttt{float} \equiv \texttt{f64}~\text{(resolved at parse-time before any rule fires)}} & \\[6pt]
+  & & \text{Surface-level alias: }\texttt{float} \equiv \texttt{f64}~\text{(resolved at parse-time before any rule fires)} & \\[6pt]
 \eta & ::= & X \mid \texttt{Exn} & \text{row entry (an identifier or the catch-all sentinel)} \\[6pt]
 \rho & ::= & \lbrace \overline{\eta} \rbrace \mid \lbrace \overline{\eta} \mid {?}r \rbrace & \text{row (closed / open with row variable } {?}r\text{)}
 \end{array}$$
@@ -962,7 +962,7 @@ Exh-Default applies to head types that lack a complete-constructor surface — e
 $$\text{wild}(p) = (p = \_) \;\vee\; (p~\text{is a variable pattern}~x)$$
 </div>
 
-A variable pattern $x$ binds the scrutinee under name $x$; from an exhaustiveness standpoint it succeeds against every value, exactly like $\_$. Treating $x$ as wildcard-like in the matrix algorithm restores Maranget's invariant that $\textbf{match}~e~\lbrace x \to \ldots \rbrace$ is exhaustive — which is also required for [T-LetPat](#T-LetPat) to admit single-variable patterns.
+A variable pattern $x$ binds the scrutinee under name $x$; from an exhaustiveness standpoint it succeeds against every value, exactly like the wildcard `_`. Treating $x$ as wildcard-like in the matrix algorithm restores Maranget's invariant that $\textbf{match}~e~\lbrace x \to \ldots \rbrace$ is exhaustive — which is also required for [T-LetPat](#T-LetPat) to admit single-variable patterns.
 
 <div markdown="0">
 $$\text{spec}(M, c) = \lbrace\, \text{canonicalize}_c(c(\overline{\ell' : p'})) \mathbin{+\!\!+} \overline{r} \mid (c(\overline{\ell' : p'}) :: \overline{r}) \in M \,\rbrace \;\cup\; \lbrace\, \underbrace{\_,\ldots,\_}_{a(c)} \mathbin{+\!\!+} \overline{r} \mid (p :: \overline{r}) \in M,\; \text{wild}(p) \,\rbrace$$
@@ -984,13 +984,13 @@ $$\textbf{P6}~\text{(Exhaustiveness).}\quad \text{check}(M, [\tau]) = \text{ok} 
 
 <a id="redundancy"></a>
 
-**Redundancy (per-arm usefulness).** Beyond exhaustiveness, the type system rejects programs containing an *unreachable* match arm — a row that no run-time value can reach because earlier rows already cover its shape. Maranget's $\text{useful}(M, \overline{p})$ predicate decides "row $\overline{p}$ matches at least one value not already matched by $M$"; the impl invokes it row-by-row against the prefix matrix and reports the first row for which $\text{useful}(M_{<i}, [p_i]) = \text{false}$.
+**Redundancy (per-arm usefulness).** Beyond exhaustiveness, the type system rejects programs containing an *unreachable* match arm — a row that no run-time value can reach because earlier rows already cover its shape. Maranget's $\text{useful}(M, \overline{p})$ predicate decides "row $\overline{p}$ matches at least one value not already matched by $M$"; the impl invokes it row-by-row against the prefix matrix and reports the first row for which $\text{useful}(M_{\lt i}, [p_i]) = \text{false}$.
 
 <div markdown="0">
 $$\textbf{P6'}~\text{(No redundant arms).}\quad \forall i.\;\text{useful}(\{[p_1], \ldots, [p_{i-1}]\},\, [p_i]) = \text{true}$$
 </div>
 
-The redundancy scan operates on the same `spec`/$D$ machinery as exhaustiveness, but switches the constructor-signature classification at one point: for a head type $\tau_1$, the signature is $\text{SigFinite}(\overline{c_j})$ when $\text{variants}(\tau_1)$ is a *closed* set (records, ordinary user-defined sums, `bool`) and `SigInfinite` otherwise (infinite-domain primitives like `i64`, `string`; and crucially the open-extensible `Exn`). The `Exn` classification matters because [D-Exception](#D-Exception) makes $\text{variants}(\texttt{Exn})$ *grow* across modules — a fresh **exception** declaration in any reachable module extends the set. Treating it as `SigFinite` at any single use site would let `useful`'s "all constructors present in $M$" branch trivially succeed against an empty closed-variant list at the catch-all carve-out site (since the catch-all + main-wrap pass guarantees coverage), classifying every wildcard or variable arm following a concrete-constructor arm as redundant. Instead, `Exn` is surfaced as `SigInfinite`: the wildcard-head usefulness check falls through to $\text{default}(M)$, which preserves wildcard rows, and only genuine duplicates (a second arm whose $\text{spec}(M_{<i}, c)$ specialisation is already covered) are flagged. See `src/typecheck/exhaustive.nx::column_signature` (nexus-t9cl.19). P6' applies symmetrically to [T-Match](#T-Match) and [T-TryCatch](#T-TryCatch).
+The redundancy scan operates on the same `spec`/$D$ machinery as exhaustiveness, but switches the constructor-signature classification at one point: for a head type $\tau_1$, the signature is $\text{SigFinite}(\overline{c_j})$ when $\text{variants}(\tau_1)$ is a *closed* set (records, ordinary user-defined sums, `bool`) and `SigInfinite` otherwise (infinite-domain primitives like `i64`, `string`; and crucially the open-extensible `Exn`). The `Exn` classification matters because [D-Exception](#D-Exception) makes $\text{variants}(\texttt{Exn})$ *grow* across modules — a fresh **exception** declaration in any reachable module extends the set. Treating it as `SigFinite` at any single use site would let `useful`'s "all constructors present in $M$" branch trivially succeed against an empty closed-variant list at the catch-all carve-out site (since the catch-all + main-wrap pass guarantees coverage), classifying every wildcard or variable arm following a concrete-constructor arm as redundant. Instead, `Exn` is surfaced as `SigInfinite`: the wildcard-head usefulness check falls through to $\text{default}(M)$, which preserves wildcard rows, and only genuine duplicates (a second arm whose $\text{spec}(M_{\lt i}, c)$ specialisation is already covered) are flagged. See `src/typecheck/exhaustive.nx::column_signature` (nexus-t9cl.19). P6' applies symmetrically to [T-Match](#T-Match) and [T-TryCatch](#T-TryCatch).
 
 ### Expressions
 
@@ -2218,7 +2218,7 @@ $$\begin{array}{rcl}
 \end{array}$$
 </div>
 
-D-Export is a *wrapper* — for any declaration form $D$ admitted by §3's other rules, $\textbf{export}~D$ runs $D$'s rule unchanged and additionally records the bound name(s) in `exports`. The set-valued `declNames` captures the multi-name forms cleanly: $\textbf{export type Option<T> = None | Some(val: T)}$ exports $\lbrace \texttt{Option}, \texttt{None}, \texttt{Some} \rbrace$; $\textbf{export opaque type Set = Set(id: i64)}$ exports only $\lbrace \texttt{Set} \rbrace$ (the constructor is hidden by [D-Type-Sum-Opaque](#D-Type-Sum-Opaque) and therefore must also be excluded from `exports`). The `exports` set is the **inter-module visibility gate**: when another module imports from this one, only entries whose names are in `exports` enter the importing $\mathcal{T}$ (see [imports.md](../imports)).
+D-Export is a *wrapper* — for any declaration form $D$ admitted by §3's other rules, $\textbf{export}~D$ runs $D$'s rule unchanged and additionally records the bound name(s) in `exports`. The set-valued `declNames` captures the multi-name forms cleanly: `export type Option<T> = None | Some(val: T)` exports $\lbrace \texttt{Option}, \texttt{None}, \texttt{Some} \rbrace$; `export opaque type Set = Set(id: i64)` exports only $\lbrace \texttt{Set} \rbrace$ (the constructor is hidden by [D-Type-Sum-Opaque](#D-Type-Sum-Opaque) and therefore must also be excluded from `exports`). The `exports` set is the **inter-module visibility gate**: when another module imports from this one, only entries whose names are in `exports` enter the importing $\mathcal{T}$ (see [imports.md](../imports)).
 
 D-Type-Sum-Opaque is the one place where module identity directly enters a typing rule: the constructor visibility depends on whether the typing-time module is the defining module $M$. All other rules are module-local in the trivial sense (their effects apply inside whichever module is being type-checked).
 
