@@ -172,7 +172,7 @@ A function with a non-`unit` return type still needs an explicit `return`.
 Every Nexus program must define a `main` function with these constraints:
 
 - **Signature**: `() -> unit`
-- **Effects**: must be empty (all exceptions handled internally)
+- **Effects**: a **closed** `throws` row of named exceptions (empty for a pure `main`); the runtime entry wrapper catches any declared variant, so they need not be handled internally. Open or free-variable rows are rejected.
 - **Requirements**: may include any subset of `{ PermFs, PermNet, PermConsole, PermRandom, PermClock, PermProc, PermEnv }`
 - **Visibility**: must not be `export`
 

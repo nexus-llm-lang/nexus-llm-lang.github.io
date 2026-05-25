@@ -159,7 +159,7 @@ end
 A few rules apply only to `main`:
 
 - Signature: `() -> unit`
-- `throws` must be empty (all exceptions must be handled internally)
+- `throws` must be a **closed** row of named exceptions (or empty); the runtime entry wrapper catches any declared variant, so they need not be handled internally. Open rows and free type variables are rejected.
 - `require` may contain any subset of runtime permissions: `{ PermFs, PermNet, PermConsole, PermRandom, PermClock, PermProc, PermEnv }`
 
 ```nexus
