@@ -253,19 +253,18 @@ $$\begin{array}{rcl}
 \text{linConsumed}(\textbf{handler}~x~[\textbf{require}~\rho]~\textbf{do}~\overline{\ell_j = e_j}~\textbf{end}, \Gamma) & = & \lbrace y \in \textstyle\bigcup_j \text{fv}(e_j) \cap \text{dom}(\Gamma) \mid \Gamma(y) = (1, S) \rbrace \\
 & & \text{(captured linears across all arms are consumed by the handler value)} \\[6pt]
 \text{linConsumed}(\textbf{if}~e_c~\textbf{then}~\overline{s_1}~\textbf{else}~\overline{s_2}, \Gamma) & = & \text{linConsumed}(e_c, \Gamma) \;\uplus\; L_\text{if} \\
-& & \text{where}~\Gamma' = \Gamma \setminus\!\!\setminus e_c,~\text{and}~L_\text{if}~\text{is selected by divergence:} \\
-& & L_\text{if} = \begin{cases} \emptyset & \text{if}~\text{tail}(\overline{s_1}) = \bot \wedge \text{tail}(\overline{s_2}) = \bot \\ \text{linConsumed}(\overline{s_2}, \Gamma') & \text{if}~\text{tail}(\overline{s_1}) = \bot \wedge \text{tail}(\overline{s_2}) \neq \bot \\ \text{linConsumed}(\overline{s_1}, \Gamma') & \text{if}~\text{tail}(\overline{s_2}) = \bot \wedge \text{tail}(\overline{s_1}) \neq \bot \\ \text{linConsumed}(\overline{s_1}, \Gamma') & \text{otherwise (both non-}\bot\text{)} \end{cases} \\
-& & \text{requires (both non-}\bot\text{):}~\text{linConsumed}(\overline{s_1}, \Gamma') = \text{linConsumed}(\overline{s_2}, \Gamma') \\
+& & \text{where}~\Gamma' = \Gamma \setminus\!\!\setminus e_c,~\text{and}~L_\text{if} = \text{linConsumed}(\overline{s_1}, \Gamma')~(= \text{linConsumed}(\overline{s_2}, \Gamma')~\text{by the requires clause}) \\
+& & \text{requires (every arm, divergent or not):}~\text{linConsumed}(\overline{s_1}, \Gamma') = \text{linConsumed}(\overline{s_2}, \Gamma') \\
 \text{linConsumed}(\textbf{match}~e~\lbrace \overline{p_i \to s_i} \rbrace, \Gamma) & = & \text{linConsumed}(e, \Gamma) \;\uplus\; L_\text{match} \\
-& & \text{where}~L_\text{match} = \begin{cases} \emptyset & \text{if}~\forall i.\;\text{tail}(\overline{s_i}) = \bot \\ \text{linConsumed}(\overline{s_k}, \Gamma_k) \setminus \text{bv}(p_k) & \text{otherwise, where}~k~\text{is any}~i~\text{with}~\text{tail}(\overline{s_i}) \neq \bot \end{cases} \\
-& & \text{requires (non-}\bot\text{arms only):} \\
-& & \quad \forall i, j~\text{with}~\text{tail}(\overline{s_i}) \neq \bot \wedge \text{tail}(\overline{s_j}) \neq \bot.\; (\text{linConsumed}(\overline{s_i}, \Gamma_i) \setminus \text{bv}(p_i)) = (\text{linConsumed}(\overline{s_j}, \Gamma_j) \setminus \text{bv}(p_j)) \\
+& & \text{where}~L_\text{match} = \text{linConsumed}(\overline{s_k}, \Gamma_k) \setminus \text{bv}(p_k)~\text{for any}~k~\text{(all arms agree by the requires clause)} \\
+& & \text{requires (every arm, divergent or not):} \\
+& & \quad \forall i, j.\; (\text{linConsumed}(\overline{s_i}, \Gamma_i) \setminus \text{bv}(p_i)) = (\text{linConsumed}(\overline{s_j}, \Gamma_j) \setminus \text{bv}(p_j)) \\
 & & \text{requires}~\forall i.\;\forall y :^1 S \in \Gamma_i \setminus \Gamma.\;y \in \text{linConsumed}(\overline{s_i}, \Gamma_i) \\
 & & \text{(pattern-introduced linear binders consumed within their arm — every arm, divergent or not)}
 \end{array}$$
 </div>
 
-Branch constructs require **arm equality** of the linear-consumption sets *among non-divergent arms only*, projected onto the outer environment. Divergent arms (those with $\text{tail} = \bot$) are excluded from the equality requirement because their control flow never reaches the branch's joinpoint — whichever consumption they made is observably irrelevant to the residual computation. Concretely, an `if cond then consume(%a); return () else throw X end` is well-typed under this rule: the `else` arm diverges, so the equality `linConsumed(then) = linConsumed(else)` does not have to hold; $L_\text{if}$ takes the surviving non-divergent arm's consumption (`{a}` from the `then` arm). This carve-out mirrors the corresponding divergent-arm exclusion already present in T-If's / T-Match's $\text{tail}(\overline{s_i}) \neq \bot \implies \ldots$ premise, and matches `src/typecheck/linearity.nx`'s `if then_diverges then return st_else end` fall-through. Pattern-introduced linear binders are required to be consumed within their arm regardless of divergence — a divergent arm's pattern still binds names that must be observably consumed before the arm's control-flow exit (the same way a divergent arm's body still type-checks its statements).
+Branch constructs require **arm equality** of the linear-consumption sets across **all** arms — divergent or not — projected onto the outer environment. The obligation is *not* lifted for divergent arms: an arm that exits via `throw` / `return` without consuming an outer linear that a sibling arm consumes **leaks** that linear on the divergent path (its suspended computation / resource is never released before control leaves the scope). $L_\text{if}$ / $L_\text{match}$ therefore credit the **common** consumed set — equal across every arm by the `requires` clause — in *all* cases, including the all-divergent one (so a linear consumed on every divergent arm is correctly credited, not re-flagged as a leak). Concretely, `if cond then consume(%a); return () else throw X end` is **not** well-typed: both arms diverge (the `then` arm ends in `return` ⟹ $\text{tail} = \bot$, the `else` arm in `throw` ⟹ $\text{tail} = \bot$), the `then` arm consumes `{a}` while the `else` arm consumes `∅`, and `{a} ≠ ∅` violates arm equality — `%a` leaks on the `else` path. Rewriting the `else` arm to `consume(%a); throw X` (both divergent arms consume `%a`) restores well-typedness with $L_\text{if} = \lbrace a \rbrace$. This uniform obligation extends the existing per-arm pattern-binder rule to outer linears: pattern-introduced linear binders were already required to be consumed within their arm regardless of divergence — a divergent arm's pattern still binds names that must be observably consumed before the arm's control-flow exit (the same way a divergent arm's body still type-checks its statements).
 
 For **match**, the projection step is explicit: each arm's $\Gamma_i$ extends Γ with pattern binders (e.g.\ the $x$ in `Some(%x) ->`), and a linear pattern binder is required to be consumed *within its arm* rather than crossing into the outer-Γ equality check. Equivalently, $\text{linConsumed}(\overline{s_i}, \Gamma_i) \setminus \text{bv}(p_i)$ is the arm's consumption restricted to outer-Γ linears, and the second `requires` clause discharges the per-arm obligation on $\Gamma_i \setminus \Gamma$ (the new bindings introduced by $p_i$). **if** has no pattern binders, so the projection collapses to the plain set equality already shown above.
 
@@ -1311,8 +1310,8 @@ $$\dfrac{
   \text{unify}(\tau_c, \texttt{bool}) \\[2pt]
   \Gamma_b;\, \rho_q;\, \tau_r \vdash_s \overline{s_1} : \Gamma_1' \mathbin{!} \rho_1 \\[2pt]
   \Gamma_b;\, \rho_q;\, \tau_r \vdash_s \overline{s_2} : \Gamma_2' \mathbin{!} \rho_2 \\[2pt]
-  \text{tail}(\overline{s_1}) \neq \bot \wedge \text{tail}(\overline{s_2}) \neq \bot \implies \\[2pt]
-  \quad \text{unify}(\text{tail}(\overline{s_1}), \text{tail}(\overline{s_2})) \;\wedge\; \text{linConsumed}(\overline{s_1}, \Gamma_b) = \text{linConsumed}(\overline{s_2}, \Gamma_b) \\[2pt]
+  \text{tail}(\overline{s_1}) \neq \bot \wedge \text{tail}(\overline{s_2}) \neq \bot \implies \text{unify}(\text{tail}(\overline{s_1}), \text{tail}(\overline{s_2})) \\[2pt]
+  \text{linConsumed}(\overline{s_1}, \Gamma_b) = \text{linConsumed}(\overline{s_2}, \Gamma_b) \quad\text{(every arm, divergent or not)} \\[2pt]
   \sigma = \text{branchType}(\overline{s_1}, \overline{s_2})
   \end{array}
 }{
@@ -1333,8 +1332,8 @@ $$\dfrac{
   \text{strip}(\tau) = \texttt{Exn} \implies \text{hasCatchAll}(\overline{p}) \quad\text{(cross-module-extensible: syntactic catch-all required)} \\[4pt]
   \forall i.\;\Gamma_b \vdash p_i : \text{strip}(\tau) \Rightarrow \Gamma_i \\[2pt]
   \forall i.\;\Gamma_i;\, \rho_q;\, \tau_r \vdash_s \overline{s_i} : \Gamma_i' \mathbin{!} \rho_i \\[4pt]
-  \forall i, j.\;\text{tail}(\overline{s_i}) \neq \bot \wedge \text{tail}(\overline{s_j}) \neq \bot \implies \\[2pt]
-  \quad \text{unify}(\text{tail}(\overline{s_i}), \text{tail}(\overline{s_j})) \;\wedge\; (\text{linConsumed}(\overline{s_i}, \Gamma_i) \setminus \text{bv}(p_i)) = (\text{linConsumed}(\overline{s_j}, \Gamma_j) \setminus \text{bv}(p_j)) \\[2pt]
+  \forall i, j.\;\text{tail}(\overline{s_i}) \neq \bot \wedge \text{tail}(\overline{s_j}) \neq \bot \implies \text{unify}(\text{tail}(\overline{s_i}), \text{tail}(\overline{s_j})) \\[2pt]
+  \forall i, j.\;(\text{linConsumed}(\overline{s_i}, \Gamma_i) \setminus \text{bv}(p_i)) = (\text{linConsumed}(\overline{s_j}, \Gamma_j) \setminus \text{bv}(p_j)) \quad\text{(every arm, divergent or not)} \\[2pt]
   \forall i.\;\forall y :^1 S \in (\Gamma_i \setminus \Gamma_b).\;y \in \text{linConsumed}(\overline{s_i}, \Gamma_i) \quad\text{(pattern-introduced linears consumed within arm)} \\[2pt]
   \sigma = \text{branchType}(\overline{s_1}, \ldots, \overline{s_n})
   \end{array}
