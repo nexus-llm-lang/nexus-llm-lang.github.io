@@ -595,6 +595,20 @@ This contrasts with [U-Record](#U-Record) below, where field names *are* part of
 
 <div markdown="0">
 $$\dfrac{
+  \begin{array}{l}
+  \text{unify}(\tau_1, \tau_2) \qquad
+  \text{unify}(\rho_{q1}, \rho_{q2}) \qquad
+  \text{unify}(\rho_{e1}, \rho_{e2})
+  \end{array}
+}{
+  \text{unify}(@(\tau_1;\, \rho_{q1};\, \rho_{e1}),\; @(\tau_2;\, \rho_{q2};\, \rho_{e2}))
+} \;\textsc{U-Thunk}$$
+</div>
+
+U-Thunk mirrors [U-Arrow](#U-Arrow): the thunk type carries deferred require/throws rows, so unifying two thunk types unifies the result type **and both rows** — not the result alone. Without it, a unifier reverting to the old result-only `@τ` congruence would let $@(\sigma;\, \lbrace\rbrace;\, \lbrace E \rbrace)$ unify $@(\sigma;\, \lbrace\rbrace;\, \lbrace\rbrace)$, silently dropping the deferred throws $\lbrace E \rbrace$ and re-opening the [§Types](#types) force-site hole. [T-Force](#T-Force)'s premise $\text{unify}(\tau, @(\sigma;\, \rho_q';\, \rho_e'))$ and [T-LetThunk](#T-LetThunk)'s annotation case both rely on U-Thunk to bind the row metavariables; the throws row unifies under the same [U-Row-Exn](#U-Row-Exn) variance as an arrow's.
+
+<div markdown="0">
+$$\dfrac{
   \lvert\overline{f_1}\rvert = \lvert\overline{f_2}\rvert \qquad
   \text{sorted by label} \qquad
   \forall i.\;\ell_i^1 = \ell_i^2 \qquad
@@ -1093,17 +1107,18 @@ $$\dfrac{
 
 <div markdown="0">
 $$\text{stripCall}(\tau) = \begin{cases}
-\sigma & \text{if } \tau \in \lbrace \%\sigma,\, @\sigma \rbrace \\
+\sigma & \text{if } \tau = \%\sigma \\
 \tau & \text{otherwise}
 \end{cases}$$
 </div>
 
-`stripCall` peels the outermost closure modality before extracting the arrow shape. It handles two cases:
+`stripCall` peels the outermost closure modality before extracting the arrow shape. The one peeled case:
 
 - $\tau_f = \%\tau_\to$: a lambda that captured linear bindings is given a $\%$ wrapper by T-Lambda's closure-linearization premise ($\tau_\to^\star = \%\tau_\to$ when $\Gamma_\text{cap} \neq \emptyset$). The wrapper records that the closure is one-shot — its linear captures may be consumed at most once. Calling such a closure consumes the $\%\tau_\to$ value (via T-Var with $q = 1$) and delegates to the inner arrow.
-- $\tau_f = @(\tau_\to ;\, \rho_q' ;\, \rho_e')$: a thunk whose **result type** $\tau_\to$ is itself a function. Calling it implicitly forces the thunk first — `stripCall` discards the $@$ wrapper to reach $\tau_\to$. This is *defined* as the explicit composition $(@f)(\overline{\ell:e})$: a [T-Force](#T-Force) step (which surfaces the thunk's deferred rows — its throws $\rho_e'$ flows into $\rho_f$ in the T-App conclusion, its require $\rho_q'$ is discharged against the ambient) followed by application of the forced function $\tau_\to$ (whose *own* require/throws then apply at the call), with the surface syntax allowing the parentheses to be omitted. So a thunk-of-function whose *forcing* may throw, and the resulting function whose *call* may throw, are both tracked. The thunk is consumed by the implicit force ($q = 1$ on the $@(\tau_\to ;\, \rho_q' ;\, \rho_e')$ binding), so a second call to the same $f$ would violate linearity.
 
-`stripCall` deliberately does **not** peel $\&$ or $\mathord{\sim}$: a borrow $\&\tau_\to$ or mutable-ref $\mathord{\sim}\tau_\to$ in the callee position is a type error — the caller does not own the closure and cannot invoke it. Contrast with the pattern-matching `strip`, which peels $\%$ and $\&$ (borrows are valid scrutinees) but not $@$.
+A **thunk-typed** callee is *not* peeled by `stripCall`. Instead $f(\overline{\ell:e})$ where $f : @(\tau_\to ;\, \rho_q' ;\, \rho_e')$ **elaborates** to the explicit composition $(@f)(\overline{\ell:e})$: a [T-Force](#T-Force) step — which surfaces the thunk's deferred throws $\rho_e'$ into the force-site row and discharges its deferred require $\rho_q'$ against the ambient — followed by [T-App](#T-App) on the forced arrow $\tau_\to$ (whose *own* require/throws apply at the call). Routing it through T-Force rather than a `stripCall` shortcut — which would return only $\tau_\to$ and **drop** $\rho_q', \rho_e'$ — is what keeps the implicit-force-call path sound: a thunk-of-function whose *forcing* throws, e.g. `let @f = (if c then throw E else g)` then `f(a: x)`, has its `E` tracked, not lost (the same P5 shape T-Force closes for thunk parameters). The force consumes the one-shot thunk, so a second call to $f$ would violate linearity.
+
+`stripCall` peels **only** $\%$ — not $\&$, $\mathord{\sim}$, or $@$: a borrow $\&\tau_\to$ or mutable-ref $\mathord{\sim}\tau_\to$ callee is a type error (the caller does not own the closure), and a thunk callee is reached via the explicit-force elaboration above rather than by peeling. Contrast with the pattern-matching `strip`, which peels $\%$ and $\&$ (borrows are valid scrutinees) but not $@$.
 
 The caller's argument labels $\overline{\ell}$ are matched against the callee's parameter labels $\overline{\ell'}$ **by name**, not by position. The permutation $\pi$ aligns the caller's $i$-th argument to the callee's $\pi(i)$-th parameter so that $\ell_i = \ell'_{\pi(i)}$; both directions of the label-set equality must hold (every callee parameter is supplied, no extra caller labels). The permutation is unique because labels are required to be distinct on each side (the surface parser rejects duplicate-label calls and parameter lists). This formalises the *order-independent labeled arguments* guarantee from [semantics.md](../semantics) §Label Order Independence — `f(b: 2, a: 1)` and `f(a: 1, b: 2)` produce the same derivation up to $\pi$.
 
@@ -1600,7 +1615,7 @@ $$\text{default}(\tau) = \begin{cases}
 \end{cases}$$
 </div>
 
-`wrapSigil` wraps the inferred type with the modality corresponding to the binding's sigil. It is **idempotent**: wrapping with a modality the type already carries at the outermost level returns the type unchanged, avoiding ill-formed double-wraps like $\%\%\sigma$ or $@@\sigma$ that no surface syntax can describe.
+`wrapSigil` wraps the inferred type with the modality corresponding to the binding's sigil. It is invoked only for $\mu \in \lbrace \varepsilon, \%, \mathord{\sim}, \& \rbrace$ — the lazy sigil $\mu = @$ never reaches it (a `let @x = e` statement is typed by [T-LetThunk](#T-LetThunk), which builds the thunk type $@(\tau;\, \rho_q;\, \rho_e)$ directly, and pattern binders admit no `@` sigil). So `wrapSigil` has no `@` case and never produces a rows-less `@\tau`. It is **idempotent**: wrapping with a modality the type already carries at the outermost level returns the type unchanged, avoiding an ill-formed double-wrap like $\%\%\sigma$ that no surface syntax can describe.
 
 <div markdown="0">
 $$\text{wrapSigil}(\mu, \tau) = \begin{cases}
@@ -1608,8 +1623,6 @@ $$\text{wrapSigil}(\mu, \tau) = \begin{cases}
 \%\tau & \text{if } \mu = \% \\
 \tau & \text{if } \mu = \mathord{\sim} \wedge \tau = \mathord{\sim}\sigma \\
 \mathord{\sim}\tau & \text{if } \mu = \mathord{\sim} \\
-\tau & \text{if } \mu = @ \wedge \tau = @\sigma \\
-@\tau & \text{if } \mu = @ \\
 \tau & \text{if } \mu = \& \wedge \tau = \&\sigma \\
 \&\tau & \text{if } \mu = \& \\
 \tau & \text{if } \mu = \varepsilon
