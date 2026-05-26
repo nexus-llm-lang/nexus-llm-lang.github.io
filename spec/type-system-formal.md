@@ -69,7 +69,7 @@ $$\begin{array}{rcll}
     & \mid & \lbrace \overline{\ell : \tau} \rbrace & \text{record} \\
     & \mid & x\langle \overline{\tau} \rangle & \text{named type (e.g.\ } \texttt{Option}\langle\texttt{i64}\rangle\text{)} \\
     & \mid & [\tau] \mid [\lvert\,\tau\,\rvert] & \text{list / array (array is always linear)} \\
-    & \mid & \%\tau \mid \mathord{\sim}\tau \mid \&\tau \mid @\tau & \text{linear / mutable ref / borrow / lazy} \\
+    & \mid & \%\tau \mid \mathord{\sim}\tau \mid \&\tau \mid @(\tau ;\, \rho_q ;\, \rho_e) & \text{linear / mutable ref / borrow / lazy (thunk: result; deferred require; deferred throws)} \\
     & \mid & \textbf{handler}\;x\;\rho & \text{handler for cap } x \\[6pt]
 b & ::= & \texttt{i32} \mid \texttt{i64} \mid \texttt{f32} \mid \texttt{f64} \mid {} & \\
   &     & \texttt{bool} \mid \texttt{char} \mid \texttt{string} \mid \texttt{unit} & \\[2pt]
@@ -89,7 +89,7 @@ The statement judgment $\Gamma;\,\rho_q;\,\tau_r \vdash_s s : \Gamma' \mathbin{!
 
 ### Modalities
 
-The modality μ determines how a binding is introduced and used. ε (plain) is elided in notation; we write $x$ for $\varepsilon\,x$. The modalities $\%$, $\mathord{\sim}$, $\&$, $@$ correspond to the surface sigils `%x`, `~x`, `&x`, `@x`. A binding with type $\%\tau$, $@\tau$, or $[\lvert\,\tau\,\rvert]$ has usage $q = 1$ (linear); all others have $q = \omega$. $@\tau$ denotes a suspended computation (one-shot thunk). $\mathord{\sim}\tau$ is a mutable reference cell. $\&\tau$ is a read-only borrow.
+The modality μ determines how a binding is introduced and used. ε (plain) is elided in notation; we write $x$ for $\varepsilon\,x$. The modalities $\%$, $\mathord{\sim}$, $\&$, $@$ correspond to the surface sigils `%x`, `~x`, `&x`, `@x`. A binding with type $\%\tau$, $@(\tau ;\, \rho_q ;\, \rho_e)$, or $[\lvert\,\tau\,\rvert]$ has usage $q = 1$ (linear); all others have $q = \omega$. $@(\tau ;\, \rho_q ;\, \rho_e)$ denotes a **one-shot suspended computation** (thunk) that produces a value of *result type* τ and, *when forced*, requires the capabilities $\rho_q$ and may raise the throws row $\rho_e$. The effects are deferred to the force site ([T-Force](#T-Force)), so suspending an effectful computation is itself pure (matching [lazy.md](../lazy)'s "a throw inside a thunk surfaces at the force site"). Crucially $@$ is its **own** constructor — *not* a nullary arrow: $@\tau \neq (\,) \to \tau$, force is **not** a call, and a thunk is forced exactly once after which the binding is just a plain τ. $@$ wraps a result type τ (which may itself be an arrow or another thunk), so $@(\texttt{i64} \to \texttt{i64})$ — a deferred *closure* — is distinct from $@\,\texttt{i64}$. Effect rows ($\rho_q$/$\rho_e$) attach in only two places: on a function arrow, and as the operand of $@$ (the deferred force-signature) — never on a bare value type (see [§Row Types](#row-types)). We write $@\sigma$ as shorthand for $@(\sigma ;\, \rho_q ;\, \rho_e)$ wherever the deferred rows are immaterial — e.g. in the structural predicates `linear` / `autoDrop` / `strip` / `comparable`, which inspect only the outermost $@$ wrapper. $\mathord{\sim}\tau$ is a mutable reference cell. $\&\tau$ is a read-only borrow.
 
 In expression position, $\mu\,x$ with $\mu \in \{\varepsilon, \%, \mathord{\sim}\}$ is a variable reference. $@e$ (force) and $\&x$ (borrow) subsume the $\mu = @$ and $\mu = \&$ cases and are listed as separate expression forms since force applies to any expression.
 
@@ -133,6 +133,8 @@ This is strictly stronger than the general `wfCap` — it disallows user-declare
 **Notation note.** Earlier sections (and most rules below) write row entries as $\overline{\tau}$ rather than the precise $\overline{\eta}$. The two conventions are interchangeable: η is the metavariable for "row entry" (an identifier or the `Exn` sentinel), and the τ notation is a legacy from when rows were typed at the outer-syntactic level. Wherever a row appears, the entries are semantically constrained to be identifiers; type-grammar productions like $\%\sigma$ or $(\overline{\ell:\tau}) \to \tau_r$ never appear as row entries and are rejected by the parser. The wf-checks above pin this constraint formally.
 
 $\rho_e$ (throws row) carries an analogous well-formedness condition: every named entry must be a constructor of `Exn` — i.e.\ in $\text{variants}(\texttt{Exn})$ — or the catch-all sentinel `Exn` itself. We write this as $\text{wfThrow}(\rho_e)$ and rely on the same introduction-site discipline (every **throws** annotation passes through one of the introduction rules).
+
+**Where effect rows may appear.** Require/throws rows are a property of a **computation**, never of a bare value. The grammar admits them in exactly two positions: (i) on a function arrow $(\overline{\ell:\tau}) \to \tau_r ;\, \rho_q ;\, \rho_e$ (the rows belong to the arrow; the result type $\tau_r$ is itself effect-free), and (ii) as the operand of a thunk $@(\tau ;\, \rho_q ;\, \rho_e)$ (the deferred force-signature). A bare $\tau ;\, \rho_q ;\, \rho_e$ is **not** a type: there is no production for it outside those two, so a result-with-effects in a parameter slot, record field, or plain annotation (e.g.\ `x: U throws { E }`) is a parse error. Effect rows are thus **non-recursive** as a standalone form — the τ inside an arrow result or a thunk operand is an ordinary effect-free type, and any nesting of effects happens only by nesting the arrow or $@$ constructors themselves (e.g.\ $@(\,(T \to U) ;\, \lbrace\rbrace ;\, \lbrace E \rbrace\,)$ vs. $@(\,T \to U~\text{throws}~\lbrace E \rbrace ;\, \lbrace\rbrace ;\, \lbrace\rbrace\,)$ — the latter's $E$ binds to the inner arrow's call, the former to the thunk's force). This is why "effects-on-expression" is admitted *only* in the lazy position $@(\cdots)$.
 
 ### Row Set Operations
 
@@ -413,7 +415,8 @@ $$\begin{array}{rcl}
 \text{fv}(\lbrace \overline{\ell : \tau} \rbrace) & = & \textstyle\bigcup_i \text{fv}(\tau_i) \\
 \text{fv}(x\langle \overline{\tau} \rangle) & = & \textstyle\bigcup_i \text{fv}(\tau_i) \\
 \text{fv}([\tau]) = \text{fv}([\lvert\,\tau\,\rvert]) & = & \text{fv}(\tau) \\
-\text{fv}(\%\tau) = \text{fv}(@\tau) = \text{fv}(\&\tau) = \text{fv}(\mathord{\sim}\tau) & = & \text{fv}(\tau) \\
+\text{fv}(\%\tau) = \text{fv}(\&\tau) = \text{fv}(\mathord{\sim}\tau) & = & \text{fv}(\tau) \\
+\text{fv}(@(\tau ;\, \rho_q ;\, \rho_e)) & = & \text{fv}(\tau) \cup \text{fv}(\rho_q) \cup \text{fv}(\rho_e) \quad\text{(the deferred require/throws rows are part of the thunk type)} \\
 \text{fv}(\textbf{handler}\;x\;\rho) & = & \text{fv}(\rho) \\
 \text{fv}(\lbrace \overline{\tau} \rbrace) & = & \textstyle\bigcup_i \text{fv}(\tau_i) \quad\text{(closed row)} \\
 \text{fv}(\lbrace \overline{\tau} \mid r \rbrace) & = & \textstyle\bigcup_i \text{fv}(\tau_i) \quad\text{(open row with rigid tail)} \\
@@ -741,7 +744,8 @@ $$\begin{array}{rcl}
 \text{occurs}_\tau(X, Y) & = & \text{false} \quad (Y \neq X) \\
 \text{occurs}_\tau(X, (\overline{\ell:\tau}) \to \tau_r;\,\rho_q;\,\rho_e) & = & \exists i.\;\text{occurs}_\tau(X, \tau_i) \;\vee\; \text{occurs}_\tau(X, \tau_r) \;\vee \\
 & & \text{occurs}_\tau^\rho(X, \rho_q) \;\vee\; \text{occurs}_\tau^\rho(X, \rho_e) \\
-\text{occurs}_\tau(X, \%\tau) = \text{occurs}_\tau(X, @\tau) = \text{occurs}_\tau(X, \&\tau) & = & \text{occurs}_\tau(X, \tau) \\
+\text{occurs}_\tau(X, \%\tau) = \text{occurs}_\tau(X, \&\tau) & = & \text{occurs}_\tau(X, \tau) \\
+\text{occurs}_\tau(X, @(\tau ;\, \rho_q ;\, \rho_e)) & = & \text{occurs}_\tau(X, \tau) \;\vee\; \text{occurs}_\tau^\rho(X, \rho_q) \;\vee\; \text{occurs}_\tau^\rho(X, \rho_e) \\
 \text{occurs}_\tau(X, [\tau]) = \text{occurs}_\tau(X, [\lvert\tau\rvert]) & = & \text{occurs}_\tau(X, \tau) \\
 \text{occurs}_\tau(X, \lbrace \overline{\ell:\tau} \rbrace) = \text{occurs}_\tau(X, x\langle \overline{\tau} \rangle) & = & \exists i.\;\text{occurs}_\tau(X, \tau_i) \\[6pt]
 \text{occurs}_\tau^\rho(X, \lbrace \overline{\tau} \rbrace) & = & \exists i.\;\text{occurs}_\tau(X, \tau_i) \\
@@ -1097,7 +1101,7 @@ $$\text{stripCall}(\tau) = \begin{cases}
 `stripCall` peels the outermost closure modality before extracting the arrow shape. It handles two cases:
 
 - $\tau_f = \%\tau_\to$: a lambda that captured linear bindings is given a $\%$ wrapper by T-Lambda's closure-linearization premise ($\tau_\to^\star = \%\tau_\to$ when $\Gamma_\text{cap} \neq \emptyset$). The wrapper records that the closure is one-shot — its linear captures may be consumed at most once. Calling such a closure consumes the $\%\tau_\to$ value (via T-Var with $q = 1$) and delegates to the inner arrow.
-- $\tau_f = @\tau_\to$: a thunk whose payload is itself a function. The call implicitly forces the thunk — the $@$ wrapper is discarded and the inner arrow is used directly. This is equivalent to writing $(@f)(\overline{\ell:e})$ with an explicit [T-Force](#T-Force) step, but the surface syntax allows the parentheses to be omitted. The thunk is consumed by the implicit force ($q = 1$ on the $@\tau_\to$ binding), so a second call to the same $f$ would violate linearity.
+- $\tau_f = @(\tau_\to ;\, \rho_q' ;\, \rho_e')$: a thunk whose **result type** $\tau_\to$ is itself a function. Calling it implicitly forces the thunk first — `stripCall` discards the $@$ wrapper to reach $\tau_\to$. This is *defined* as the explicit composition $(@f)(\overline{\ell:e})$: a [T-Force](#T-Force) step (which surfaces the thunk's deferred rows — its throws $\rho_e'$ flows into $\rho_f$ in the T-App conclusion, its require $\rho_q'$ is discharged against the ambient) followed by application of the forced function $\tau_\to$ (whose *own* require/throws then apply at the call), with the surface syntax allowing the parentheses to be omitted. So a thunk-of-function whose *forcing* may throw, and the resulting function whose *call* may throw, are both tracked. The thunk is consumed by the implicit force ($q = 1$ on the $@(\tau_\to ;\, \rho_q' ;\, \rho_e')$ binding), so a second call to the same $f$ would violate linearity.
 
 `stripCall` deliberately does **not** peel $\&$ or $\mathord{\sim}$: a borrow $\&\tau_\to$ or mutable-ref $\mathord{\sim}\tau_\to$ in the callee position is a type error — the caller does not own the closure and cannot invoke it. Contrast with the pattern-matching `strip`, which peels $\%$ and $\&$ (borrows are valid scrutinees) but not $@$.
 
@@ -1537,15 +1541,20 @@ Borrowing does not consume the binding. Only unrestricted bindings can be borrow
 
 <div markdown="0">
 $$\dfrac{
+  \begin{array}{c}
   \Gamma;\, \rho_q \vdash_e e : \tau \mathbin{!} \rho_0 \qquad
-  \sigma~\text{fresh} \qquad
-  \text{unify}(\tau, @\sigma)
+  \sigma, \rho_q', \rho_e'~\text{fresh} \qquad
+  \text{unify}(\tau, @(\sigma ;\, \rho_q' ;\, \rho_e')) \\[2pt]
+  \text{unify}(\rho_q, \text{open}(\rho_q'))
+  \end{array}
 }{
-  \Gamma;\, \rho_q \vdash_e @e : \sigma \mathbin{!} \rho_0
+  \Gamma;\, \rho_q \vdash_e @e : \sigma \mathbin{!} (\rho_0 \cup \rho_e')
 } \;\textsc{T-Force}$$
 </div>
 
-The thunk is consumed by $e$'s sub-derivation: if $e$ is a variable reference $\mu y$, the consumption happens via [T-Var](#T-Var) with $q = 1$ on $y$; if $e$ is a composite expression (e.g. $@x.\textit{thunk\_field}$, $@(\textit{get\_thunk}())$, $@(\textbf{if}~c~\textbf{then}~t_a~\textbf{else}~t_b)$), the consumption occurs at whichever T-Var leaf inside $e$'s derivation tree references the linear thunk-typed binding. This matches `linConsumed`'s recursive clause $\text{linConsumed}(@e,\Gamma) = \text{linConsumed}(e,\Gamma)$: forcing a composite expression inherits its sub-expression's consumption set verbatim. The premise $\text{unify}(\tau, @\sigma)$ uses a fresh σ rather than a structural pattern $\tau = @\sigma$ on the premise's right-hand side, so that an unresolved inference variable $\tau = {?}\alpha$ — common when $e$ is a generic-typed parameter inside a $\forall$-quantified body — is pinned to $@\sigma$ by the unifier instead of leaving the rule inapplicable. The two forms agree on already-concrete $\tau = @\sigma'$ shapes (`unify` succeeds with $\sigma = \sigma'$); they diverge on unresolved τ, where only the unification form makes the derivation tree mechanically constructible.
+The thunk is consumed by $e$'s sub-derivation: if $e$ is a variable reference $\mu y$, the consumption happens via [T-Var](#T-Var) with $q = 1$ on $y$; if $e$ is a composite expression (e.g. $@x.\textit{thunk\_field}$, $@(\textit{get\_thunk}())$, $@(\textbf{if}~c~\textbf{then}~t_a~\textbf{else}~t_b)$), the consumption occurs at whichever T-Var leaf inside $e$'s derivation tree references the linear thunk-typed binding. This matches `linConsumed`'s recursive clause $\text{linConsumed}(@e,\Gamma) = \text{linConsumed}(e,\Gamma)$: forcing a composite expression inherits its sub-expression's consumption set verbatim.
+
+**Deferred-effect surfacing (P5).** Forcing a thunk is the **one-shot** elimination of $@$ — not a function call, but it surfaces the deferred force-signature the same way a call surfaces an arrow's. The forced thunk's type is $@(\sigma ;\, \rho_q' ;\, \rho_e')$, so: the result is σ; the conclusion's throws is $\rho_0 \cup \rho_e'$ — the effect $\rho_0$ of *reaching* the thunk value (typically $\emptyset$ when $e$ is a variable/parameter) **plus** the deferred throws row $\rho_e'$ the suspended computation raises when run; and the deferred require row $\rho_q'$ is discharged against the ambient capabilities by $\text{unify}(\rho_q, \text{open}(\rho_q'))$ — exactly as [T-App](#T-App) discharges a callee's require row — so a thunk whose forcing needs `PermFs` can be forced only under an ambient row that provides it. This closes the [§Types](#types) soundness hole: a function that forces a thunk-typed **parameter** $\textit{th} : @(\sigma ;\, \lbrace\rbrace ;\, \lbrace E \rbrace)$ produces $\sigma \mathbin{!} \lbrace E \rbrace$ at the force site, so it cannot be declared $\textbf{throws}~\lbrace\rbrace$ — the exception is tracked even though no creation site is visible in the forcing function. Force is **not** reducible to T-App (a thunk is not a nullary arrow; it is consumed exactly once), so T-Force is an independent rule that nonetheless reuses T-App's row-discharge shape. The premise $\text{unify}(\tau, @(\sigma ;\, \rho_q' ;\, \rho_e'))$ uses fresh metavariables rather than a structural match, so an unresolved $\tau = {?}\alpha$ (common when $e$ is a generic-typed parameter) is pinned to a thunk type by the unifier ($\rho_q', \rho_e'$ resolve to fresh row variables) instead of leaving the rule inapplicable. The two forms agree on already-concrete thunk types; they diverge on unresolved τ, where only the unification form makes the derivation tree mechanically constructible.
 
 <div markdown="0">
 $$\dfrac{
@@ -1631,7 +1640,24 @@ The annotation case **pins** $\tau'$ to σ before any defaulting could fire: $\t
 
 The side-condition $\mu = \mathord{\sim} \implies \neg\text{linear}(\tau')$ enforces the [types.md](../types#mutable-references-) invariant that mutable-ref cells cannot hold linear values. Without it, $\textbf{let}~\mathord{\sim}r = \textit{make\_linear}()$ would produce a $\mathord{\sim}\%T$ binding; subsequent $\mathord{\sim}r$ deref-reads would each yield a fresh $\%T$ value, duplicating the linear resource. The check applies uniformly to inferred types and to explicit annotations ($\textbf{let}~\mathord{\sim}x : \%T = e$). Linearity is structural, so the check also rejects $\mathord{\sim}$ cells holding records or ADTs with any linear component.
 
-T-Let always produces a monomorphic scheme (see P8). The single exception is the variable-aliasing form below, which fires only when the surface form is exactly $\textbf{let}~x = y$ with no sigil, no annotation, and $y$ bound to a polymorphic scheme. All other shapes — annotated, sigil-prefixed, or with a non-variable RHS — fall through to T-Let.
+T-Let always produces a monomorphic scheme (see P8). The single exception is the variable-aliasing form below, which fires only when the surface form is exactly $\textbf{let}~x = y$ with no sigil, no annotation, and $y$ bound to a polymorphic scheme. All other shapes — annotated, sigil-prefixed, or with a non-variable RHS — fall through to T-Let, **except** the lazy sigil $\mu = @$, which is handled by [T-LetThunk](#T-LetThunk) below (it suspends the bound expression's effect rather than incurring it).
+
+<a id="T-LetThunk"></a>
+
+<div markdown="0">
+$$\dfrac{
+  \begin{array}{l}
+  \rho_q'~\text{fresh} \qquad
+  \Gamma;\, \rho_q' \vdash_e e : \sigma \mathbin{!} \rho_e \qquad
+  \text{wfCap}(\rho_q') \\[2pt]
+  \tau_f = @(\sigma ;\, \rho_q' ;\, \rho_e)
+  \end{array}
+}{
+  \Gamma;\, \rho_q;\, \tau_r \vdash_s \textbf{let}~@x = e : (\Gamma \setminus\!\!\setminus e),\, x :^{1} \text{mono}(\tau_f) \mathbin{!} \lbrace\rbrace
+} \;\textsc{T-LetThunk}$$
+</div>
+
+T-LetThunk specializes T-Let for the `@` sigil. The bound expression $e$ is **suspended**, not evaluated, so its **deferred force-signature is captured into the thunk type** $@(\sigma ;\, \rho_q' ;\, \rho_e)$ and the `let` itself is pure ($\lbrace\rbrace$). Both rows are the suspended computation's *own*: $\rho_e$ is $e$'s throws row (its synthesized output); $\rho_q'$ is $e$'s require row — $e$ is type-checked under a **fresh** require context $\rho_q'$ (not the creating function's ambient $\rho_q$), so its capability uses pin $\rho_q'$ by the usual row unification. Critically the creating context need **not** provide those caps: a cap-free function may build a thunk that does file IO, to be forced later under an ambient that grants `PermFs` — because $e$ runs at *force* time in the *force site's* context, not here. Both rows are discharged at the force site by [T-Force](#T-Force) (throws added to the force-site row; require unified against the force-site ambient). So $\textbf{let}~@t = \textit{thrower}()$ is **pure at the `let`** and the throws/require surface only on force, matching [lazy.md](../lazy)'s create-vs-force split. Linearity is unchanged from T-Let: linear captures in $e$ are consumed at the binding (residual $\Gamma \setminus\!\!\setminus e$) — the thunk owns them, exactly as a closure captures, and since $\text{autoDrop}(@\sigma) = \texttt{false}$ it must be forced to discharge them. Only the *effects* are deferred, not the capture. The thunk is linear ($q = 1$). An explicit annotation $\textbf{let}~@t : @(\sigma'' ;\, \rho_q'' ;\, \rho_e'') = e$ pins $\tau_f$ via unification, as in T-Let's annotation case. (Force is the one-shot elimination — not a call — so this synthesis mirrors how a function body's rows are determined without making the thunk an arrow.)
 
 <a id="T-Let-Alias"></a>
 

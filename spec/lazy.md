@@ -38,6 +38,14 @@ let result = @x                    // forces thunk, evaluates now
 let delayed: @string = @("hello" ++ " world")
 ```
 
+`@T` is shorthand for a thunk with no deferred effects. When the suspended computation requires capabilities or may throw, those rows are written **inside** the thunk — they fire on **force**, not at creation:
+
+```nexus
+let read: @(string require { PermFs } throws { IOError })   // forcing reads a file: needs PermFs, may throw IOError
+```
+
+Effect rows may appear only on a function arrow or inside `@( … )` — never on a bare type (`x: U throws { E }` is a parse error). A row binds to the nearest enclosing arrow, so `@(T -> U throws E)` is a lazy *function that throws when called* (force is pure), whereas `@((T -> U) throws E)` throws when **forced** and yields a plain `T -> U`. Forcing is one-shot: after `@x`, the binding is just a `T`.
+
 ## Parallel Evaluation
 
 `@x` forces a single thunk. To run a *list* of thunks side by side, opt in through the stdlib helper `force_all`. The wrapper ships in the lazy stdlib module.
