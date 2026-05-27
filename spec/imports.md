@@ -15,7 +15,7 @@ A **module** is one `.nx` source file. Each decl lives in one module. We write $
 
 The **defining module** of a decl $D$ is the $M$ with $D \in \text{decls}(M)$. Rule [D-Type-Sum-Opaque](./type-system-formal#D-Type-Sum-Opaque) reads this tag. It is the only rule whose effect on $\mathcal{T}$ turns on which module is in play. Every other rule is module-local. Its conclusion fires inside the current module. It does not branch on module tag.
 
-A module's tag is its **canonical absolute path**. Take the path after any pkg-resolve step. (See [packaging](../packaging); that step lives outside this page.) Two `import` lines in one file that resolve to the same path point at the same module. The importer sees its exports once, no matter how often the `import` repeats.
+A module's tag is its **canonical absolute path**. Take the path after any pkg-resolve step. ([packaging](../packaging) describes that step, which lives outside this page.) Two `import` lines in one file that resolve to the same path point at the same module. The importer sees its exports once, no matter how often the `import` repeats.
 
 ## 2. Import statement forms
 

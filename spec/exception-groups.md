@@ -47,7 +47,7 @@ end
 
 The form is sugar; the compiler expands `| ParseError ->` into one arm per member.
 
-In the formal type system ([type-system-formal.md](../type-system-formal)), throws-rows are variant-precise. Each member of a group becomes its own row entry. A group catch subtracts the union of its member constructors from the row. The formal rules never see the group at all — only the expanded constructor list shows up (see `caughtVariants` and `members` in T-TryCatch).
+In the formal type system ([type-system-formal.md](../type-system-formal)), throws-rows are variant-precise. Each member of a group becomes its own row entry. A group catch subtracts the union of its member constructors from the row. The formal rules never encounter the group at all — only the expanded constructor list shows up (see `caughtVariants` and `members` in T-TryCatch).
 
 ## Catching Specific Exceptions
 
