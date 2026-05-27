@@ -1545,12 +1545,12 @@ $$\dfrac{
 
 <div markdown="0">
 $$\text{stripBorrow}(\tau) = \begin{cases}
-\sigma & \text{if } \tau \in \lbrace \%\sigma,\, @\sigma,\, \&\sigma,\, \mathord{\sim}\sigma \rbrace \\
+\sigma & \text{if } \tau \in \lbrace \%\sigma,\, \&\sigma,\, \mathord{\sim}\sigma \rbrace \\
 \tau & \text{otherwise}
 \end{cases}$$
 </div>
 
-Borrowing does not consume the binding. Only unrestricted bindings can be borrowed. T-Borrow uses `stripBorrow` rather than `strip` because borrowing a $\mathord{\sim}\tau$ binding should yield a $\&\tau$ borrow of the cell's contents, not a nonsensical $\&(\mathord{\sim}\tau)$ borrow-of-cell. The pattern-side `strip` deliberately keeps $\mathord{\sim}$ in place — refs cannot be match scrutinees — so the two operators diverge precisely at the $\mathord{\sim}$ case.
+Borrowing does not consume the binding. Bare T-Borrow only fires on unrestricted bindings ($x :^{\omega}$); the argument-position rule [T-App-BorrowLin](#T-App) reuses `stripBorrow` for linear ($x :^{1}$) targets. T-Borrow uses `stripBorrow` rather than `strip` because borrowing a $\mathord{\sim}\tau$ binding should yield a $\&\tau$ borrow of the cell's contents, not a nonsensical $\&(\mathord{\sim}\tau)$ borrow-of-cell. Like `strip`, `stripBorrow` deliberately does **not** peel $@$ (thunk): a thunk's result does not exist until [T-Force](#T-Force) forces it, so a thunk must be forced before it can be borrowed (write `let v = @x` then $\&v$). Because $\text{stripBorrow}(@\sigma) = @\sigma$, T-App-BorrowLin's $\text{unify}(\text{stripBorrow}(\tau'),\, \sigma)$ degenerates to $\text{unify}(@\sigma,\, \sigma)$ against a $\&\sigma$ parameter slot and fails, rejecting a borrow of an unforced thunk at the type level. The pattern-side `strip` additionally keeps $\mathord{\sim}$ in place — refs cannot be match scrutinees — so the two operators agree on $\%$, $\&$, and $@$, diverging precisely at the $\mathord{\sim}$ case (`stripBorrow` peels it; `strip` keeps it).
 
 <a id="T-Force"></a>
 
