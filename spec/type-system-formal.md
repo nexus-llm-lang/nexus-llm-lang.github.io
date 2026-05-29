@@ -491,6 +491,27 @@ $$\text{wfRef}(\mathord{\sim}\sigma) \;\Longleftrightarrow\; \neg\text{linear}(\
 
 `wfRef` is checked at every **type-formation site** that can introduce a $\mathord{\sim}\sigma$: parameter and return slots of **fn** literals ([T-Lambda](#T-Lambda) / [T-Let-PolyFn](#T-Let-PolyFn)), the signature of a method declared by [D-Cap](#D-Cap), the type annotation of [D-External](#D-External), the field types of [D-Type-Record](#D-Type-Record) / [D-Type-Sum](#D-Type-Sum) / [D-Type-Sum-Opaque](#D-Type-Sum-Opaque), and any explicit type annotation on [T-Let](#T-Let). The check fails fast at declaration time rather than letting a $\mathord{\sim}\%T$-shaped value smuggle in through e.g.\ an externally-declared signature, then duplicate the inner linear via successive $\mathord{\sim}x$ reads. T-Let itself also carries the rule-local guard $\mu = \mathord{\sim} \implies \neg\text{linear}(\tau')$ (see [T-Let](#T-Let)); `wfRef` is the global counterpart that catches the same hazard when the type sneaks in through a non-sigil channel.
 
+<a id="generic-argument-linearity-well-formedness"></a>
+
+**Generic-argument linearity well-formedness (`wfLinArg`).** A user-defined generic type $x\langle\overline{\sigma}\rangle$ stores each type argument in a field reachable by projection ([T-Proj](#T-Proj)) or constructor-pattern destructuring ([P-Ctor](#P-Ctor)). A *persistent* (non-$\%$-wrapped) container admits **repeated** reads of the same field — $\textbf{let}~b = \texttt{Box}(v{:}~\%x);\; b.v;\; b.v$ — so if a type argument $\sigma_i$ were linear, each read would yield a fresh value of type $\sigma_i$, duplicating a single-use resource. The type system therefore rejects $x\langle\overline{\sigma}\rangle$ as malformed when any type argument is linear:
+
+<div markdown="0">
+$$\text{wfLinArg}(x\langle\sigma_1,\dots,\sigma_n\rangle) \;\Longleftrightarrow\; \forall i.\;\neg\text{linear}(\sigma_i)$$
+</div>
+
+**Checked at (introduction sites).** Like [`wfRef`](#mutable-reference-well-formedness), `wfLinArg` is a fail-fast **type-formation** check, enforced at every site that can introduce an $x\langle\overline{\sigma}\rangle$ into the typing context:
+
+| Site | Rule |
+|------|------|
+| Parameter and return slots of a **fn** literal | [T-Lambda](#T-Lambda), [T-Let-PolyFn](#T-Let-PolyFn) |
+| Explicit type annotation on a let-binding | [T-Let](#T-Let) |
+| Field types of a record / sum-type variant | [D-Type-Record](#D-Type-Record), [D-Type-Sum](#D-Type-Sum), [D-Type-Sum-Opaque](#D-Type-Sum-Opaque) |
+| Method signature in a cap declaration | [D-Cap](#D-Cap) |
+
+**Relationship to T-Proj (use-site defense).** Because the structural $\text{linear}$ predicate above recurses into type arguments, $\text{linear}(x\langle\dots,\%\sigma,\dots\rangle) = \text{true}$, so [T-Proj](#T-Proj)'s $\neg\text{linear}(\tau)$ premise *already* rejects the duplicating projection $b.v$ at the use site. `wfLinArg` is the **formation-site counterpart** — exactly as `wfRef` is the formation-site counterpart to [T-Let](#T-Let)'s rule-local $\mu = \mathord{\sim} \implies \neg\text{linear}(\tau')$ guard. It fails fast at declaration time instead of deferring to each use, and rejects the malformed type uniformly even where no projection occurs but the embedded linear could be silently dropped (the container bound, never destructured, then discarded). The rejection is *conservative on instantiation*: a rigid quantifier $\alpha$ is non-linear by the variable convention, so the polymorphic declaration $\texttt{Box}\langle\alpha\rangle$ is well-formed and only a concrete linear *instantiation* such as $\texttt{Box}\langle\%\texttt{i64}\rangle$ is rejected — the same instantiation-site conservatism that makes generic equality inexpressible under [T-Cmp](#T-Cmp).
+
+**Spec ↔ impl.** Realised by `enforce_no_linear_type_args` in `src/typecheck/tcwf.nx` (diagnostic `LinearTypeInGenericArg`, `E2033`), which rejects $\text{TyUserDefined}(x, \overline{\sigma})$ whenever some $\sigma_i$ is structurally linear, at the four type-introduction sites tabled above.
+
 Two additional behaviors are embedded in specific rules rather than stated as standalone inference rules:
 
 - **Weakening** (in [T-App](#T-App)): when a parameter has type $\%\tau$ and the argument has type σ with $\neg\text{linear}(\sigma)$, $\text{unify}(\sigma, \tau)$ is used instead of $\text{unify}(\sigma, \%\tau)$. This applies only to the linear modality $\%$, not to $@$ or other linear-producing forms.
