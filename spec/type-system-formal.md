@@ -519,24 +519,40 @@ Two additional behaviors are embedded in specific rules rather than stated as st
 
 <a id="gravity-rule-occurrence-position"></a>
 
-**Gravity rule — occurrence-position constraint ($\neg\text{escapesRef}$).** `wfRef` above only checks that the *inner* type of a reference cell is non-linear. It does not prevent the reference cell type $\mathord{\sim}\sigma$ itself from appearing in positions that would let the cell outlive its defining function. The *gravity rule* (documented in [types.md §Gravity Rule](../types)) additionally prohibits $\mathord{\sim}\sigma$ from appearing in **escape positions**: the return type of a function, the field type of a heap-allocated record or sum-type variant, and — via closure linearization plus the no-ref-capture premise in [T-Lambda](#T-Lambda) — closure captures. The formal predicate is:
+**Gravity rule — occurrence-position constraint ($\neg\text{escapesRef}$).** `wfRef` above only checks that the *inner* type of a reference cell is non-linear. It does not prevent a borrowing type — the mutable reference $\mathord{\sim}\sigma$ or the read-only borrow $\&\sigma$ — from appearing in positions that would let the borrow outlive its defining function. The *gravity rule* (documented in [types.md §Gravity Rule](../types)) prohibits such types from appearing in **escape positions**: the return type of a function, the field type of a heap-allocated record or sum-type variant, and — via closure linearization plus the no-ref-capture premise in [T-Lambda](#T-Lambda) — closure captures. The constraint is **position-indexed**: a mutable reference $\mathord{\sim}\sigma$ is barred from *every* escape position, whereas a borrow $\&\sigma$ is barred only from **return positions** (a function / cap-method / external return type). Field-stored borrows are a permitted idiom — the compiler's own `CompileCtx`/`CodegenCtx` thread `&HashMap`/`&EffectMap` views through record fields — so $\&\sigma$ is *not* screened at field-declaration sites; its unsound escape via a *returned* record is instead caught by the Form-B owner-locality check (below), not by $\text{escapesRef}$. The formal predicate is parameterized by a flag $b$ (the `escBorrow` flag, set true only at return positions):
 
 <div markdown="0">
-$$\text{escapesRef}(\tau) \;\Longleftrightarrow\; \tau~\text{contains}~\mathord{\sim}\sigma~\text{at any structurally reachable position (record fields, ADT fields, list element type, or as the type itself)}$$
+$$\text{escapesRef}_{b}(\tau) \;\Longleftrightarrow\; \tau~\text{contains}~\mathord{\sim}\sigma~\text{at any structurally reachable position (record fields, ADT fields, list element type, or as the type itself)},\;\;\text{or}\;\;\bigl(b \;\wedge\; \tau~\text{contains}~\&\sigma~\text{at any such position}\bigr)$$
 </div>
 
-The occurrence-position constraint is enforced at the following sites:
+The occurrence-position constraint is enforced at the following sites (the **escBorrow** column states whether a bare $\&\sigma$ is *also* rejected there, beyond $\mathord{\sim}\sigma$):
 
-| Site | Premise added | Rule |
-|------|---------------|------|
-| Return type of a **fn** declaration | $\neg\text{escapesRef}(\tau_r)$ | [T-Lambda](#T-Lambda), [T-Let-PolyFn](#T-Let-PolyFn) |
-| Method return type in a cap declaration | $\neg\text{escapesRef}(\kappa_j)$ | [D-Cap](#D-Cap) |
-| Return type of an external binding | $\neg\text{escapesRef}(\tau_r)$ | [D-External](#D-External) |
-| Field types of a record type declaration | $\forall \ell.\;\neg\text{escapesRef}(\tau_\ell)$ | [D-Type-Record](#D-Type-Record) |
-| Field types of a sum-type variant | $\forall i.\;\neg\text{escapesRef}(\tau_i)$ | [D-Type-Sum](#D-Type-Sum), [D-Type-Sum-Opaque](#D-Type-Sum-Opaque) |
-| Explicit **return** statement | $\neg\text{escapesRef}(\tau)$ | [T-Return](#T-Return) |
+| Site | Premise added | escBorrow | Rule |
+|------|---------------|-----------|------|
+| Return type of a **fn** declaration | $\neg\text{escapesRef}_{b}(\tau_r)$ | $b=\text{true}$ (reject $\&\sigma$) | [T-Lambda](#T-Lambda), [T-Let-PolyFn](#T-Let-PolyFn) |
+| Method return type in a cap declaration | $\neg\text{escapesRef}_{b}(\kappa_j)$ | $b=\text{true}$ | [D-Cap](#D-Cap) |
+| Return type of an external binding | $\neg\text{escapesRef}_{b}(\tau_r)$ | $b=\text{true}$ | [D-External](#D-External) |
+| Field types of a record type declaration | $\forall \ell.\;\neg\text{escapesRef}_{b}(\tau_\ell)$ | $b=\text{false}$ ($\&\sigma$ storable) | [D-Type-Record](#D-Type-Record) |
+| Field types of a sum-type variant | $\forall i.\;\neg\text{escapesRef}_{b}(\tau_i)$ | $b=\text{false}$ | [D-Type-Sum](#D-Type-Sum), [D-Type-Sum-Opaque](#D-Type-Sum-Opaque) |
+| Explicit **return** statement | $\neg\text{escapesRef}_{b}(\tau)$ | $b=\text{false}$ | [T-Return](#T-Return) |
+| Borrow of a frame-local owner laundered into a returned record/ADT field | owner-locality (see below) | — | [§Linearity](#linearity) |
 
-The T-Return premise is the last-resort catch for any reference type that reaches a return statement without being screened at a declaration site. The declaration-site premises (T-Lambda/T-Let-PolyFn return-type annotation, D-Type-Record/D-Type-Sum fields) provide early rejection at the type-formation point and are the primary enforcement layer; T-Return is a secondary guard for annotated-return-type mismatches. Closure capture of $\mathord{\sim}\sigma$ is already ruled out by T-Lambda's `no ref capture` premise ($\forall x \in \text{fv}(\overline{s}) \cap \text{dom}(\Gamma).\;\Gamma(x) \neq \mathord{\sim}\sigma$) and does not require a separate $\neg\text{escapesRef}$ premise there.
+The T-Return premise is the last-resort catch for any reference type that reaches a return statement without being screened at a declaration site. It runs with $b=\text{false}$: a bare $\&\sigma$ reaching a return statement is *not* rejected there, because the inferred type of a returned borrow-pattern-bound variable is transiently $\&\sigma$ even when the function's declared return type is the stripped inner type; the declared-return-type premise (T-Lambda/T-Let-PolyFn, $b=\text{true}$) is the authoritative screen for return-position borrow escapes. The declaration-site premises (T-Lambda/T-Let-PolyFn return-type annotation, D-Type-Record/D-Type-Sum fields) provide early rejection at the type-formation point and are the primary enforcement layer; T-Return is a secondary guard for annotated-return-type mismatches. Closure capture of $\mathord{\sim}\sigma$ is already ruled out by T-Lambda's `no ref capture` premise ($\forall x \in \text{fv}(\overline{s}) \cap \text{dom}(\Gamma).\;\Gamma(x) \neq \mathord{\sim}\sigma$) and does not require a separate $\neg\text{escapesRef}$ premise there.
+
+**Notation.** Elsewhere in this document a rule premise written $\neg\text{escapesRef}(\tau)$ without a subscript abbreviates $\neg\text{escapesRef}_{\text{true}}(\tau)$ at a return slot ([T-Lambda](#T-Lambda), [D-Cap](#D-Cap), [D-External](#D-External)) and $\neg\text{escapesRef}_{\text{false}}(\tau)$ at a field-declaration or return-statement slot ([D-Type-Record](#D-Type-Record), [D-Type-Sum](#D-Type-Sum), [T-Return](#T-Return)); i.e. $\&\sigma$ is rejected only at return slots.
+
+**Form-B borrow-escape — owner-locality (linearity pass).** $\text{escapesRef}$ bars a $\&\sigma$ that appears *syntactically* in a return type, but it cannot see a borrow that is **laundered into a returned record through a call**. For example `mk = fn (c: &BB) -> Wrap do return Wrap(b: c) end` has a borrow-free return type, yet
+
+```
+let %b1 = bb.empty()
+let w = mk(c: &b1)     // w holds a borrow of the local linear %b1
+bb.free(buf: %b1)      // owner freed; w.b now dangles
+return w               // ← escape: a use-after-free witness
+```
+
+lets `w.b` dangle. A *direct* `Wrap(b: &b1)` over a local is already rejected at [T-Borrow](#T-Borrow) (constructor/record fields are not argument position); the residual is the call-laundered path. The linearity pass therefore adds an **owner-locality** check: a function is rejected when a record/ADT value reachable from its returned result transitively carries a borrow of a binding **owned by this frame**. Frame-owned owners are this function's *local* bindings — linear/lazy parameters and `let %x`/`let @x`, plus (per the nexus-quuuq extension) non-linear `let x` locals — but **not** $\&$-typed *parameters*: a borrow parameter views a non-local owner that outlives the frame (the `CompileCtx`-as-parameter idiom), so a borrow of it may legally escape. The check is whole-function and runtime-grounded (the freed-then-returned program is an observable use-after-free).
+
+> **Diagnostic note.** Both the $\&\sigma$-return rejection and the Form-B rejection currently surface through the `E2022` text *"mutable reference (~σ) escapes its defining scope"*, which names $\mathord{\sim}\sigma$ even when the trigger was a $\&\sigma$ borrow. This is a wording/UX nit, not a soundness gap.
 
 ### Unification
 
