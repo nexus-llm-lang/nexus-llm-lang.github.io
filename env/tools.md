@@ -7,15 +7,17 @@ title: Tools
 
 ## Language server (LSP)
 
-Nexus ships a built-in LSP server. The server hooks into editors and supports script-driven analysis.
+Nexus ships an LSP server as a separate `lsp.wasm` binary, built by `./bootstrap.sh` (Stage L). It speaks LSP over stdio and hooks into editors for script-driven analysis. It is not a `nexus` subcommand.
 
 ### Usage
 
+Run the built `lsp.wasm` under wasmtime over stdio:
+
 ```bash
-nexus lsp          # start LSP server (stdio)
+wasmtime lsp.wasm   # start LSP server (stdio)
 ```
 
-Point your editor at `nexus lsp` as the LSP server for `.nx` files.
+Point your editor at `wasmtime lsp.wasm` as the LSP server for `.nx` files.
 
 ### Capabilities
 
@@ -31,10 +33,10 @@ Point your editor at `nexus lsp` as the LSP server for `.nx` files.
 
 ### CLI Diagnostics (LLM-friendly)
 
-For non-interactive use — CI pipelines, LLM tool calls, scripts — `nexus check --format json` writes structured diagnostics to stdout:
+For non-interactive use — CI pipelines, LLM tool calls, scripts — `nexus typecheck --format json` writes structured diagnostics to stdout:
 
 ```bash
-nexus check --format json program.nx
+nexus typecheck --format json program.nx
 ```
 
 The output has `file`, `ok` (bool), `diagnostics` (range, severity, message), and `symbols` (name, kind, range). The exit code is `0` on success and `1` on errors.
@@ -49,7 +51,7 @@ vim.api.nvim_create_autocmd('FileType', {
   callback = function()
     vim.lsp.start({
       name = 'nexus',
-      cmd = { 'nexus', 'lsp' },
+      cmd = { 'wasmtime', 'lsp.wasm' },
       root_dir = vim.fs.root(0, '.git'),
     })
   end,
@@ -58,7 +60,7 @@ vim.api.nvim_create_autocmd('FileType', {
 
 **VS Code (settings.json)**
 
-Use a generic LSP client extension (such as [vscode-languageclient](https://github.com/AstroNvim/astrolsp)) and point it at `nexus lsp` as the server for `.nx` files.
+Use a generic LSP client extension (such as [vscode-languageclient](https://github.com/AstroNvim/astrolsp)) and point it at `wasmtime lsp.wasm` as the server for `.nx` files.
 
 **Helix (languages.toml)**
 
@@ -70,8 +72,8 @@ file-types = ["nx"]
 language-servers = ["nexus-lsp"]
 
 [language-server.nexus-lsp]
-command = "nexus"
-args = ["lsp"]
+command = "wasmtime"
+args = ["lsp.wasm"]
 ```
 
 ---
@@ -114,4 +116,4 @@ Claude Code activates the skill as soon as it touches a `.nx` file.
 
 The skill is a set of Markdown files. Agents that lack Claude Code skill support can read the files straight from `skills/nexus-lang/`.
 
-LLM agents can also call `nexus check --format json` as a tool. They get structured diagnostics without installing the skill.
+LLM agents can also call `nexus typecheck --format json` as a tool. They get structured diagnostics without installing the skill.

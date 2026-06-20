@@ -9,9 +9,9 @@ Nexus compiles to the WebAssembly Component Model and uses WASI for system inter
 
 ## Perm-to-cap mapping
 
-A program's required perms live in `main`'s `require` clause. They end up in a custom WASM section named after the cap list. When `nexus run` invokes `wasmtime`, it maps each present perm to the matching `wasmtime` flag. Only `Fs` and `Net` need a runtime flag today; the rest are checked statically. The underlying WASI calls always succeed under the default `-Scli` profile.
+A program's required perms live in `main`'s `require` clause. When you run a compiled program with `wasmtime`, you pass a flag for each perm that needs a runtime grant. `nexus build --explain-capabilities=wasmtime` prints the exact `wasmtime` command for the program. Only `Fs` and `Net` need a runtime flag today; the rest are checked statically. The underlying WASI calls always succeed under the default `-Scli` profile.
 
-| Nexus Permission | Runtime mapping (`nexus run` → wasmtime) |
+| Nexus Permission | Runtime mapping (wasmtime flag) |
 |---|---|
 | `PermConsole` | (none — stdio is available under `-Scli`) |
 | `PermFs` | `--dir .` (preopen the current directory) |
@@ -31,25 +31,18 @@ The type checker ensures the following:
 1. Any function that calls a cap-requiring cap must itself `require` that cap, or have it satisfied via `inject`.
 2. `main`'s `require` clause is the source of truth for the program's cap surface.
 
-### Binary encoding
+### Reporting required perms
 
-Required perms live in a custom WASM section. The shape:
-
-```
-Section name: "nexus:capabilities"
-Data format:  UTF-8 newline-separated capability names
-Example:      "Fs\nNet\nConsole\n"
-```
-
-So a tool can inspect the required perms without running the binary.
+Caps are not stored in the compiled binary. The compiler enforces them at compile time, and the build can report the program's cap surface via `nexus build --explain-capabilities` (see [Inspect Capabilities](#inspect-capabilities)).
 
 ### Runtime enforcement
 
-The Nexus runtime (via wasmtime) sets up the WASI context from the declared caps:
+Only `Fs` and `Net` have a runtime mapping; you grant them with wasmtime flags when you run the program:
 
-- **Filesystem isolation**: with no `PermFs`, no directory is preopened.
-- **Network isolation**: with no `PermNet`, network interfaces are not inherited.
-- **Console isolation**: with no `PermConsole`, stdio is not inherited.
+- **Filesystem isolation**: `Fs` maps to `--dir .` (preopen the current directory). With no `PermFs`, you preopen no directory.
+- **Network isolation**: `Net` maps to `--wasi inherit-network`. With no `PermNet`, network interfaces are not inherited.
+
+The remaining caps (`Console`, `Random`, `Clock`, `Proc`, `Env`) have no runtime wasmtime mapping — they are enforced by the compile-time static check only.
 
 ## ABI
 
@@ -229,7 +222,9 @@ Return values use the same types as internal functions; strings return as packed
 
 | Section Name | Format | Purpose |
 |---|---|---|
-| `nexus:capabilities` | UTF-8 newline-separated names | Declared runtime permissions |
+| `name` | WASM name section | Function/local names for debugging |
+| `coverage` | Nexus coverage map | Source coverage instrumentation |
+| `nx.bt.symbols` | Nexus symbol table | Backtrace symbol resolution |
 
 #### Funcref Table
 
@@ -245,23 +240,23 @@ When the program uses closures or function references, a funcref table is emitte
 ### Compile to WASM
 
 ```bash
-nexus build program.nx                  # outputs main.wasm
+nexus build program.nx                  # outputs out.wasm
 nexus build program.nx -o output.wasm   # custom output path
 ```
 
-The build step needs `wasm-merge` to bundle deps. Set it via `--wasm-merge PATH` or the `NEXUS_WASM_MERGE` env var.
+The build step bundles deps automatically; `wasm-merge` must be available on `PATH`.
 
 ### Run with wasmtime
 
 ```bash
 # Minimal (no capabilities)
-wasmtime run -Scli main.wasm
+wasmtime run -Scli out.wasm
 
 # With network
-wasmtime run -Scli -Shttp -Sinherit-network -Sallow-ip-name-lookup -Stcp main.wasm
+wasmtime run -Scli -Shttp -Sinherit-network -Sallow-ip-name-lookup -Stcp out.wasm
 
 # With filesystem preopens
-wasmtime run -Scli --dir ./data main.wasm
+wasmtime run -Scli --dir ./data out.wasm
 ```
 
 ### Inspect Capabilities

@@ -226,8 +226,8 @@ fn unwrap_or<T>(opt: Option<T>, default: T) -> T
 fn map<T, U>(opt: Option<T>, f: (val: T) -> U) -> Option<U>
 fn and_then<T, U>(opt: Option<T>, f: (val: T) -> Option<U>) -> Option<U>
 fn or_else<T>(opt: Option<T>, other: Option<T>) -> Option<T>
-fn unwrap<T>(opt: Option<T>) -> T throws { Exn }
-fn expect<T>(opt: Option<T>, msg: string) -> T throws { Exn }
+fn unwrap<T>(opt: Option<T>) -> T throws { RuntimeError }
+fn expect<T>(opt: Option<T>, msg: string) -> T throws { RuntimeError }
 ```
 
 ### List (`std:list`)
@@ -241,14 +241,14 @@ fn empty<T>() -> [ T ]
 fn cons<T>(x: T, xs: [ T ]) -> [ T ]
 fn is_empty<T>(xs: [ T ]) -> bool
 fn length<T>(xs: [ T ]) -> i64
-fn head<T>(xs: [ T ]) -> T
-fn tail<T>(xs: [ T ]) -> [ T ]
-fn last<T>(xs: [ T ]) -> T
+fn head<T>(xs: [ T ]) -> T throws { ListError }
+fn tail<T>(xs: [ T ]) -> [ T ] throws { ListError }
+fn last<T>(xs: [ T ]) -> T throws { ListError }
 fn reverse<T>(xs: [ T ]) -> [ T ]
 fn concat<T>(xs: [ T ], ys: [ T ]) -> [ T ]
 fn take<T>(xs: [ T ], n: i64) -> [ T ]
 fn drop_n<T>(xs: [ T ], n: i64) -> [ T ]
-fn nth<T>(xs: [ T ], n: i64) -> T
+fn nth<T>(xs: [ T ], n: i64) -> T throws { ListError }
 fn contains(xs: [ i64 ], val: i64) -> bool
 fn fold_left<T, U>(xs: [ T ], init: U, f: (acc: U, val: T) -> U) -> U
 fn map<T, U>(xs: [ T ], f: (val: T) -> U) -> [ U ]
@@ -291,19 +291,19 @@ fn free(map: %HashMap) -> unit
 Open-addressed hash map (linear probing) from `string` keys to `i64` values. The impl rides on the runtime collection module. The map is an opaque linear handle and must be `free`d.
 
 ```nexus
-opaque type StringMap = StringMap(id: i64)  // linear -- must be freed
-type Lookup = Found(value: i64) | Missing
+opaque type StringMap<V> = StringMap(id: i64)  // linear -- must be freed
+type Lookup<V> = Found(value: V) | Missing
 
-fn empty() -> %StringMap
-fn put(map: %StringMap, key: string, value: i64) -> %StringMap
-fn get(map: &StringMap, key: string) -> Lookup
-fn get_or(map: &StringMap, key: string, default: i64) -> i64
-fn contains_key(map: &StringMap, key: string) -> bool
-fn remove(map: %StringMap, key: string) -> %StringMap
-fn size(map: &StringMap) -> i64
-fn keys(map: &StringMap) -> [ string ]
-fn values(map: &StringMap) -> [ i64 ]
-fn free(map: %StringMap) -> unit
+fn empty<V>() -> %StringMap<V>
+fn put<V>(map: %StringMap<V>, key: string, value: V) -> %StringMap<V>
+fn get<V>(map: &StringMap<V>, key: string) -> Lookup<V>
+fn get_or<V>(map: &StringMap<V>, key: string, default: V) -> V
+fn contains_key<V>(map: &StringMap<V>, key: string) -> bool
+fn remove<V>(map: %StringMap<V>, key: string) -> %StringMap<V>
+fn size<V>(map: &StringMap<V>) -> i64
+fn keys<V>(map: &StringMap<V>) -> [ string ]
+fn values<V>(map: &StringMap<V>) -> [ V ]
+fn free<V>(map: %StringMap<V>) -> unit
 ```
 
 ### ByteBuffer (`std:bytebuffer`)
@@ -316,7 +316,6 @@ opaque type ByteBuffer = ByteBuffer(id: i64)  // linear -- must be freed
 fn empty() -> %ByteBuffer
 fn push_byte(buf: %ByteBuffer, byte: i64) -> %ByteBuffer
 fn push_i32_le(buf: %ByteBuffer, val: i64) -> %ByteBuffer
-fn push_i64_le(buf: %ByteBuffer, val: i64) -> %ByteBuffer
 fn push_uleb128(buf: %ByteBuffer, val: i64) -> %ByteBuffer
 fn push_sleb128(buf: %ByteBuffer, val: i64) -> %ByteBuffer
 fn push_string(buf: %ByteBuffer, s: string) -> %ByteBuffer
@@ -364,8 +363,8 @@ fn from_bool(val: bool) -> string
 fn from_char(c: char) -> string
 fn from_char_code(code: i64) -> string                // Unicode codepoint → string
 fn parse_i64(s: string) -> Option<i64>
-fn parse_f64(s: string) -> Option<f64>
-fn to_f64(s: string) -> f64 throws { Exn }
+fn parse_f64_checked(s: string) -> Option<f64>
+fn to_f64(s: string) -> f64 throws { InvalidF64 }
 ```
 
 ### Math (`std:math`)
@@ -374,12 +373,10 @@ fn to_f64(s: string) -> f64 throws { Exn }
 fn abs(val: i64) -> i64
 fn max(a: i64, b: i64) -> i64
 fn min(a: i64, b: i64) -> i64
-fn mod_i64(a: i64, b: i64) -> i64
-fn abs_float(val: float) -> float
+fn mod_i64(a: i64, b: i64) -> i64 throws { DivisionByZero }
 fn sqrt(val: float) -> float
 fn floor(val: float) -> float
 fn ceil(val: float) -> float
-fn pow(base: float, exp: float) -> float
 fn i64_to_float(val: i64) -> float
 fn float_to_i64(val: float) -> i64
 fn negate(val: bool) -> bool
@@ -434,10 +431,10 @@ fn hex_digit_value(c: char) -> i64
 Combinators for `@` thunk forcing. The code is pure Nexus, layered over the `lazy_spawn` and `lazy_join` dispatch primitives in the runtime lazy module.
 
 ```nexus
-fn race(a: i64, b: i64) -> i64
-fn cancel(thunk: i64) -> unit
-fn detach(thunk: i64) -> unit
-fn force_all(tasks: [i64]) -> [i64]
+fn race<T>(a: @T, b: @T, drop: (v: T) -> unit) -> T
+fn cancel<T>(a: @T, drop: (v: T) -> unit) -> unit
+fn detach<T>(a: @T, drop: (v: T) -> unit) -> unit
+fn force_all<T, R>(tasks: [ @(T require { |R }) ]) -> [ T ] require { |R }
 ```
 
 | Function | Description |

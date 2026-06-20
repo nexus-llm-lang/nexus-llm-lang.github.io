@@ -9,46 +9,40 @@ title: CLI
 
 | Flag | Description |
 |---|---|
-| `--verbose` / `-v` | Enable structured timing output to stderr |
+| `--verbose` | Enable structured timing output to stderr |
 
 ## Commands
 
-### `nexus run FILE`
+### Running a program
 
-Compile a Nexus source file and run it on wasmtime. Args after `--` are passed straight through to the program.
+There is no `nexus run` subcommand. Compile with `nexus build`, then run the produced WASM directly under `wasmtime`:
 
 ```bash
-nexus run program.nx
-nexus run program.nx -- arg1 arg2
+nexus build program.nx -o out.wasm
+wasmtime run -S threads --dir=. out.wasm
 ```
 
-Sandbox flags pin the run environment so the result is reproducible:
+Determinism hooks are environment variables read at runtime, passed through wasmtime's `--env`:
 
-| Flag | Effect |
+| Env var | Effect |
 |---|---|
-| `--seed N` | Fix the RNG seed for deterministic random output |
-| `--frozen-clock[=EPOCH]` | Pin wall/mono clock to EPOCH (default 0) |
-| `--max-time MS` | Abort the program after MS milliseconds |
-| `--max-mem MB` | Cap wasm linear memory at MB MiB |
-| `--no-net` / `--no-fs` / `--no-clock` / `--no-rand` | Strip the named capability (refuses if the program requires it) |
-| `--tmp-fs DIR` | Rebind the `Fs` root to a scratch directory |
-| `--record FILE` | Record the invocation as a JSONL session |
-| `--replay FILE` | Replay a recorded session and assert byte-equivalence |
+| `NEXUS_SEED=N` | Fix the RNG seed for deterministic random output |
+| `NEXUS_FROZEN_CLOCK=EPOCH_MS` | Pin wall/mono clock to EPOCH (in milliseconds) |
+
+```bash
+wasmtime run --env NEXUS_SEED=1 --env NEXUS_FROZEN_CLOCK=0 -S threads --dir=. out.wasm
+```
 
 ### `nexus build FILE`
 
 Compile to a WASM component:
 
 ```bash
-nexus build program.nx                  # outputs main.wasm
+nexus build program.nx                  # outputs out.wasm
 nexus build program.nx -o output.wasm   # custom output path
 ```
 
-Build needs `wasm-merge` to bundle deps. Set it via:
-- `--wasm-merge PATH` flag
-- `NEXUS_WASM_MERGE` env var
-
-Lookup order: `--wasm-merge` first, then `NEXUS_WASM_MERGE`, then `wasm-merge` on the `PATH`.
+Build bundles deps automatically; `wasm-merge` just needs to be on the `PATH`.
 
 Inspect declared caps:
 
@@ -68,8 +62,8 @@ nexus build program.nx --explain-capabilities-format=json  # machine-readable JS
 Run the built component:
 
 ```bash
-wasmtime run -Scli main.wasm
-wasmtime run -Scli -Shttp -Sinherit-network -Sallow-ip-name-lookup -Stcp main.wasm
+wasmtime run -Scli out.wasm
+wasmtime run -Scli -Shttp -Sinherit-network -Sallow-ip-name-lookup -Stcp out.wasm
 ```
 
 ### `nexus typecheck FILE`
@@ -115,12 +109,12 @@ nexus typecheck --format json program.nx
 
 The exit code is `0` on success and `1` if any error shows up. A warning alone does not fail the run.
 
-### `nexus lsp`
+### LSP server
 
-Start the LSP server over stdio. Any LSP-aware editor can connect: VS Code, Neovim, Emacs, Helix, and so on.
+The LSP server is a separate binary, `lsp.wasm`, built by `./bootstrap.sh` (Stage L). It is not a `nexus` subcommand. Run it over stdio under wasmtime; any LSP-aware editor can connect: VS Code, Neovim, Emacs, Helix, and so on.
 
 ```bash
-nexus lsp
+wasmtime run -Scli lsp.wasm
 ```
 
 Supported LSP features:
@@ -149,23 +143,15 @@ Each input line is parsed, typechecked, and run against a persistent session. A 
 
 ## Capabilities
 
-Caps are **declared in source** with `require { ... }`. They never come from the command line. The compiler embeds the required set into the binary's `nexus:capabilities` custom section, and `nexus run` reads that section. The runner then forwards the matching `wasmtime` flags for the program. There's no opt-in flag list to maintain.
-
-To inspect what a program requires:
+Caps are **declared in source** with `require { ... }`. They never come from the command line. Inspect what a program requires with `nexus caps` or at build time:
 
 ```bash
+nexus caps main program.nx                              # caps required by a symbol
 nexus build program.nx --explain-capabilities           # list capability names
 nexus build program.nx --explain-capabilities=wasmtime  # show wasmtime run command
 nexus build program.nx --explain-capabilities=none      # suppress capability output
 ```
 
-To *strip* caps at run time (the run aborts if the program declared one of the stripped caps):
-
-| Flag | Effect |
-|---|---|
-| `--no-fs` | Refuse `Fs` |
-| `--no-net` | Refuse `Net` |
-| `--no-clock` | Refuse `Clock` |
-| `--no-rand` | Refuse `Random` |
+Most caps (`Console`, `Random`, `Clock`, `Proc`, `Env`) are static, compile-time checks only. At run time, only `Fs` and `Net` are enforced through wasmtime flags: `--dir .` grants `Fs`, `--wasi inherit-network` grants `Net`. Omit the flag to deny the capability.
 
 See [WASM and WASI](../wasm) for the per-cap WASI mapping.

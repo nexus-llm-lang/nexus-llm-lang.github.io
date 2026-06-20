@@ -64,10 +64,10 @@ let result = @{ a, b }
 ## Quick Start
 
 ```bash
-nexus                   # REPL
-nexus run example.nx    # interpret
-nexus build example.nx  # compile to main.wasm
-nexus check example.nx  # typecheck only
+nexus                        # REPL
+nexus build example.nx       # compile to out.wasm
+wasmtime run -S threads --dir=. out.wasm  # run it
+nexus typecheck example.nx   # typecheck only
 ```
 
 ---
