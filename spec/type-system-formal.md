@@ -1766,6 +1766,18 @@ $$\dfrac{
 
 The premise $\tau_r \neq \bot$ rejects $\textbf{return}~e$ outside any enclosing function. The premise $\neg\text{escapesRef}(\tau)$ enforces the gravity rule (see [§Gravity Rule](#gravity-rule-occurrence-position)): a $\mathord{\sim}\sigma$-typed expression may not be returned from a function because that would let the reference cell outlive the stack frame that owns it. The check fires on τ (the inferred type of $e$) rather than on $\tau_r$ (the declared return type) so that it catches cases where $\tau_r$ is a unification variable that happened to unify with a reference type. $\bot$ is the **return-context sentinel** used to mark the absence of an enclosing function (see §1.2 below); a top-level **let** via [D-Let-Top](#D-Let-Top) types its body under $\tau_r = \bot$, so a **return** statement at module scope is statically rejected.
 
+<a id="T-ExprStmt"></a>
+
+<div markdown="0">
+$$\dfrac{
+  \Gamma;\, \rho_q \vdash_e e : \tau \mathbin{!} \rho_0
+}{
+  \Gamma;\, \rho_q;\, \tau_r \vdash_s e : \Gamma \mathbin{!} \rho_0
+} \;\textsc{T-ExprStmt}$$
+</div>
+
+T-ExprStmt lifts an expression $e$ used as a statement into the statement judgment. The output environment is Γ and the effect row is the expression's. The value's type τ is not part of the statement judgment; it reaches the enclosing construct through $\text{tail}(\overline{s})$, whose "expression of type τ" case applies when $e$ is the last statement.
+
 <a id="T-Assign"></a>
 
 <div markdown="0">
