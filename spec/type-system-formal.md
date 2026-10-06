@@ -1607,6 +1607,35 @@ The thunk is consumed by $e$'s sub-derivation: if $e$ is a variable reference $\
 
 **Deferred-effect surfacing (P5).** Forcing a thunk is the **one-shot** elimination of $@$ — not a function call, but it surfaces the deferred force-signature the same way a call surfaces an arrow's. The forced thunk's type is $@(\sigma ;\, \rho_q' ;\, \rho_e')$, so: the result is σ; the conclusion's throws is $\rho_0 \cup \rho_e'$ — the effect $\rho_0$ of *reaching* the thunk value (typically $\emptyset$ when $e$ is a variable/parameter) **plus** the deferred throws row $\rho_e'$ the suspended computation raises when run; and the deferred require row $\rho_q'$ is discharged against the ambient capabilities by $\text{unify}(\rho_q, \text{open}(\rho_q'))$ — exactly as [T-App](#T-App) discharges a callee's require row — so a thunk whose forcing needs `PermFs` can be forced only under an ambient row that provides it. This closes the [§Types](#types) soundness hole: a function that forces a thunk-typed **parameter** $\textit{th} : @(\sigma ;\, \lbrace\rbrace ;\, \lbrace E \rbrace)$ produces $\sigma \mathbin{!} \lbrace E \rbrace$ at the force site, so it cannot be declared $\textbf{throws}~\lbrace\rbrace$ — the exception is tracked even though no creation site is visible in the forcing function. Force is **not** reducible to T-App (a thunk is not a nullary arrow; it is consumed exactly once), so T-Force is an independent rule that nonetheless reuses T-App's row-discharge shape. The premise $\text{unify}(\tau, @(\sigma ;\, \rho_q' ;\, \rho_e'))$ uses fresh metavariables rather than a structural match, so an unresolved $\tau = {?}\alpha$ (common when $e$ is a generic-typed parameter) is pinned to a thunk type by the unifier ($\rho_q', \rho_e'$ resolve to fresh row variables) instead of leaving the rule inapplicable. The two forms agree on already-concrete thunk types; they diverge on unresolved τ, where only the unification form makes the derivation tree mechanically constructible.
 
+<a id="T-Force-Container"></a>
+
+<div markdown="0">
+$$\dfrac{
+  \begin{array}{c}
+  \Gamma;\, \rho_q \vdash_e e : \tau \mathbin{!} \rho_0 \qquad
+  \tau~\text{is not a thunk} \qquad
+  \text{thunks}(\tau) = \overline{@(\sigma_j ;\, \rho_{q,j}' ;\, \rho_{e,j}')} \neq \cdot \\[2pt]
+  \forall j.\;\rho_{q,j}' \subseteq \rho_q \qquad
+  \tau' = \text{forced}(\tau)
+  \end{array}
+}{
+  \Gamma;\, \rho_q \vdash_e @e : \tau' \mathbin{!} \bigl(\rho_0 \cup \textstyle\bigcup_j \rho_{e,j}'\bigr)
+} \;\textsc{T-Force-Container}$$
+</div>
+
+When the operand is a **container of thunks** rather than a thunk, $@e$ forces every thunk one level deep and yields the container of forced values. $\text{thunks}(\tau)$ lists the thunk components and $\text{forced}(\tau)$ replaces each with its value type:
+
+| $\tau$ | $\text{thunks}(\tau)$ | $\text{forced}(\tau)$ |
+|---|---|---|
+| $[@\sigma]$ | $@\sigma$ | $[\sigma]$ |
+| $[\lvert @\sigma \rvert]$ | $@\sigma$ | $[\lvert \sigma \rvert]$ |
+| $\lbrace \overline{\ell_i : \tau_i} \rbrace$ | the $\tau_i$ that are thunks | each thunk field $@\sigma_i \mapsto \sigma_i$; other fields unchanged |
+| $D\langle\overline{\tau_k}\rangle$ (enum) | the $\tau_k$ that are thunks | $D\langle\overline{\tau_k'}\rangle$ with each thunk argument $@\sigma_k \mapsto \sigma_k$ |
+
+For an enum $D\langle\overline{X_k}\rangle$, a type parameter $X_k$ instantiated with a thunk may occur in a constructor field only as that field's whole type; a field such as $[X_k]$ is rejected, since forcing reaches one level only. At runtime each constructor is rebuilt with the fields of type $X_k$ forced. Nested containers are not traversed: $@[[@\sigma]]$ is ill-typed.
+
+The container is consumed like any operand of $@$. Every thunk component is forced exactly once before $@e$ yields; the order among them is unspecified. The current runtime forces them sequentially (elements in index order, record fields in label order, constructor fields in declaration order), and an exception raised by one propagates out of $@e$.
+
 <div markdown="0">
 $$\dfrac{
   \Gamma = \Gamma_1 \otimes \ldots \otimes \Gamma_k \qquad

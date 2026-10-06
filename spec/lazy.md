@@ -48,7 +48,19 @@ Effect rows may appear only on a function arrow or inside `@( … )` — never o
 
 ## Parallel Evaluation
 
-`@x` forces a single thunk. To run a *list* of thunks side by side, opt in through the stdlib helper `force_all`. The wrapper ships in the lazy stdlib module.
+`@x` forces a single thunk. Applied to a container of thunks — a list, an array, a record, or an enum value whose type arguments are thunks — `@` forces every thunk in it, one level deep, and yields the container of values (like `Promise.all`; see [T-Force-Container](./type-system-formal#T-Force-Container)):
+
+```nexus
+let @a = compute_a()
+let @b = compute_b()
+let both = @{ x: a, y: b }   // { x: a's value, y: b's value }
+
+let @c = compute_a()
+let @d = compute_b()
+let xs = @[ c, d ]           // [c's value, d's value]
+```
+
+The stdlib helper `force_all` does the same for a list.
 
 ```nexus
 let @p1 = compute1()
