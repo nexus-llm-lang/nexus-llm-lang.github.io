@@ -56,9 +56,9 @@ let @p2 = compute2()
 let xs = force_all(tasks: [p1, p2])   // [p1's result, p2's result]
 ```
 
-Each thunk is dispatched as a task — one struct in linear memory — and joined left-to-right. The dispatch primitives `lazy_spawn` and `lazy_join` live in `nxlib/stdlib/runtime/lazy.nx`.
+Each thunk is recorded as a task and joined left-to-right. The dispatch primitives `lazy_spawn` and `lazy_join` live in `nxlib/stdlib/runtime/lazy.nx`.
 
-> **Status note.** The current `lazy_spawn` runs *sequentially*. It forces each thunk inline and stores the result, so `force_all` runs the tasks one after the other. A `wasi:threads` worker entry point (`wasi_thread_start`) is exported for runs under `wasmtime -S threads`, but the sequential `lazy_spawn` does not invoke it. The plan is to switch over to the component-model `future<T>` for real parallel execution. That switch is tracked as future work.
+> **Status note.** The current runtime runs thunks *sequentially*: `lazy_spawn` records the thunk without running it, and `lazy_join` forces it on the calling thread, so `force_all` runs the tasks one after the other. Parallel execution is not implemented.
 
 ## Linearity
 

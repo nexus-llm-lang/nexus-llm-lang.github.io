@@ -19,7 +19,7 @@ There is no `nexus run` subcommand. Compile with `nexus build`, then run the pro
 
 ```bash
 nexus build program.nx -o out.wasm
-wasmtime run -S threads --dir=. out.wasm
+wasmtime run -W tail-call=y,exceptions=y,function-references=y,stack-switching=y,threads=y --dir=. out.wasm
 ```
 
 Determinism hooks are environment variables read at runtime, passed through wasmtime's `--env`:
@@ -30,7 +30,7 @@ Determinism hooks are environment variables read at runtime, passed through wasm
 | `NEXUS_FROZEN_CLOCK=EPOCH_MS` | Pin wall/mono clock to EPOCH (in milliseconds) |
 
 ```bash
-wasmtime run --env NEXUS_SEED=1 --env NEXUS_FROZEN_CLOCK=0 -S threads --dir=. out.wasm
+wasmtime run --env NEXUS_SEED=1 --env NEXUS_FROZEN_CLOCK=0 -W tail-call=y,exceptions=y,function-references=y,stack-switching=y,threads=y --dir=. out.wasm
 ```
 
 ### `nexus build FILE`

@@ -439,10 +439,10 @@ fn force_all<T, R>(tasks: [ @(T require { |R }) ]) -> [ T ] require { |R }
 
 | Function | Description |
 |---|---|
-| `race(a, b)` | Force two thunks in parallel, return the first to complete; loser discarded |
-| `cancel(thunk)` | Consume a thunk without evaluating (satisfies linearity) |
-| `detach(thunk)` | Fire-and-forget: start evaluation, don't wait for result |
-| `force_all(tasks)` | Spawn all thunks in parallel, join results in order |
+| `race(a, b, drop)` | Force `a`, then `b`; return `a`'s value and pass `b`'s to `drop` |
+| `cancel(a, drop)` | Force `a` and pass its value to `drop` (the thunk does run) |
+| `detach(a, drop)` | Force `a` and pass its value to `drop` |
+| `force_all(tasks)` | Force every thunk, one at a time, and return the results in input order |
 
 Note: the underlying functions use `i64` inside, since every value is `i64` at the WASM level. The typechecker pins `@T` use-once at the call site.
 

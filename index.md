@@ -49,7 +49,7 @@ end
 
 ### Lazy and Parallel
 
-A thunk waits to run. When two thunks don't depend on each other, the runtime fires them in parallel. Linear types keep each one to a single shot.
+A thunk waits to run. Thunks that don't depend on each other may be evaluated in parallel; the current runtime forces them one at a time. Linear types keep each one to a single shot.
 
 ```nexus
 let @a = compute_a()
@@ -66,7 +66,7 @@ let result = @{ a, b }
 ```bash
 nexus                        # REPL
 nexus build example.nx       # compile to out.wasm
-wasmtime run -S threads --dir=. out.wasm  # run it
+wasmtime run -W tail-call=y,exceptions=y,function-references=y,stack-switching=y,threads=y --dir=. out.wasm  # run it
 nexus typecheck example.nx   # typecheck only
 ```
 

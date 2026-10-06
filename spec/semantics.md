@@ -150,7 +150,7 @@ let xs  = force_all(tasks: [p1, p2])
 
 - `@` thunks are unevaluated until forced (`@x`)
 - Thunks cannot capture mutable (`~`) bindings — the `~` stack-confinement rule rules out cross-thread aliasing
-- The current runtime forces each `force_all` task in turn. Parallel execution over WASI threads is tracked as future work. See [lazy.md](./lazy) for the dispatch primitives and the migration plan.
+- The current runtime forces each `force_all` task in turn; parallel execution is not implemented. See [lazy.md](./lazy) for the dispatch primitives.
 
 ## Implicit Unit Return
 
