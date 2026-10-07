@@ -625,7 +625,7 @@ list_pattern        ::= "[" [ pattern ( "," pattern )* [ "," ] ] "]"
 literal_pattern     ::= literal
 variable_pattern    ::= [ sigil ] IDENT
 constructor_pattern ::= [ sigil ] UIDENT "(" [ ctor_pat_arg ( "," ctor_pat_arg )* ] ")"
-                         (* sigil routes ~/%/@/& onto the matching cell shape — see nexus-nahg *)
+                         (* sigil routes ~/%/@/& onto the matching cell shape *)
 ctor_pat_arg        ::= IDENT ":" pattern | pun_pat_arg
 pun_pat_arg         ::= IDENT                    (* desugars to IDENT ":" IDENT *)
                       | sigil IDENT              (* desugars to IDENT ":" sigil IDENT *)

@@ -21,7 +21,7 @@ The type checker rejects any program that breaks rule 2. Rule 1 carves out the c
 
 ## Auto-Droppable Types
 
-The predicate `is_auto_droppable(τ)` (`src/typecheck/linearity.nx`) names the set of types that may slide out of scope. It is the **sole** way a binding can vanish without an explicit consume.
+The predicate `is_auto_droppable(τ)` (`src/ir/shared/type_pred.nx`) names the set of types that may slide out of scope. It is the **sole** way a binding can vanish without an explicit consume.
 
 ```
 auto_droppable(τ) ≡
@@ -53,7 +53,7 @@ A linear value must reach one of the channels below before its function ends. Th
 
 ### Function-end check
 
-`require_empty_or_droppable` (`src/typecheck/linearity.nx`) runs at the end of every `EagerBody`. The check looks at the live linear set. Either the set is empty, or every name in it is a parameter whose declared inner type is auto-droppable. Otherwise the checker throws `LinearUnused(name, span)`.
+`require_empty_or_droppable` (`src/typecheck/linearity/walk.nx`) runs at the end of every `EagerBody`. The check looks at the live linear set. Either the set is empty, or every name in it is a parameter whose declared inner type is auto-droppable. Otherwise the checker throws `LinearUnused(name, span)`.
 
 ### Throwable-call leak guard
 
@@ -75,7 +75,7 @@ The form `let _ = e` parses as a `Let` whose binder name is `"_"`. The linearity
 
 ## Lazy Thunks (`@T`)
 
-`@T` is the one shape that is *always* linear, no matter the inner type. The only consume that runs the body is the **force** form `@x`. The stdlib combinators in `nxlib/stdlib/lazy.nx` are sugar over force.
+`@T` is the one shape that is *always* linear, no matter the inner type. The only consume that runs the body is the **force** form `@x`. The stdlib combinators in `nxlib/stdlib/concurrency/lazy.nx` (`std:lazy`) are sugar over force.
 
 ```nexus
 export let cancel = fn <T>(a: @T) -> unit do
@@ -100,27 +100,30 @@ Nexus does **not** garbage-collect, refcount, or per-value-`free`. Heap memory c
 | `heap_reset(mark)` | Rewind the bump pointer to `mark`; everything allocated since is gone |
 | `heap_swap(base)` | Atomically install `base` as the new arena head and return the prior value (used to route allocations to a scratch arena) |
 
-Codegen for these lives in `src/backend/codegen.nx` (`emit_heap_mark` and `emit_heap_reset`). The compiler emits no per-value cleanup. At the next reset, closures, records, and linear handles all go unreachable in one shot.
+Codegen for these lives in `src/backend/codegen/intrinsics/heap.nx` (`emit_heap_mark` and `emit_heap_reset`). The compiler emits no per-value cleanup. At the next reset, closures, records, and linear handles all go unreachable in one shot.
 
 > **Consequence**: a future destructor type would need one of two paths. One is a new MIR/LIR drop op with codegen support. The other is explicit `dispose(...)` calls at the user level, guarded by linearity. Neither exists today.
 
 ## WASM `op_drop` Emissions
 
-The WASM `drop` opcode (`0x1A`) shows up in the emitter purely as **stack housekeeping**. It is never a value-cleanup op. Every site today is:
+The WASM `drop` opcode (`0x1A`) shows up in the emitter purely as **stack housekeeping**. It is never a value-cleanup op. The sites are:
 
 | Site | Purpose |
 |---|---|
-| `src/backend/codegen/atom.nx:119` | After packing a `unit` into i64, drop the pre-pack stack slot |
-| `src/backend/codegen/atom.nx:141`, `:165` | Field store/load for `unit`-typed record fields — drop the placeholder |
-| `src/backend/codegen/atom.nx:205` | Discard `memory.grow` return value (`-1` on failure) |
-| `src/backend/codegen.nx` | Let-binder whose declared type is `unit` — drop a non-unit RHS result |
-| `src/backend/codegen.nx` | `_start` shim drops the `main` return value when non-unit |
+| `emit_pack_to_i64` (`src/backend/codegen/emit/atom.nx`) | After packing a `unit` into i64, drop the pre-pack stack slot |
+| `emit_typed_field_store` / `emit_typed_field_load` (`emit/atom.nx`) | Field store/load for `unit`-typed record fields — drop the placeholder |
+| `emit_memory_grow_check`, `emit_atomic_bump` (`emit/atom.nx`), `compile_cabi_realloc` (`src/backend/codegen/ctx/synth.nx`) | Discard the `memory.grow` return value (`-1` on failure) and the result of the heap-base `i32.atomic.rmw.cmpxchg` |
+| `emit_coverage_prologue` (`src/backend/codegen/emit/control.nx`) | Discard the old counter value returned by `i32.atomic.rmw.add` |
+| `drop_all_args` (`src/backend/codegen/intrinsics/threads.nx`) | Evaluate and discard the arguments of an intrinsic that ignores them |
+| `emit_expr` (`src/backend/codegen.nx`) | Drop the i64 an indirect call pushes when the expected result type is `unit` |
+| `emit_stmt` (`src/backend/codegen.nx`) | Let-binder whose declared type is `unit` — drop a non-unit RHS result |
+| `compile_wasi_run_wrapper` (`ctx/synth.nx`) | Drop the `main` return value when non-unit |
 
 None of these run user cleanup logic. They balance the WASM operand stack and nothing more.
 
 ## Closures and Captures
 
-A closure stores its captures as fields of a heap object (`emit_closure_captures`, `src/backend/codegen.nx`). The closure's *linearity* comes from capture. If the body refs any outer linear binding, the closure is itself linear (`collect_captured_linears`, `src/typecheck/linearity.nx`).
+A closure stores its captures as fields of a heap object (`emit_closure_captures`, `src/backend/codegen/emit/call.nx`). The closure's *linearity* comes from capture. If the body refs any outer linear binding, the closure is itself linear (`collect_captured_linears`, `src/typecheck/linearity/capture.nx`).
 
 When a linear closure is consumed, codegen does **not** free the heap object. The next `heap_reset` reclaims it. There is no per-closure destructor. A closure that captures `%h` runs no "release" on `%h`. The capture was the consume for `%h`, done at closure-creation time.
 
@@ -134,11 +137,11 @@ The shape is structural rather than aspirational. Adding a destructor type later
 
 | Concern | Authoritative location |
 |---|---|
-| Set of auto-droppable types | `src/typecheck/linearity.nx` |
-| Function-end consumption check | `src/typecheck/linearity.nx` |
-| Throwable-call leak guard | `src/typecheck/linearity.nx` |
-| `_` wildcard binder semantics | `src/typecheck/linearity.nx` |
-| Lazy combinators | `nxlib/stdlib/lazy.nx` |
-| Arena intrinsics | `src/backend/codegen.nx` |
+| Set of auto-droppable types | `src/ir/shared/type_pred.nx` |
+| Function-end consumption check | `src/typecheck/linearity/walk.nx` |
+| Throwable-call leak guard | `src/typecheck/linearity/walk.nx` |
+| `_` wildcard binder semantics | `src/typecheck/infer/statements.nx` (P-Wild) |
+| Lazy combinators | `nxlib/stdlib/concurrency/lazy.nx` |
+| Arena intrinsics | `src/backend/codegen/intrinsics/heap.nx` |
 | Spec rules | [semantics.md](semantics), [types.md](types), [type-system-formal.md](type-system-formal) §T-Proj, §T-Seq-Cons |
 
