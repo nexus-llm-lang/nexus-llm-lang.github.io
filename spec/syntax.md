@@ -150,7 +150,7 @@ list.map(xs: items, f: transform)
 
 Every argument carries a label. Order at the call site does not matter; reordering the args yields the same call. Cap method calls take the form `Cap.method(...)`.
 
-**Punning.** When the argument is a bare variable whose name matches the label, you can drop the label. The parser desugars an unlabeled bare-variable call into the fully labeled form. Sigils ride along, so a call like `f(%v)` rewrites with the matching `v` label, and the same expansion runs for `&v`, `~v`, `@v`, and `&%v` (borrow of a linear). Constructor calls and constructor patterns follow the same rule. Punning does **not** apply to record literals or record patterns; those still need a `name` `value` pair spelled out.
+**Punning.** When the argument is a bare variable whose name matches the label, you can drop the label. The parser desugars an unlabeled bare-variable call into the fully labeled form. Sigils ride along, so a call like `f(%v)` rewrites with the matching `v` label, and the same expansion runs for `&v`, `~v`, `@v`, and `&%v` (borrow of a linear). Constructor calls and constructor patterns follow the same rule, and so do record literals and record patterns: `{ a, b }` is `{ a: a, b: b }`, and the pattern `let { a, b } = r` binds `a` and `b` from the fields of the same names.
 
 ### Lambda Expressions
 
