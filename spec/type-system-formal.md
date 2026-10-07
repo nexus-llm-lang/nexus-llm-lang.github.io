@@ -49,6 +49,8 @@ p & ::= & \mu\,x & \text{variable pattern, } \mu \in \lbrace \varepsilon, \%, \m
 
 Bare identifiers in pattern position are disambiguated **by Γ-lookup**: if the identifier resolves to a constructor scheme in Γ, it parses as a nullary constructor pattern (via [P-CtorNullary](#P-CtorNullary)); otherwise it parses as a variable binder (via [P-Var](#P-Var)). The split mirrors the surface convention "zero-field exceptions omit parentheses both at declaration and at match" (see [Exception Groups](../exception-groups)) and matches `src/typecheck/exhaustive.nx`'s pattern dispatch, which checks `variants` before treating a bare identifier as a binder.
 
+**Linear constructor application.** A constructor application written with the linear sigil, $\%c(\overline{\ell : e})$, has type $\%\tau$ where τ is the constructor's result type: the value is linear and must be consumed exactly once (by a pattern match, or by passing it where $\%\tau$ is expected). Destructuring a value of type $\%\tau$ with a constructor pattern consumes it and binds every field whose type is not a scalar base type as linear.
+
 The core calculus omits several surface language features that are either desugared or handled as environment preconditions:
 
 - **Constructors** ($c$) — assumed predefined in Γ with a function type (n-ary) or a value type (nullary). Application $f(\overline{\ell : e})$ covers both function calls and constructor application. In patterns, $c$ is syntactically distinguished from variable patterns $x$.
@@ -771,6 +773,8 @@ Polymorphic schemes are introduced **only** by explicit type-parameter lists on 
 $$\kappa ::= \texttt{Type} \mid \texttt{Row}$$
 </div>
 
+**Type parameters range over sigil-free types.** A quantifier $X{:}\texttt{Type}$ may be instantiated with τ only when $\text{sigilFree}(\tau)$: no $\%$, $@$, $\&$, $\mathord{\sim}$ or $[\lvert\,\cdot\,\rvert]$ occurs in τ outside a function type. This is what makes $\text{linear}(\alpha) = \text{false}$ sound: a generic body may use a value of type $X$ any number of times, and $X$ never stands for a linear type, so `fn <T>(x: T) -> [T]` returning `[x, x]` cannot duplicate a resource. A linear argument does not instantiate $X$ by dropping its $\%$ either. Type arguments of data types (`[@T]`, `Option<%T>` built by inference) are not restricted; their linearity is tracked structurally (§Linearity).
+
 <div markdown="0">
 $$\textbf{fn}~\textit{foo}\langle X_1, \ldots, X_n\rangle(\overline{\ell:\tau}) \to \tau_r;\,\rho_q;\,\rho_e \quad\rightsquigarrow\quad \forall X_1{:}\kappa_1 \ldots X_n{:}\kappa_n.\,(\overline{\ell:\tau}) \to \tau_r;\,\rho_q;\,\rho_e$$
 </div>
@@ -879,6 +883,8 @@ $$\dfrac{
 </div>
 
 P-Var binds $x$ at $\tau_b = \text{wrapSigil}(\mu, \text{strip}(\tau))$: the pattern's sigil decides the modality of the binding regardless of what the scrutinee's sigil was. The combined effect — `strip` peels the scrutinee's outer modality, `wrapSigil` re-applies the pattern's modality — means $\textbf{let}~\%x = (\%v : \%T)$ binds $x$ at $\%T$, $\textbf{let}~\&y = (v : T)$ binds $y$ at $\&T$ (a borrow-let-pattern, mirroring the let-statement form), and $\textbf{let}~x = (\%v : \%T)$ binds at $\%T$ via wrapSigil's $\mu = \varepsilon$ identity clause. The idempotency of `wrapSigil` (§Statements) ensures a single layer is always present, never two. P-Wild / P-Lit / P-Or / P-Record have no sigil prefix at the pattern root (the surface grammar admits sigils only on variable and constructor patterns); their sub-patterns recurse through P-Var or P-Ctor where sigils may again appear.
+
+**Borrowed scrutinee.** When the value being destructured was reached through a borrow (the scrutinee has type $\&\sigma$, or the pattern is nested inside such a value), a variable pattern whose component type is linear binds at $\&\text{strip}(\tau)$ instead: ownership of a component cannot be moved out of a borrow. Non-linear components still bind by value.
 
 <div markdown="0">
 $$\dfrac{
@@ -1737,6 +1743,8 @@ $$\dfrac{
 
 T-LetThunk specializes T-Let for the `@` sigil. The bound expression $e$ is **suspended**, not evaluated, so its **deferred force-signature is captured into the thunk type** $@(\sigma ;\, \rho_q' ;\, \rho_e)$ and the `let` itself is pure ($\lbrace\rbrace$). Both rows are the suspended computation's *own*: $\rho_e$ is $e$'s throws row (its synthesized output); $\rho_q'$ is $e$'s require row — $e$ is type-checked under a **fresh** require context $\rho_q'$ (not the creating function's ambient $\rho_q$), so its capability uses pin $\rho_q'$ by the usual row unification. Critically the creating context need **not** provide those caps: a cap-free function may build a thunk that does file IO, to be forced later under an ambient that grants `PermFs` — because $e$ runs at *force* time in the *force site's* context, not here. Both rows are discharged at the force site by [T-Force](#T-Force) (throws added to the force-site row; require unified against the force-site ambient). So $\textbf{let}~@t = \textit{thrower}()$ is **pure at the `let`** and the throws/require surface only on force, matching [lazy.md](../lazy)'s create-vs-force split. Linearity is unchanged from T-Let: linear captures in $e$ are consumed at the binding (residual $\Gamma \setminus\!\!\setminus e$) — the thunk owns them, exactly as a closure captures, and since $\text{autoDrop}(@\sigma) = \texttt{false}$ it must be forced to discharge them. Only the *effects* are deferred, not the capture. The thunk is linear ($q = 1$). An explicit annotation $\textbf{let}~@t : @(\sigma'' ;\, \rho_q'' ;\, \rho_e'') = e$ pins $\tau_f$ via unification, as in T-Let's annotation case. (Force is the one-shot elimination — not a call — so this synthesis mirrors how a function body's rows are determined without making the thunk an arrow.)
 
+**No borrows in a thunk.** The suspended expression may not borrow an outer binding ($\&x$ with $x \in \text{dom}(\Gamma)$) or mention an outer binding of borrow type: the thunk may be forced after the borrowed value has been consumed, so it cannot close over a borrow. The same holds for every thunk expression, not only a `let @x` right-hand side.
+
 <a id="T-Let-Alias"></a>
 
 <div markdown="0">
@@ -1794,6 +1802,8 @@ $$\dfrac{
 </div>
 
 The premise $\tau_r \neq \bot$ rejects $\textbf{return}~e$ outside any enclosing function. The premise $\neg\text{escapesRef}(\tau)$ enforces the gravity rule (see [§Gravity Rule](#gravity-rule-occurrence-position)): a $\mathord{\sim}\sigma$-typed expression may not be returned from a function because that would let the reference cell outlive the stack frame that owns it. The check fires on τ (the inferred type of $e$) rather than on $\tau_r$ (the declared return type) so that it catches cases where $\tau_r$ is a unification variable that happened to unify with a reference type. $\bot$ is the **return-context sentinel** used to mark the absence of an enclosing function (see §1.2 below); a top-level **let** via [D-Let-Top](#D-Let-Top) types its body under $\tau_r = \bot$, so a **return** statement at module scope is statically rejected.
+
+A returned borrow $\&\sigma$ does not satisfy a linear $\tau_r = \%\sigma$: ownership cannot be produced from a borrow.
 
 <a id="T-ExprStmt"></a>
 

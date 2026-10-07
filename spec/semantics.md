@@ -152,6 +152,10 @@ let xs  = force_all(tasks: [p1, p2])
 - Thunks cannot capture mutable (`~`) bindings — the `~` stack-confinement rule rules out cross-thread aliasing
 - The current runtime forces each `force_all` task in turn; parallel execution is not implemented. See [lazy.md](./lazy) for the dispatch primitives.
 
+## Runtime Errors
+
+Integer division or remainder by zero, a signed division whose result does not fit (`i64::MIN / -1`, and the `i32` analogue), and an array index outside the array raise `RuntimeError` (`"division by zero"`, `"integer overflow"`, `"index out of bounds"`). They can be caught with `try`/`catch` like any exception, but, like other runtime errors, they are not part of a function's throws row. An exception that escapes `main` is printed to stderr and the program exits with status 1.
+
 ## Implicit Unit Return
 
 A function whose return type is `unit` may omit the trailing `return ()`. When the body has no `return` at all, the compiler tacks on a `return ()` for you:
