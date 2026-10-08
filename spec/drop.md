@@ -57,7 +57,7 @@ A linear value must reach one of the channels below before its function ends. Th
 
 ### Throwable-call leak guard
 
-A call whose `throws` row is non-empty counts as a possible exit. Take any linear binding live at such a site. If a catch arm does not re-consume it, the call is rejected as `LinearLeakAcrossThrowableCall`. The rule shows up in [semantics.md](semantics) §Exception Propagation, and the code lives in `src/typecheck/linearity.nx`.
+A call whose `throws` row is non-empty counts as a possible exit. Take any linear binding live at such a site. If a catch arm does not re-consume it, the call is rejected as `LinearLeakAcrossThrowableCall`. The rule shows up in [semantics.md](semantics) §Exception Propagation, and the code lives in `src/typecheck/linearity/walk.nx`.
 
 > **Note**: there is no runtime cleanup on unwind. The leak guard rests on a static proof. By the time `throw` runs, no linear obligation is still live in the abandoned scope.
 
