@@ -41,7 +41,7 @@ let greet = fn (name: string) -> unit require { Logger, Console } do
 end
 ```
 
-Both `require { ... }` and `throws { ... }` are optional; omitted means empty row.
+Both `require { ... }` and `throws { ... }` are optional. An omitted `require` clause is the empty row. An omitted `throws` clause on a named function is an *open* row: the function may throw any exception, and a caller with an omitted clause admits it. A caller that declares a closed row (e.g. `throws {}`) rejects a call to such a function unless the callee is provably non-throwing (no `throw` and no call to a throwing function). Lambdas get their throws row inferred from the body; handler arms with no `throws` clause have the closed empty row; an exception that escapes a `main` with no `throws` clause is printed to stderr and the program exits with status 1.
 
 ### External Functions
 

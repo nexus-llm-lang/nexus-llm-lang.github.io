@@ -245,4 +245,4 @@ Row types back the effect and cap annotations:
 { Console | e }  // open row with tail variable
 ```
 
-An empty row, written `{}` or just omitted, means no effects and no requirements.
+An empty row, written `{}`, means no effects and no requirements. An omitted `require` clause is the empty row; an omitted `throws` clause on a named function is an open row (see [effects](./effects)).
